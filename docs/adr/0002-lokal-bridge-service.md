@@ -1,6 +1,6 @@
 # ADR-0002: Lokal bridge-service mellem add-in og model
 
-- Status: Foreslået
+- Status: Vedtaget
 - Dato: 2026-11-02
 
 ## Kontekst

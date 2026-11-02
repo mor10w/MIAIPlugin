@@ -1,6 +1,6 @@
 # ADR-0001: Office Web Add-in (Office.js) frem for VSTO/COM
 
-- Status: Foreslået
+- Status: Vedtaget
 - Dato: 2026-11-02
 
 ## Kontekst

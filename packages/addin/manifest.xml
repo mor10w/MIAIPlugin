@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MIAI add-in-manifest (XML). Peger på den lokale MIAI Bridge på https://localhost:44321.
+  Sideload: se docs/UDVIKLING.md.
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+  <Id>fdac46a3-f2b8-4e84-b704-78a669531789</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>M. Wiingaard</ProviderName>
+  <DefaultLocale>da-DK</DefaultLocale>
+  <DisplayName DefaultValue="MIAI – lokal AI-assistent">
+    <Override Locale="en-US" Value="MIAI – local AI assistant"/>
+  </DisplayName>
+  <Description DefaultValue="Skriv, ret, oversæt og lav formler og slides med AI-modeller, der kører på din egen maskine.">
+    <Override Locale="en-US" Value="Write, proofread, translate and create formulas and slides with AI models running on your own machine."/>
+  </Description>
+  <IconUrl DefaultValue="https://localhost:44321/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:44321/assets/icon-64.png"/>
+  <SupportUrl DefaultValue="https://localhost:44321/"/>
+  <AppDomains>
+    <AppDomain>https://localhost:44321</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+    <Host Name="Workbook"/>
+    <Host Name="Presentation"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:44321/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+        <Host xsi:type="Document">
+          <DesktopFormFactor>
+            <GetStarted>
+              <Title resid="MIAI.GetStarted.Title"/>
+              <Description resid="MIAI.GetStarted.Description"/>
+              <LearnMoreUrl resid="MIAI.LearnMoreUrl"/>
+            </GetStarted>
+            <FunctionFile resid="MIAI.Taskpane.Url"/>
+            <ExtensionPoint xsi:type="PrimaryCommandSurface">
+              <OfficeTab id="TabHome">
+                <Group id="MIAI.Group">
+                  <Label resid="MIAI.Group.Label"/>
+                  <Icon>
+                    <bt:Image size="16" resid="MIAI.Icon.16"/>
+                    <bt:Image size="32" resid="MIAI.Icon.32"/>
+                    <bt:Image size="80" resid="MIAI.Icon.80"/>
+                  </Icon>
+                  <Control xsi:type="Button" id="MIAI.OpenPane">
+                    <Label resid="MIAI.OpenPane.Label"/>
+                    <Supertip>
+                      <Title resid="MIAI.OpenPane.Label"/>
+                      <Description resid="MIAI.OpenPane.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="MIAI.Icon.16"/>
+                      <bt:Image size="32" resid="MIAI.Icon.32"/>
+                      <bt:Image size="80" resid="MIAI.Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <TaskpaneId>MIAI.Taskpane</TaskpaneId>
+                      <SourceLocation resid="MIAI.Taskpane.Url"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+        <Host xsi:type="Workbook">
+          <DesktopFormFactor>
+            <GetStarted>
+              <Title resid="MIAI.GetStarted.Title"/>
+              <Description resid="MIAI.GetStarted.Description"/>
+              <LearnMoreUrl resid="MIAI.LearnMoreUrl"/>
+            </GetStarted>
+            <FunctionFile resid="MIAI.Taskpane.Url"/>
+            <ExtensionPoint xsi:type="PrimaryCommandSurface">
+              <OfficeTab id="TabHome">
+                <Group id="MIAI.Group">
+                  <Label resid="MIAI.Group.Label"/>
+                  <Icon>
+                    <bt:Image size="16" resid="MIAI.Icon.16"/>
+                    <bt:Image size="32" resid="MIAI.Icon.32"/>
+                    <bt:Image size="80" resid="MIAI.Icon.80"/>
+                  </Icon>
+                  <Control xsi:type="Button" id="MIAI.OpenPane">
+                    <Label resid="MIAI.OpenPane.Label"/>
+                    <Supertip>
+                      <Title resid="MIAI.OpenPane.Label"/>
+                      <Description resid="MIAI.OpenPane.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="MIAI.Icon.16"/>
+                      <bt:Image size="32" resid="MIAI.Icon.32"/>
+                      <bt:Image size="80" resid="MIAI.Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <TaskpaneId>MIAI.Taskpane</TaskpaneId>
+                      <SourceLocation resid="MIAI.Taskpane.Url"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+        <Host xsi:type="Presentation">
+          <DesktopFormFactor>
+            <GetStarted>
+              <Title resid="MIAI.GetStarted.Title"/>
+              <Description resid="MIAI.GetStarted.Description"/>
+              <LearnMoreUrl resid="MIAI.LearnMoreUrl"/>
+            </GetStarted>
+            <FunctionFile resid="MIAI.Taskpane.Url"/>
+            <ExtensionPoint xsi:type="PrimaryCommandSurface">
+              <OfficeTab id="TabHome">
+                <Group id="MIAI.Group">
+                  <Label resid="MIAI.Group.Label"/>
+                  <Icon>
+                    <bt:Image size="16" resid="MIAI.Icon.16"/>
+                    <bt:Image size="32" resid="MIAI.Icon.32"/>
+                    <bt:Image size="80" resid="MIAI.Icon.80"/>
+                  </Icon>
+                  <Control xsi:type="Button" id="MIAI.OpenPane">
+                    <Label resid="MIAI.OpenPane.Label"/>
+                    <Supertip>
+                      <Title resid="MIAI.OpenPane.Label"/>
+                      <Description resid="MIAI.OpenPane.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="MIAI.Icon.16"/>
+                      <bt:Image size="32" resid="MIAI.Icon.32"/>
+                      <bt:Image size="80" resid="MIAI.Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <TaskpaneId>MIAI.Taskpane</TaskpaneId>
+                      <SourceLocation resid="MIAI.Taskpane.Url"/>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="MIAI.Icon.16" DefaultValue="https://localhost:44321/assets/icon-16.png"/>
+        <bt:Image id="MIAI.Icon.32" DefaultValue="https://localhost:44321/assets/icon-32.png"/>
+        <bt:Image id="MIAI.Icon.80" DefaultValue="https://localhost:44321/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="https://localhost:44321/taskpane.html"/>
+        <bt:Url id="MIAI.LearnMoreUrl" DefaultValue="https://localhost:44321/"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="MIAI.GetStarted.Title" DefaultValue="MIAI er klar">
+          <bt:Override Locale="en-US" Value="MIAI is ready"/>
+        </bt:String>
+        <bt:String id="MIAI.Group.Label" DefaultValue="MIAI"/>
+        <bt:String id="MIAI.OpenPane.Label" DefaultValue="AI-assistent">
+          <bt:Override Locale="en-US" Value="AI assistant"/>
+        </bt:String>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="MIAI.GetStarted.Description" DefaultValue="Klik på AI-assistent under fanen Hjem.">
+          <bt:Override Locale="en-US" Value="Click AI assistant on the Home tab."/>
+        </bt:String>
+        <bt:String id="MIAI.OpenPane.Tooltip" DefaultValue="Åbn MIAI – AI med lokale modeller">
+          <bt:Override Locale="en-US" Value="Open MIAI – AI with local models"/>
+        </bt:String>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

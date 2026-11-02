@@ -1,12 +1,16 @@
-# ADR-0004: Implementeringssprog for bridge
+# ADR-0004: Bridge implementeres i Node.js/TypeScript
 
-- Status: Åben
+- Status: Vedtaget
 - Dato: 2026-11-02
 
-## Muligheder
-1. **Node.js/TypeScript (Fastify)**: ét sprog i hele stakken, delte typer med add-in.
-2. **.NET 8 (Minimal API)**: nem Windows-service, cert-store, MSI/WiX, god på Mac/Linux.
-3. **Rust (Tauri)**: lille binær og bakkeikon-UI, men højere udviklingsomkostning.
+## Kontekst
+Muligheder var Node.js/TypeScript, .NET 8 og Rust (Tauri).
 
 ## Beslutning
-Afgøres efter fase 0-spike.
+Node.js 22 LTS + TypeScript + Fastify 5. Typer og opgavedefinitioner deles med add-in'et via pakken `@miai/shared`.
+
+## Konsekvenser
++ Ét sprog, delte typer og validering (Zod) på begge sider.
++ Fastify har god SSE- og statisk fil-understøttelse.
+- Distribution kræver en pakket Node-binær (Node SEA eller tilsvarende); afklares i fase 1.
+- Windows-service og cert-store håndteres af installeren frem for af bridgen.
