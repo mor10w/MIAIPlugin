@@ -16,6 +16,7 @@ import {
 } from "@fluentui/react-components";
 import { diagramToSvg, parseTsv, stripEmphasis, tasksForHost, textFormat, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
+import { extractGraphic } from "../svg";
 import { useI18n } from "../i18n";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
@@ -74,15 +75,19 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   // Det faktiske format afhænger af konteksten (fx TSV ved oversættelse af et Excel-område).
   const format = task && ctxRef.current ? textFormat(task, ctxRef.current) : undefined;
   const supported: ApplyMode[] = task ? task.applyModes.filter((m) => adapter.supports(m)) : [];
-  // Et TSV-svar hører hjemme i cellerne; "Erstat" ville skrive det hele i én celle.
-  const modes: ApplyMode[] = format === "tsv" ? supported.filter((m) => m === "cells" || m === "comment") : supported.filter((m) => m !== "cells");
 
   // Ren tekst: fjern Markdown-fremhævning, som små modeller ofte tilføjer.
   const shownText = format === "plain" ? stripEmphasis(state.text) : state.text;
 
+  // Et TSV-svar hører hjemme i cellerne; "Indsæt som billede" kræver en figur i svaret.
+  const modes: ApplyMode[] = task
+    ? supported.filter((m) => (format === "tsv" ? m === "cells" || m === "comment" : m !== "cells") && (m !== "image" || extractGraphic(shownText) !== null))
+    : [];
+
   const apply = async (mode: ApplyMode) => {
     const ctx = ctxRef.current!;
     if (!task) throw new Error("Ingen opgave");
+    if (mode === "image") return adapter.applyImage!(shownText);
     if (format) return adapter.applyText(shownText, format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);

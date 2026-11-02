@@ -1,6 +1,7 @@
 import type { ApplyMode, DiagramResult, DocContext, GrammarResult } from "@miai/shared";
-import { diagramToPng } from "../diagram-image";
+import { diagramToPng, graphicToPng } from "../image";
 import { mdToSafeHtml } from "../markdown";
+import { extractGraphic } from "../svg";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
 
 const has = (v: string) => Office.context.requirements.isSetSupported("WordApi", v);
@@ -15,7 +16,7 @@ export class WordAdapter implements HostAdapter {
 
   supports(mode: ApplyMode): boolean {
     if (mode === "trackChanges" || mode === "comment") return has("1.4");
-    return mode === "replace" || mode === "insertAfter" || mode === "diagram";
+    return mode === "replace" || mode === "insertAfter" || mode === "diagram" || mode === "image";
   }
 
   async getContext(opts: ContextOptions): Promise<DocContext> {
@@ -136,6 +137,19 @@ export class WordAdapter implements HostAdapter {
       pic.altTextDescription = result.nodes.map((n) => n.label).join(" → ");
       await ctx.sync();
       return { message: "Diagrammet er indsat efter markeringen." };
+    });
+  }
+
+  /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede ved markeringen. */
+  async applyImage(text: string): Promise<ApplyOutcome> {
+    const block = extractGraphic(text);
+    if (!block) throw new Error("Svaret indeholder ikke et diagram (mermaid eller svg).");
+    const png = await graphicToPng(block);
+    return this.run(async (ctx, range) => {
+      const pic = range.insertInlinePictureFromBase64(png.base64, "After");
+      pic.width = 450; // punkter – passer i A4's tekstområde
+      await ctx.sync();
+      return { message: "Diagrammet er indsat ved markeringen." };
     });
   }
 }

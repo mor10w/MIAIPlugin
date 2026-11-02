@@ -7,6 +7,7 @@ export type ApplyMode =
   | "trackChanges" // erstat som sporede ændringer (Word)
   | "insertAfter" // indsæt efter markeringen
   | "comment" // indsæt som kommentar
+  | "image" // indsæt Mermaid-diagram i svaret som billede (Word/PowerPoint)
   | "newSlides" // opret slides (PowerPoint)
   | "formula" // skriv formel i markeret celle (Excel)
   | "cells" // skriv TSV ind i markerede celler (Excel)
@@ -433,7 +434,7 @@ export const TASKS: TaskDefinition[] = [
     input: "prompt",
     output: { kind: "text", format: "markdown" },
     params: [{ name: "prompt", label: { da: "Besked", en: "Message" }, kind: "text" }],
-    applyModes: ["insertAfter", "replace", "comment"],
+    applyModes: ["insertAfter", "replace", "comment", "image"],
     // 0.7: Qwen3-tænke-modeller degenererer (gentagelsessløjfer) ved lav temperatur.
     temperature: 0.7,
     buildMessages: (req) => {
@@ -442,7 +443,12 @@ export const TASKS: TaskDefinition[] = [
         ? `The user's current ${req.context.isWholeDocument ? "document" : "selection"}${req.context.address ? ` (${req.context.address})` : ""}:\n${doc(ctx)}`
         : "The user has no selection.";
       return [
-        system(req, "Be concise and practical. Use Markdown when it helps.", contextNote),
+        system(
+          req,
+          "Be concise and practical. Use Markdown when it helps.",
+          "When the answer benefits from a figure, include one: prefer a ```mermaid block; use a self-contained ```svg block (no external references, no scripts) for free-form graphics.",
+          contextNote,
+        ),
         ...req.history,
         { role: "user", content: req.params.prompt ?? "" },
       ];

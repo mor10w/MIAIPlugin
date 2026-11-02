@@ -26,6 +26,8 @@ export interface HostAdapter {
   applyFormula?(result: FormulaResult, ctx: DocContext): Promise<ApplyOutcome>;
   /** Indsætter diagrammet visuelt (billede i Word, native shapes i PowerPoint). */
   applyDiagram?(result: DiagramResult, ctx: DocContext): Promise<ApplyOutcome>;
+  /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede. Kaster, hvis ingen blok findes. */
+  applyImage?(text: string): Promise<ApplyOutcome>;
 }
 
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */

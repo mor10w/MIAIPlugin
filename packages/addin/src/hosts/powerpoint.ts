@@ -1,5 +1,7 @@
 import { applyEdits, diagramBounds, layoutDiagram, routeEdges, type ApplyMode, type DiagramResult, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
+import { graphicToPng } from "../image";
 import { mdToPlain } from "../markdown";
+import { extractGraphic } from "../svg";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
 
 const has = (v: string) => Office.context.requirements.isSetSupported("PowerPointApi", v);
@@ -27,6 +29,7 @@ export class PowerPointAdapter implements HostAdapter {
 
   supports(mode: ApplyMode): boolean {
     if (mode === "newSlides" || mode === "diagram") return has("1.4");
+    if (mode === "image") return has("1.8"); // billedfyldning kræver PowerPointApi 1.8
     return mode === "replace" || mode === "insertAfter";
   }
 
@@ -175,5 +178,34 @@ export class PowerPointAdapter implements HostAdapter {
     });
     const edges = routes.length;
     return { message: `${result.nodes.length} figurer og ${edges} forbindelser er placeret på den valgte slide${has("1.8") ? " som én gruppe" : ""} – klik på dem for at redigere.` };
+  }
+
+  /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billedfyldt rektangel på den valgte slide. */
+  async applyImage(text: string): Promise<ApplyOutcome> {
+    if (!has("1.8")) throw new Error("Din PowerPoint-version understøtter ikke billedfigurer fra add-ins (kræver PowerPointApi 1.8).");
+    const block = extractGraphic(text);
+    if (!block) throw new Error("Svaret indeholder ikke et diagram (mermaid eller svg).");
+    const png = await graphicToPng(block);
+    // Skalér til slide med margin, bevar forholdsforhold, og centrer.
+    const maxW = W - 80;
+    const maxH = H - 80;
+    const s = Math.min(maxW / png.width, maxH / png.height);
+    const w = Math.max(40, png.width * s);
+    const h = Math.max(24, png.height * s);
+    await PowerPoint.run(async (ctx) => {
+      const sel = ctx.presentation.getSelectedSlides();
+      sel.load("items");
+      await ctx.sync();
+      if (!sel.items.length) throw new Error("Vælg en slide, og prøv igen.");
+      const sh = sel.items[0].shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle, {
+        left: (W - w) / 2,
+        top: (H - h) / 2,
+        width: w,
+        height: h,
+      });
+      sh.fill.setImage(png.base64);
+      await ctx.sync();
+    });
+    return { message: "Diagrammet er placeret på den valgte slide – klik på det for at flytte eller redigere." };
   }
 }
