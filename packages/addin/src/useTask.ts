@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import type { TaskRequest } from "@miai/shared";
-import { runTask } from "./api";
+import { useBackend } from "./backend";
 
 export interface TaskState {
   status: "idle" | "running" | "done" | "error";
@@ -17,6 +17,7 @@ const initial: TaskState = { status: "idle", text: "", progressChars: 0 };
 export function useTask() {
   const [state, setState] = useState<TaskState>(initial);
   const abortRef = useRef<AbortController | null>(null);
+  const backend = useBackend();
 
   const start = useCallback(async (id: string, req: TaskRequest, onDelta?: (text: string) => void) => {
     abortRef.current?.abort();
@@ -29,7 +30,7 @@ export function useTask() {
       setState(finalState);
     };
     try {
-      await runTask(
+      await backend.runTask(
         id,
         req,
         (e) => {
@@ -63,7 +64,7 @@ export function useTask() {
       else update((s) => ({ ...s, status: "error", error: (err as Error).message }));
     }
     return finalState;
-  }, []);
+  }, [backend]);
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
   const reset = useCallback(() => setState(initial), []);

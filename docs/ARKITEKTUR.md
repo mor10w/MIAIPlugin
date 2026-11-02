@@ -1,10 +1,47 @@
-# Arkitektur (udkast)
+# Arkitektur
+
+## Overblik
+
+```
+                  ┌────────────── packages/shared (@miai/shared) ──────────────┐
+                  │ types · tasks (prompts, Zod-skemaer) · engine (executeTask) │
+                  │ openai (klient) · think (filter) · json · policy · text     │
+                  └──────────────┬───────────────────────────┬─────────────────┘
+                                 │ bruges af                 │ bruges af
+          ┌──────────────────────▼─────────┐      ┌──────────▼──────────────────┐
+          │ packages/addin (task pane)     │      │ packages/bridge (valgfri)   │
+          │ host-adaptere · UI · backend:  │      │ Fastify, HTTPS på loopback  │
+          │  ├─ DirectBackend ─────────────┼──┐   │ serverer add-in + /api/*    │
+          │  └─ BridgeBackend ─────────────┼──┼──▶│ config.json, maskinpolitik, │
+          └────────────────────────────────┘  │   │ audit-log                   │
+                                              │   └──────────┬──────────────────┘
+                                              ▼              ▼
+                                OpenAI-kompatibel endpoint (/v1/models, /v1/chat/completions)
+                                Ollama · LM Studio · llama.cpp · vLLM · LocalAI · Jan · …
+```
+
+Tilstanden vælges ved runtime (`backend/index.ts`). Hvis task pane serveres af en MIAI Bridge (`/api/health` svarer på samme origin), bruges den. Ellers bruges direkte forbindelse. Se [ADR-0007](adr/0007-bridge-valgfri-direkte-forbindelse.md).
 
 ## Komponenter
 
-### 1. Office Add-in (`packages/addin`)
-- Office Web Add-in med task pane + ribbon-kommandoer (function commands).
-- **Host-adaptere** skjuler forskelle mellem Word, Excel og PowerPoint bag ét interface:
+### 1. Fælles motor (`packages/shared`)
+Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i Node.
+
+- **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
+- **`engine.ts`** (`executeTask`):
+  - vælger model (forespørgsel → model pr. opgave → standard → første fra `/v1/models`)
+  - tjekker politikken
+  - streamer svaret og filtrerer `<think>`
+  - ved JSON-opgaver: sætter `response_format` efter endpointens `structuredOutput`, sender skemaet i prompten, validerer med Zod og prøver én gang mere ved fejl
+- **`openai.ts`**: minimal klient. Bruger `fetch` + `ReadableStream.getReader()` og har fallback for `AbortSignal.any`. GET-kald sendes uden ekstra headers, så browseren undgår CORS-preflight. Tåler servere, der ignorerer `stream: true`.
+- **`policy.ts`**: `allowedHosts` med `*.domæne`-wildcards.
+
+### 2. Office Add-in (`packages/addin`)
+- Task pane (React 19 + Fluent UI v9) med fanerne Handlinger, Chat og Indstillinger.
+- **Backends** (`src/backend`) med samme interface:
+  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin.
+  - `BridgeBackend`: kalder `/api/*` på samme origin og læser SSE-strømmen.
+- **Host-adaptere**:
 
 ```ts
 interface HostAdapter {
@@ -18,67 +55,69 @@ interface HostAdapter {
 }
 ```
 
-- Ændringer vises som diff i task pane før de anvendes. Word: `changeTrackingMode`
-  slås midlertidigt til, så brugeren kan acceptere/afvise ændringer i Word.
-- Word: markeringen gemmes som sporet objekt (`trackedObjects`), så resultatet
-  indsættes det rigtige sted, selvom brugeren klikker andetsteds imens.
-- Excel: formlen skrives i den markerede celle, hvorefter resultatet læses. Giver
-  Excel en fejl (#NAME? osv.), får brugeren besked. De tidligere formler gemmes,
-  så **Fortryd** virker (Ctrl+Z fortryder ikke altid add-in-ændringer).
-- PowerPoint: tekst → slides via `slides.add`. Layoutets pladsholdere udfyldes,
-  og findes de ikke, tilføjes tekstbokse (PowerPointApi 1.4). Hvis det viser sig
-  utilstrækkeligt med firmaskabeloner, er plan B en `.pptx` genereret i bridgen
-  og indsat med `insertSlidesFromBase64`.
+- **Word**: markeringen gemmes som sporet objekt (`trackedObjects`), så resultatet lander det rigtige sted, selvom brugeren klikker andetsteds imens. Grammatik bruger `search` og sporede ændringer.
+- **Excel**: formlen skrives i cellen, og resultatet læses, så fejl som #NAME? meldes. Tidligere formler gemmes, så **Fortryd** virker (Ctrl+Z fortryder ikke altid add-in-ændringer). Oversættelse af områder sker som TSV.
+- **PowerPoint**: tekst via `get/setSelectedDataAsync`. Slides oprettes med `slides.add`, og layoutets pladsholdere udfyldes; findes de ikke, tilføjes tekstbokse (PowerPointApi 1.4). Plan B ved firmaskabeloner: `.pptx` + `insertSlidesFromBase64`.
+- **Sikkerhed**: modeloutput renses med DOMPurify før visning og indsættelse som HTML.
 
-### 2. MIAI Bridge (`packages/bridge`)
-Lokal Node.js-service (Fastify) på `https://127.0.0.1:44321`. Serverer både task pane (statiske filer) og API'et, så de deler origin.
+### 3. MIAI Bridge (`packages/bridge`) – valgfri
+Node.js-service (Fastify) på `https://127.0.0.1:44321`. Serverer add-in'ets filer og API'et fra samme origin.
 
 | Endpoint | Formål |
 |----------|--------|
 | `GET  /api/health` | Status og om den aktive endpoint svarer |
 | `GET  /api/models` | Modeller fra endpointens `/v1/models` |
 | `GET  /api/tasks` | Opgavekatalog |
-| `POST /api/tasks/{id}` | Kør opgave (`grammar`, `rewrite`, `translate`, `explain-formula`, `text-to-slides`, `chat` …); svar som SSE |
+| `POST /api/tasks/{id}` | Kør opgave; svar som SSE (`TaskEvent`) |
 | `GET/PUT /api/settings` | Indstillinger og politik (API-nøgler maskeres) |
 
-Ansvar:
-- **Én OpenAI-klient** (`openai.ts`): `/v1/models` og streaming `/v1/chat/completions`. Tåler servere, der ignorerer `stream: true`.
-- **Opgavekatalog** (`@miai/shared/tasks.ts`): prompt, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder.
-- **Struktureret output**: `response_format` efter endpointens `structuredOutput` (`json_schema`/`json_object`/`none`). Skemaet sendes også i prompten, og svaret udtrækkes robust, valideres med Zod og prøves én gang mere ved fejl.
-- **`<think>`-filter** for reasoning-modeller, også når tags er splittet over chunks.
-- **Politik** (`allowedHosts`), kontrolleret både ved gem og ved hvert kald (ADR-0006).
-- **Sikkerhed**: lytter kun på loopback, Host-header-tjek (DNS rebinding), `X-MIAI`-header og origin-tjek, så fremmede websider ikke kan bruge bridgen. Modeloutput renses med DOMPurify før visning og indsættelse.
-- **Audit-log** (valgfri): tid, opgave, host, model, varighed og tegn/tokens, men aldrig indhold.
+Bridgen bidrager med det, en browser ikke kan:
+- en **maskinpolitik**, som brugeren ikke kan ændre (ADR-0006)
+- **audit-log** med metadata (aldrig indhold)
+- UI uden internet
+- filsystemadgang til senere RAG (fase 4)
 
-### 3. Inference-værktøj (eksternt)
-Et hvilket som helst OpenAI-kompatibelt værktøj (Ollama som standardforslag). Modeller hentes og styres i værktøjet selv.
+Sikkerhed:
+- lytter kun på loopback
+- `Host`-tjek mod DNS rebinding
+- kræver `X-MIAI`-header og eget `Origin`
 
-## Hvorfor en bridge og ikke direkte kald fra add-in?
+### 4. Inference-værktøj (eksternt)
+Et hvilket som helst OpenAI-kompatibelt værktøj. Ved direkte forbindelse skal værktøjet tillade CORS fra add-in'ets origin:
 
-1. Add-ins skal serveres over HTTPS; kald til `http://localhost:11434` giver mixed
-   content og CORS-problemer (Ollama kræver `OLLAMA_ORIGINS`).
-2. Chromium-baserede webviews indfører Private/Local Network Access-restriktioner.
-3. API-nøgler (fx til en intern gateway) må ikke ligge i en webview.
-4. Filsystemadgang (RAG, skabeloner, logs) kræver en native proces.
-5. Ét sted for logging/audit af hvad der sendes hvorhen.
+| Værktøj | CORS |
+|---|---|
+| Ollama | `https://localhost:*` tilladt som standard; andre origins: `OLLAMA_ORIGINS=https://mor10w.github.io` |
+| LM Studio | Developer/Server → "Enable CORS" |
+| vLLM | `--allowed-origins '["https://…"]'` (standard `*`) |
+| llama.cpp server | Tillader som udgangspunkt alle origins |
+| Andre | Se værktøjets dokumentation, eller brug bridgen |
 
-## Dataflow – eksempel "Forklar formel" (Excel)
+## Hosting og manifester
+Manifester genereres fra `packages/addin/manifest.template.xml` af `scripts/make-manifest.mjs`. Hver variant har eget Id:
 
-1. Bruger markerer `C5` og klikker *Forklar formel*.
-2. `ExcelAdapter.getContext()` → formel, værdier i refererede celler (begrænset), kolonneoverskrifter.
-3. `POST /api/tasks/explain-formula` → bridge vælger model, bygger prompt, streamer svar.
-4. Task pane viser forklaring; valgfrit *Indsæt som kommentar* på cellen.
+| Variant | Add-in hentes fra | Tilstand | Fil |
+|---|---|---|---|
+| hosted | GitHub Pages (`.github/workflows/pages.yml`) | Direkte | `<pages-url>/manifest.xml` |
+| dev | Vite på `https://localhost:3000` | Direkte | `packages/addin/manifest.dev.xml` |
+| bridge | MIAI Bridge på `https://localhost:44321` | Bridge | `packages/addin/manifest.xml` |
+
+En organisation kan hoste `dist/` på en intern HTTPS-server og generere sit eget manifest med `node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml`.
+
+## Dataflow – eksempel "Forklar formel" (Excel, direkte)
+1. Brugeren markerer `C5` og klikker *Forklar formel*.
+2. `ExcelAdapter.getContext()` henter formel, adresse og overskrifter/første rækker.
+3. `DirectBackend.runTask` → `executeTask` bygger prompten og streamer fra `http://127.0.0.1:11434/v1/chat/completions`.
+4. Task pane viser forklaringen; valgfrit *Som kommentar* på cellen.
 
 ## Repo-struktur
-
 ```
 MIAIPlugin/
 ├─ packages/
-│  ├─ addin/        # Office.js task pane + manifest
-│  ├─ bridge/       # lokal service
-│  └─ shared/       # typer, opgavekatalog og prompts, hjælpefunktioner
-├─ scripts/         # ikoner, sideload (Mac/Windows)
-├─ evals/           # (fase 0) eval-sæt og harness
-├─ installer/       # (fase 1) Windows (MSI/winget) og macOS (pkg)
+│  ├─ shared/       # fælles motor: typer, opgaver/prompts, OpenAI-klient, politik
+│  ├─ addin/        # Office.js task pane, backends, host-adaptere, manifest-skabelon
+│  └─ bridge/       # valgfri lokal service
+├─ scripts/         # manifester, ikoner, sideload (Mac/Windows)
+├─ .github/workflows/  # CI og GitHub Pages
 └─ docs/            # plan, arkitektur, udvikling, ADR'er
 ```

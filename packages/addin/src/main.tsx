@@ -1,9 +1,19 @@
 import { createRoot } from "react-dom/client";
+import { BackendContext, createBackend } from "./backend";
 import { App } from "./components/App";
 import { createAdapter } from "./hosts";
 
-Office.onReady((info) => {
+Office.onReady(async (info) => {
   const root = createRoot(document.getElementById("root")!);
   const adapter = createAdapter(info.host);
-  root.render(adapter ? <App adapter={adapter} /> : <p style={{ padding: 16 }}>Denne Office-app understøttes ikke endnu. / This Office app is not supported yet.</p>);
+  if (!adapter) {
+    root.render(<p style={{ padding: 16 }}>Denne Office-app understøttes ikke endnu. / This Office app is not supported yet.</p>);
+    return;
+  }
+  const backend = await createBackend();
+  root.render(
+    <BackendContext.Provider value={backend}>
+      <App adapter={adapter} />
+    </BackendContext.Provider>,
+  );
 });

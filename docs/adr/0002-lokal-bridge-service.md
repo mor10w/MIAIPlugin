@@ -1,6 +1,6 @@
 # ADR-0002: Lokal bridge-service mellem add-in og model
 
-- Status: Vedtaget
+- Status: Erstattet af [ADR-0007](0007-bridge-valgfri-direkte-forbindelse.md). Bridgen er nu valgfri.
 - Dato: 2026-11-02
 
 ## Kontekst

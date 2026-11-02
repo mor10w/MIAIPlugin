@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEdits, fitGrid, parseTsv } from "./text.js";
+import { applyEdits, fitGrid, parseTsv, stripEmphasis } from "./text.js";
 import { TASKS, getTask } from "./tasks.js";
 import { TaskRequest } from "./types.js";
 
@@ -13,6 +13,12 @@ describe("applyEdits", () => {
   });
   it("tæller rettelser der ikke findes", () => {
     expect(applyEdits("abc", [{ original: "x", replacement: "y", explanation: "" }])).toEqual({ text: "abc", skipped: 1 });
+  });
+});
+
+describe("stripEmphasis", () => {
+  it("fjerner parvis fremhævning men ikke enkeltstående tegn", () => {
+    expect(stripEmphasis("en **enkel** tekst, 2 * 3 og __x__")).toBe("en enkel tekst, 2 * 3 og x");
   });
 });
 

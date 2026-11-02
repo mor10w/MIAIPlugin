@@ -52,6 +52,10 @@ const da = {
   saved: "Gemt.",
   model: "Model",
   hostUnsupported: "Denne Office-app understøttes ikke endnu.",
+  modeDirect: "direkte",
+  modeDirectInfo: "Direkte forbindelse: add-in'et kalder selv dit inference-værktøj. Indstillinger gemmes i add-in'et på denne maskine.",
+  modeBridgeInfo: "Forbundet via MIAI Bridge. Indstillinger gemmes af bridgen, og en organisationspolitik kan være gældende.",
+  policySource: "Politik",
 };
 
 type Dict = typeof da;
@@ -108,6 +112,10 @@ const en: Dict = {
   saved: "Saved.",
   model: "Model",
   hostUnsupported: "This Office app is not supported yet.",
+  modeDirect: "direct",
+  modeDirectInfo: "Direct connection: the add-in calls your inference tool itself. Settings are stored in the add-in on this machine.",
+  modeBridgeInfo: "Connected via MIAI Bridge. Settings are stored by the bridge and an organisation policy may apply.",
+  policySource: "Policy",
 };
 
 export type Lang = "da" | "en";

@@ -8,7 +8,7 @@ Første målgruppe er privatpersoner og mindre virksomheder med Office installer
 
 ## Beslutning
 - Understøt Word, Excel og PowerPoint på Windows og Mac desktop. Office på web er ikke i scope for fase 1–2.
-- Add-in'ets filer serveres af den lokale bridge (same origin), så task pane og API deler origin og virker offline. Undtagelsen er Office.js fra Microsofts CDN.
+- Add-in'ets filer hostes statisk med direkte forbindelse til modellen, eller serveres af den valgfri bridge (se ADR-0007).
 - XML add-in-manifest, sideloadet af installeren (Windows: delt katalog/registry; Mac: `wef`-mappen).
 - Enterprise forberedes kun via designregler (politik, konfigurerbar endpoint, audit-log), ikke via funktioner.
 

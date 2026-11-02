@@ -96,7 +96,8 @@ export type Policy = z.infer<typeof Policy>;
 export interface SettingsView {
   settings: Settings;
   policy: Policy;
-  policySource: "default" | "user" | "machine";
+  /** browser = gemt i add-in'et (direkte tilstand); machine = låst af organisationen (kun bridge). */
+  policySource: "default" | "user" | "machine" | "browser";
 }
 
 export interface ModelInfo {

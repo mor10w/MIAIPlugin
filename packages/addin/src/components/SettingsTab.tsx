@@ -18,7 +18,7 @@ import {
   tokens,
 } from "@fluentui/react-components";
 import type { Endpoint, Policy, Settings, StructuredOutputMode } from "@miai/shared";
-import { api } from "../api";
+import { corsHint, useBackend } from "../backend";
 import { useI18n } from "../i18n";
 
 /** Kendte OpenAI-kompatible inference-værktøjer og deres standardporte. "Andet" dækker alt andet. */
@@ -48,6 +48,7 @@ function uniqueId(base: string, taken: string[]): string {
 export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => void }) {
   const { t } = useI18n();
   const s = useStyles();
+  const api = useBackend();
   const [settings, setSettings] = useState<Settings>();
   const [policy, setPolicy] = useState<Policy>();
   const [policySource, setPolicySource] = useState<string>("default");
@@ -68,7 +69,7 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
       })
       .catch((e) => setMsg({ intent: "error", text: (e as Error).message }));
     api.models().then((m) => setModels(m.map((x) => x.id)), () => setModels([]));
-  }, []);
+  }, [api]);
 
   if (!settings || !policy) return msg ? <MessageBar intent="error"><MessageBarBody>{msg.text}</MessageBarBody></MessageBar> : <Spinner />;
 
@@ -113,6 +114,9 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
 
   return (
     <div className={s.root}>
+      <MessageBar intent="info">
+        <MessageBarBody>{api.mode === "bridge" ? t("modeBridgeInfo") : `${t("modeDirectInfo")} ${corsHint()}`}</MessageBarBody>
+      </MessageBar>
       <Subtitle2>{t("endpoints")}</Subtitle2>
       {settings.endpoints.map((ep) => (
         <Card key={ep.id} className={s.card}>
@@ -200,7 +204,9 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
       <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : undefined}>
         <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
       </Field>
-      <Caption1>Politik: {policySource}</Caption1>
+      <Caption1>
+        {t("policySource")}: {policySource}
+      </Caption1>
 
       <Button appearance="primary" onClick={save}>
         {t("save")}

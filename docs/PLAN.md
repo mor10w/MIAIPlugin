@@ -1,6 +1,6 @@
-# MIAIPlugin – projektplan (udkast v0.2)
+# MIAIPlugin – projektplan
 
-> Status: **Udkast** · Senest opdateret: 2026-11-02 · Ejer: M. Wiingaard
+> Status: **Udkast v0.3** · Senest opdateret: 2026-11-02 · Ejer: M. Wiingaard
 
 ## 1. Vision
 
@@ -29,7 +29,7 @@ Som standard er det et lokalt inference-værktøj på brugerens egen maskine.
 | Office | **Lokale desktop-installationer** (Windows, Mac) | Office på web, central udrulning (M365 Admin Center) |
 | Inference | Lokal på brugerens maskine | On-prem inference-server på intern host (vLLM/TGI bag gateway) |
 | Konfiguration | Brugerens egen `config.json` via UI | Maskin-/politikfil (GPO/Intune) der låser endpoints og modeller |
-| Installation | Installer pr. bruger | Pakket til Intune/SCCM, Jamf |
+| Installation | Inference-værktøj + ét manifest (add-in hostet statisk, direkte forbindelse) | MIAI Bridge pakket til Intune/SCCM, Jamf |
 
 **Designregler der holder enterprise-døren åben** (koster næsten intet nu):
 - Endpoint = `baseUrl` + valgfri API-nøgle. En intern `https://llm.firma.local/v1` er bare en anden endpoint.
@@ -60,21 +60,25 @@ Som standard er det et lokalt inference-værktøj på brugerens egen maskine.
 
 ## 4. Arkitektur (resumé)
 
-Detaljer i [ARKITEKTUR.md](ARKITEKTUR.md).
+Detaljer i [ARKITEKTUR.md](ARKITEKTUR.md). Bridgen er **valgfri** (ADR-0007).
 
 ```
-┌──────────── Office desktop (Word / Excel / PowerPoint) ─────────────┐
-│ Task pane (React + Fluent UI)  ←  serveres af bridgen (same origin) │
-│ Host-adaptere: Word · Excel · PowerPoint (Office.js)                │
-└───────────────┬─────────────────────────────────────────────────────┘
-                │ https://localhost:44321/api/*  (SSE-streaming)
-┌───────────────▼───────────── MIAI Bridge (Node.js) ─────────────────┐
-│ Opgavekatalog/prompts · politik (allowedHosts) · indstillinger      │
-│ <think>-filter · JSON-output m. validering · audit-log              │
-└───────────────┬─────────────────────────────────────────────────────┘
-                │ OpenAI API: /v1/models, /v1/chat/completions
-     Ollama · LM Studio · llama.cpp · vLLM · LocalAI · Jan · …
+┌──────────── Office desktop (Word / Excel / PowerPoint) ────────────┐
+│ Task pane (React + Fluent UI) · host-adaptere (Office.js)           │
+│ @miai/shared: opgaver/prompts · OpenAI-klient · <think>-filter ·    │
+│               JSON-validering · politik                             │
+│ Backend:  [Direkte]  ─────────────┐          [Bridge] ──┐           │
+└───────────────────────────────────┼─────────────────────┼───────────┘
+                                    │ OpenAI API (CORS)   │ https://localhost:44321/api
+                                    │                     ▼
+                                    │       MIAI Bridge (valgfri): samme motor,
+                                    │       låst politik, audit-log, offline UI
+                                    ▼                     │
+             Ollama · LM Studio · llama.cpp · vLLM · LocalAI · Jan · … ◀┘
 ```
+
+- **Direkte** (standard for privat/SMB): add-in'et hostes statisk (GitHub Pages) og kalder selv modellen.
+- **Bridge** (organisationer, offline, senere RAG): add-in'et serveres af bridgen, som kalder modellen.
 
 ## 5. Modelstrategi
 
@@ -92,7 +96,7 @@ Struktureret output (grammatik-rettelser, slides, formler) bruger
 `json_object` eller prompt + parsing + ét genforsøg. Dette sættes pr. endpoint
 (`structuredOutput`).
 
-Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra i bridgen.
+Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af den fælles motor.
 
 ## 6. Faseplan
 
@@ -100,13 +104,17 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra i 
 - [x] Monorepo-skelet: `shared`, `bridge`, `addin`.
 - [x] Bridge: HTTPS, statiske add-in-filer, `/api/health`, `/api/models`, `/api/tasks/:id` (SSE), `/api/settings`, politik-check.
 - [x] Add-in: task pane, host-adaptere, hurtighandlinger, chat, indstillinger.
+- [x] Bridgen gjort valgfri: fælles motor i `shared`, direkte backend i add-in'et, automatisk valg af tilstand (ADR-0007).
+- [x] Browsertest (Chromium) af direkte tilstand og bridge-tilstand med simuleret Word.
+- [x] GitHub Pages-hosting + genererede manifester (bridge, dev, hostet).
+- [ ] Direkte tilstand i WebView2 med hostet origin (Local Network Access-prompt?) og i WKWebView på Mac.
 - [ ] Verificér end-to-end i Word, Excel og PowerPoint desktop på Windows og Mac (manuel test).
 - [ ] Eval-sæt (30–50 opgaver, dansk/engelsk) og valg af anbefalede modeller.
 
 ### Fase 1 – MVP
-- Hærdning af F1–F11, fejlhåndtering, afbryd-knap, tokengrænser og chunking af store dokumenter.
-- Installer: Windows (MSI/winget) og macOS (pkg). Installerer bridge som bruger-service, opretter lokalt CA/cert og sideloader manifest.
-- Bakkeikon/statusside for bridgen.
+- Hærdning af F1–F11, fejlhåndtering, tokengrænser og chunking af store dokumenter.
+- Førstegangsguide i direkte tilstand: find kørende værktøjer på kendte porte og vis præcis CORS-opsætning.
+- Distribution: hostet manifest (direkte) som standard. Valgfri installer til bridgen (Windows MSI/winget, macOS pkg) med lokalt CA/cert og service.
 
 ### Fase 2
 - F6, F12, F14: opgaver som brugerredigerbare filer, deling via mappe.
@@ -121,8 +129,8 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra i 
 
 ## 7. Ikke-funktionelle krav
 
-- **Privatliv**: bridgen kalder kun hosts, som politikken tillader; ingen telemetri.
-- **Sikkerhed**: lytter kun på loopback. Kræver korrekt `Host`-header (DNS rebinding) og eget `Origin`, så fremmede websider ikke kan bruge bridgen. Dokumentindhold markeres som data i prompts.
+- **Privatliv**: motoren kalder kun hosts, som politikken tillader (i både direkte tilstand og bridge); ingen telemetri.
+- **Sikkerhed**: modeloutput renses (DOMPurify) før visning og indsættelse, og dokumentindhold markeres som data i prompts. Bridgen lytter kun på loopback, kræver korrekt `Host`-header (DNS rebinding) og eget `Origin`. I direkte tilstand afgør inference-værktøjets CORS-opsætning, hvilke origins der må kalde det.
 - **Ydelse**: streaming altid for tekstsvar; første token < 2 s på anbefalet hardware.
 - **Fortryd**: Word bruger track changes eller Ctrl+Z. Excel gemmer de tidligere formler og har en "Fortryd"-knap, fordi add-in-ændringer ikke altid kan fortrydes med Ctrl+Z.
 
@@ -132,7 +140,7 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra i 
 |-----|------|
 | Add-in | TypeScript, React 19, Fluent UI v9, Vite, Office.js, XML-manifest |
 | Bridge | Node.js 22 LTS, TypeScript, Fastify 5, Zod (ADR-0004) |
-| Test | Vitest (bridge og shared, mod mock OpenAI-server); senere Playwright og eval-harness |
+| Test | Vitest (shared og bridge mod mock OpenAI-server); Playwright-browsertest af task pane; senere eval-harness |
 | CI | GitHub Actions |
 
 ## 9. Beslutninger og åbne spørgsmål
@@ -142,6 +150,7 @@ Besluttet:
 - Desktop først; privat og SMB først (ADR-0005).
 - Bridge i Node.js/TypeScript (ADR-0004).
 - Politik/allowedHosts fra start (ADR-0006).
+- Bridgen er valgfri; direkte forbindelse er standard (ADR-0007).
 
 Åbne:
 1. Licens: open source (MIT/Apache-2.0) eller kommerciel/dual?
@@ -152,7 +161,9 @@ Besluttet:
 
 | Risiko | Afbødning |
 |--------|-----------|
-| Office-webview stoler ikke på lokalt cert | Installer tilføjer CA til brugerens trust store; i udvikling bruges `office-addin-dev-certs` |
+| CORS ikke sat op i inference-værktøjet (direkte tilstand) | Tydelig fejltekst med præcis opsætning; førstegangsguide; bridge som alternativ |
+| Local Network Access-prompt i WebView2 ved hostet origin | Afprøves i fase 0; alternativt hosting på `https://localhost` eller bridge |
+| Office-webview stoler ikke på lokalt cert (bridge/dev) | Installer tilføjer CA til brugerens trust store; i udvikling bruges `office-addin-dev-certs` |
 | Lokale modeller svagere på dansk | Eval-sæt; model pr. opgave; enterprise kan pege på større on-prem model |
 | Svag hardware | Små modeller, anbefaling ud fra RAM |
 | Endpoints understøtter struktureret output forskelligt | `structuredOutput`-indstilling pr. endpoint + robust parsing og genforsøg |

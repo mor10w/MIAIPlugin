@@ -1,12 +1,24 @@
 import { existsSync } from "node:fs";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
-import { getTask, Policy, Settings, TaskRequest, TASKS, type HealthInfo, type ModelInfo, type SettingsView, type TaskEvent } from "@miai/shared";
+import {
+  cachedModels,
+  getTask,
+  isUrlAllowed,
+  Policy,
+  Settings,
+  TaskRequest,
+  TASKS,
+  validateInput,
+  type HealthInfo,
+  type ModelInfo,
+  type SettingsView,
+  type TaskEvent,
+  type UpstreamError,
+} from "@miai/shared";
 import { z } from "zod";
 import { PolicyError, type ConfigStore } from "./config.js";
-import { UpstreamError } from "./openai.js";
-import { isUrlAllowed } from "./policy.js";
-import { cachedModels, InputError, runTask, validateInput } from "./runner.js";
+import { runTask } from "./runner.js";
 
 export const VERSION = "0.1.0";
 const KEY_MASK = "********";
@@ -139,12 +151,6 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
     };
     try {
       await runTask({ task, req: parsed.data, store, emit, signal: abort.signal });
-    } catch (err) {
-      if (!abort.signal.aborted) {
-        const code = err instanceof UpstreamError ? err.code : err instanceof InputError ? "NO_INPUT" : "INTERNAL";
-        if (code === "INTERNAL") req.log.error(err);
-        emit({ type: "error", message: (err as Error).message, code });
-      }
     } finally {
       reply.raw.end();
     }

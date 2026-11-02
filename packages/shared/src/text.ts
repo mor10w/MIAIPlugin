@@ -22,6 +22,14 @@ export function applyEdits(text: string, edits: GrammarResult["edits"]): { text:
   return { text: out + text.slice(cursor), skipped };
 }
 
+/**
+ * Små modeller sætter ofte Markdown-fremhævning i svar, der skal være ren tekst.
+ * Fjerner kun parvis **fed** og __fed__ – resten af teksten røres ikke.
+ */
+export function stripEmphasis(text: string): string {
+  return text.replace(/\*\*(\S(?:[^*\n]*\S)?)\*\*/g, "$1").replace(/__(\S(?:[^_\n]*\S)?)__/g, "$1");
+}
+
 /** Parser TSV (som modellen returnerer til Excel) til et 2D-array. Fjerner afsluttende tom linje. */
 export function parseTsv(tsv: string): string[][] {
   const lines = tsv.replace(/\r\n/g, "\n").replace(/\n+$/, "").split("\n");

@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "watch": "vite build --watch --mode development",
     "typecheck": "tsc --noEmit",
-    "validate": "office-addin-manifest validate manifest.xml"
+    "validate": "office-addin-manifest validate manifest.xml && office-addin-manifest validate manifest.dev.xml"
   },
   "dependencies": {
     "@fluentui/react-components": "^9.70.0",

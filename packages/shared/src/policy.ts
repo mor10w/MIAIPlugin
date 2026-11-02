@@ -1,4 +1,4 @@
-import type { Policy } from "@miai/shared";
+import type { Policy } from "./types.js";
 
 /** Tjekker om en URL's host er tilladt af politikken. Understøtter "*.domæne" wildcards. */
 export function isUrlAllowed(url: string, policy: Policy): boolean {

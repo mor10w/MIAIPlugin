@@ -14,7 +14,7 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { tasksForHost, type ApplyMode, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
+import { stripEmphasis, tasksForHost, type ApplyMode, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
 import { useTask } from "../useTask";
@@ -24,7 +24,7 @@ import { Markdown } from "./Markdown";
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: tokens.spacingHorizontalS },
-  taskBtn: { justifyContent: "flex-start", textAlign: "left", height: "auto", minHeight: "36px", whiteSpace: "normal" },
+  taskBtn: { justifyContent: "flex-start", textAlign: "left", height: "auto", minHeight: "36px", whiteSpace: "normal", overflowWrap: "anywhere", hyphens: "auto", minWidth: 0 },
   form: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" },
   result: { padding: tokens.spacingHorizontalM },
@@ -65,11 +65,13 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   };
 
   const modes: ApplyMode[] = task ? task.applyModes.filter((m) => adapter.supports(m)) : [];
+  // Ren tekst-opgaver: fjern Markdown-fremhævning, som små modeller ofte tilføjer.
+  const shownText = task?.output.kind === "text" && task.output.format === "plain" ? stripEmphasis(state.text) : state.text;
 
   const apply = async (mode: ApplyMode) => {
     const ctx = ctxRef.current!;
     if (!task) throw new Error("Ingen opgave");
-    if (task.output.kind === "text") return adapter.applyText(state.text, task.output.format, mode, ctx);
+    if (task.output.kind === "text") return adapter.applyText(shownText, task.output.format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);
     if (task.id === "generate-formula") return adapter.applyFormula!(state.result as FormulaResult, ctx);
@@ -136,9 +138,9 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
 
       {task && (state.text || state.result !== undefined) && (
         <Card className={s.result}>
-          <ResultView task={task} text={state.text} result={state.result} />
+          <ResultView task={task} text={shownText} result={state.result} />
           {state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length) && (
-            <ApplyBar key={state.text + JSON.stringify(state.result)} modes={modes} apply={apply} copyText={task.output.kind === "text" ? state.text : undefined} />
+            <ApplyBar key={state.text + JSON.stringify(state.result)} modes={modes} apply={apply} copyText={task.output.kind === "text" ? shownText : undefined} />
           )}
         </Card>
       )}

@@ -12,8 +12,8 @@
   <Version>0.1.0.0</Version>
   <ProviderName>M. Wiingaard</ProviderName>
   <DefaultLocale>da-DK</DefaultLocale>
-  <DisplayName DefaultValue="MIAI – lokal AI-assistent">
-    <Override Locale="en-US" Value="MIAI – local AI assistant"/>
+  <DisplayName DefaultValue="MIAI – lokal AI-assistent (bridge)">
+    <Override Locale="en-US" Value="MIAI – local AI assistant (bridge)"/>
   </DisplayName>
   <Description DefaultValue="Skriv, ret, oversæt og lav formler og slides med AI-modeller, der kører på din egen maskine.">
     <Override Locale="en-US" Value="Write, proofread, translate and create formulas and slides with AI models running on your own machine."/>

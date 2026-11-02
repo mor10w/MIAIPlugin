@@ -4,12 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import { Settings, type TaskEvent } from "@miai/shared";
+import { extractJson, isUrlAllowed, Settings, ThinkFilter, type TaskEvent } from "@miai/shared";
 import { ConfigStore } from "../src/config.js";
-import { extractJson } from "../src/json.js";
-import { isUrlAllowed } from "../src/policy.js";
 import { buildServer } from "../src/server.js";
-import { ThinkFilter } from "../src/think.js";
 
 // ---------------------------------------------------------------------------
 // Mock af en OpenAI-kompatibel inference-server
