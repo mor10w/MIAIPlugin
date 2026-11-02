@@ -1,4 +1,4 @@
-import { applyEdits, type ApplyMode, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
+import { applyEdits, layoutDiagram, type ApplyMode, type DiagramResult, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
 
@@ -106,5 +106,55 @@ export class PowerPointAdapter implements HostAdapter {
       }
     });
     return { message: `${result.slides.length} slides oprettet sidst i præsentationen.` };
+  }
+
+  /**
+   * Indsætter diagrammet som native shapes på den valgte slide (ADR-0009):
+   * afrounded rektangler med label + flowChartConnector-linjer. Brugeren kan
+   * derefter klikke på, flytte og redigere hver del.
+   */
+  async applyDiagram(result: DiagramResult): Promise<ApplyOutcome> {
+    if (!has("1.4")) throw new Error("Din PowerPoint-version understøtter ikke figurer fra add-ins (kræver PowerPointApi 1.4).");
+    const L = layoutDiagram(result);
+    // Skalér layoutet til at passe i en 16:9-slide med margin, og centrer.
+    const s = Math.min((W - 80) / L.width, (H - 80) / L.height);
+    const ox = (W - L.width * s) / 2;
+    const oy = (H - L.height * s) / 2;
+    await PowerPoint.run(async (ctx) => {
+      const sel = ctx.presentation.getSelectedSlides();
+      sel.load("items");
+      await ctx.sync();
+      if (!sel.items.length) throw new Error("Vælg en slide, og prøv igen.");
+      const slide = sel.items[0];
+
+      // Kanter først, så knuderne tegnes ovenpå. flowChartConnector er en ren
+      // linje (ingen pilehoved), så rektangelens retning er ligegyldig.
+      const pos = new Map(L.nodes.map((n) => [n.id, n]));
+      for (const e of result.edges ?? []) {
+        const a = pos.get(e.from);
+        const b = pos.get(e.to);
+        if (!a || !b) continue;
+        const x1 = ox + (a.x + a.w) * s, y1 = oy + (a.y + a.h / 2) * s;
+        const x2 = ox + b.x * s, y2 = oy + (b.y + b.h / 2) * s;
+        slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.flowChartConnector, {
+          left: Math.min(x1, x2),
+          top: Math.min(y1, y2),
+          width: Math.max(1, Math.abs(x2 - x1)),
+          height: Math.max(1, Math.abs(y2 - y1)),
+        });
+      }
+
+      for (const n of L.nodes) {
+        const sh = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.roundRectangle, {
+          left: ox + n.x * s,
+          top: oy + n.y * s,
+          width: Math.max(40, n.w * s),
+          height: Math.max(24, n.h * s),
+        });
+        sh.textFrame.textRange.text = n.label;
+      }
+      await ctx.sync();
+    });
+    return { message: `${result.nodes.length} figurer og ${(result.edges ?? []).length} linjer er placeret på den valgte slide – klik på dem for at redigere.` };
   }
 }

@@ -1,4 +1,4 @@
-import type { ApplyMode, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
+import type { ApplyMode, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 
@@ -24,6 +24,8 @@ export interface HostAdapter {
   applyGrammar?(result: GrammarResult, mode: ApplyMode, ctx: DocContext): Promise<ApplyOutcome>;
   applySlides?(result: SlidesResult): Promise<ApplyOutcome>;
   applyFormula?(result: FormulaResult, ctx: DocContext): Promise<ApplyOutcome>;
+  /** Indsætter diagrammet visuelt (billede i Word, native shapes i PowerPoint). */
+  applyDiagram?(result: DiagramResult): Promise<ApplyOutcome>;
 }
 
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */

@@ -14,7 +14,7 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { stripEmphasis, tasksForHost, type ApplyMode, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
+import { diagramToSvg, stripEmphasis, tasksForHost, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
 import { useTask } from "../useTask";
@@ -74,6 +74,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     if (task.output.kind === "text") return adapter.applyText(shownText, task.output.format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);
+    if (task.id === "diagram") return adapter.applyDiagram!(state.result as DiagramResult);
     if (task.id === "generate-formula") return adapter.applyFormula!(state.result as FormulaResult, ctx);
     throw new Error("Ukendt resultattype");
   };
@@ -167,6 +168,10 @@ function ResultView({ task, text, result }: { task: TaskDefinition; text: string
         ))}
       </div>
     );
+  }
+  if (task.id === "diagram") {
+    const r = result as DiagramResult;
+    return <div dangerouslySetInnerHTML={{ __html: diagramToSvg(r) }} />;
   }
   if (task.id === "text-to-slides") {
     const r = result as SlidesResult;

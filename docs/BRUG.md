@@ -132,6 +132,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 | Skriv artikel ud fra idé | ✅ | | |
 | Præsentationsdisposition | ✅ | | ✅ |
 | Tekst til slides | | | ✅ |
+| Lav diagram | ✅ | | ✅ |
 | Forklar formel · Lav formel ud fra beskrivelse | | ✅ | |
 | Chat med dokumentet | ✅ | ✅ | ✅ |
 
@@ -143,6 +144,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Opsummér** – markering, eller uden markering: hele dokumentet. Længde: punktform (3-5 punkter), ét afsnit eller én sætning. Indsættes **efter** markeringen eller **som kommentar**.
 - **Skriv artikel ud fra idé** – skriv en linje (fx "5 grunde til at køre AI lokalt"), vælg tone og længde (~300/700/1500 ord). Markér evt. et udkast, den bygges videre på. Indsættes som formateret tekst med overskrifter.
 - **Præsentationsdisposition** – emne + antal slides (5/8/10/15).
+- **Lav diagram** – markér tekst (fx. en tabel eller disposition) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsgrebet vises i task pane; **Indsæt efter markeringen** indsætter det som billede ved markeringen.
 
 ### Excel
 
@@ -154,6 +156,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 
 - **Omskriv / Parafrasér / Forenkl** – markér tekst i en tekstboks; resultatet erstatter teksten i boksen.
 - **Tekst til slides** – indsæt tekst eller beskriv et emne, vælg antal slides (3/5/8/10). Modellen foreslår titler, punkter og taler-notes; **Opret slides** indsætter dem i præsentationen (pladsholdere udfyldes; uden pladsholdere oprettes tekstbokse).
+- **Lav diagram** – markér tekst (fx. en tabel) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsgrebet vises i task pane; **Indsæt efter markeringen** placerer diagrammet som **native figurer** på den valgte slide (afrounded rektangler + linjer) – klik på dem for at flytte, farve og redigere hver del.
 - **Opsummér** – markering, eller hele præsentationen (slide for slide).
 - **Præsentationsdisposition** – som i Word.
 
@@ -180,7 +183,7 @@ Knapper, som din Office-version ikke understøtter, skjules.
 
 - **Modellens størrelde** afgør kvaliteten. `qwen3:4b` er et pænt udgangspunkt; brug en større model (7B+) til artikler og oversættelser, hvis maskinen rækker.
 - **Reasoning-modeller** (fx Qwen3) sender `<think>`-blokke med – skruen *Skjul <think>-tankegang* er slået til som standard, så tankegangen ikke ender i dokumentet.
-- **Struktureret output**: opgaver som grammatik, slides og formler kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
+- **Struktureret output**: opgaver som grammatik, slides, formler og diagrammer kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
 - **Dokumenttekst behandles som data**, aldrig som instruktioner, så markeringer med fx "ignorer ovenstående" ikke styrer modellen.
 - **Indstillinger i direkte tilstand** ligger i add-in'ets `localStorage` på maskinen. Nogle webview-bygninger rydder den; i så fald gendannes standardindstillingerne.
 

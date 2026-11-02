@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./tasks.js";
+export * from "./diagram.js";
 export * from "./text.js";
 export * from "./think.js";
 export * from "./json.js";

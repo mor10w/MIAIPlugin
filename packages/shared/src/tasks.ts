@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ChatMessage, HostKind, ParsedTaskRequest } from "./types.js";
+import { DiagramResult } from "./diagram.js";
 
 export type ApplyMode =
   | "replace" // erstat markeringen
@@ -342,6 +343,26 @@ export const TASKS: TaskDefinition[] = [
         "Respond with JSON only.",
       ),
       user(req.params.prompt && `Material / topic:\n${doc(req.params.prompt)}`, req.context.text && `Selected text:\n${doc(req.context.text)}`),
+    ],
+  },
+  {
+    id: "diagram",
+    label: { da: "Lav diagram", en: "Create diagram" },
+    description: { da: "Omdanner den markerede tekst (fx en tabel) til et diagram, der kan indsættes visuelt.", en: "Turns the selected text (e.g. a table) into a diagram that can be inserted visually." },
+    hosts: ["word", "powerpoint"],
+    input: "selectionOrDocument",
+    output: { kind: "json", schema: DiagramResult, schemaName: "diagram" },
+    params: [],
+    applyModes: ["insertAfter"],
+    temperature: 0.4,
+    buildMessages: (req) => [
+      system(
+        req,
+        "Convert the material into a simple flowchart or hierarchy diagram that shows its structure (steps, roles, states or relations).",
+        "Use 3-10 nodes with short labels (max 6 words each) and edges that show the flow or parent-child relation. Node ids must be unique (n1, n2, ...).",
+        "Respond with JSON only.",
+      ),
+      user(`Material:\n${doc(req.context.text)}`),
     ],
   },
   {

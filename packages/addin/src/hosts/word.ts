@@ -1,4 +1,5 @@
-import type { ApplyMode, DocContext, GrammarResult } from "@miai/shared";
+import type { ApplyMode, DiagramResult, DocContext, GrammarResult } from "@miai/shared";
+import { diagramToPng } from "../diagram-image";
 import { mdToSafeHtml } from "../markdown";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
 
@@ -114,6 +115,17 @@ export class WordAdapter implements HostAdapter {
       });
       const skipped = edits.length - applied;
       return { message: `${applied} af ${edits.length} rettelser anvendt${mode === "trackChanges" ? " som sporede ændringer" : ""}.`, warning: skipped > 0 };
+    });
+  }
+
+  /** Indsætter diagrammet som billede ved markeringen (ADR-0009). */
+  async applyDiagram(result: DiagramResult): Promise<ApplyOutcome> {
+    const png = await diagramToPng(result);
+    return this.run(async (ctx, range) => {
+      const pic = range.insertInlinePictureFromBase64(png.base64, "After");
+      pic.width = 450; // punkter – passer i A4's tekstområde
+      await ctx.sync();
+      return { message: "Diagrammet er indsat ved markeringen." };
     });
   }
 }
