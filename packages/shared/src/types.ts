@@ -78,7 +78,7 @@ export const Settings = z.object({
   /** Model pr. opgave-id, fx { "explain-formula": "qwen3:14b" }. */
   taskModels: z.record(z.string(), z.string()).default({}),
   temperature: z.number().min(0).max(2).default(0.3),
-  maxTokens: z.number().int().min(16).max(65_536).default(4_096),
+  maxTokens: z.number().int().min(16).max(65_536).default(8_192),
   uiLanguage: z.enum(["da", "en"]).default("da"),
   auditLog: z.boolean().default(false),
 });

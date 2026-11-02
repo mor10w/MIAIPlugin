@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isDegenerating } from "./degenerate.js";
 import { extractJson } from "./json.js";
 import { listModels, streamChat, UpstreamError, type ClientOptions } from "./openai.js";
 import { isUrlAllowed } from "./policy.js";
@@ -93,11 +94,22 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
       full += t;
       onText(t);
     };
+    let degenerated = false;
     for await (const chunk of streamChat(ep, { model, messages: msgs, temperature, maxTokens: settings.maxTokens, responseFormat, signal }, client)) {
       if (chunk.text) push(chunk.text);
       if (chunk.usage) usage = chunk.usage;
+      // Afbryd tidligt, hvis modellen er faldet i en gentagelsessløjfe.
+      if (isDegenerating(full)) {
+        degenerated = true;
+        break;
+      }
     }
     if (filter) push(filter.flush());
+    if (degenerated) {
+      const note = "\n\n_(Svaret blev afbrudt – modellen begyndte at gentage sig selv.)_";
+      full += note;
+      onText(note);
+    }
     return full;
   };
 

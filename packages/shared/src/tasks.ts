@@ -400,7 +400,8 @@ export const TASKS: TaskDefinition[] = [
     output: { kind: "text", format: "markdown" },
     params: [{ name: "prompt", label: { da: "Besked", en: "Message" }, kind: "text" }],
     applyModes: ["insertAfter", "replace", "comment"],
-    temperature: 0.5,
+    // 0.7: Qwen3-tænke-modeller degenererer (gentagelsessløjfer) ved lav temperatur.
+    temperature: 0.7,
     buildMessages: (req) => {
       const ctx = req.context.host === "excel" ? req.context.table || req.context.text : req.context.text;
       const contextNote = ctx

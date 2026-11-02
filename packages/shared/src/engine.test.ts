@@ -14,11 +14,14 @@ beforeAll(async () => {
     seen.push({ method: req.method!, headers: req.headers });
     res.setHeader("access-control-allow-origin", "*");
     if (req.url === "/v1/models") return res.end(JSON.stringify({ data: [{ id: "gemma3:4b" }] }));
-    req.resume();
+    let body = "";
+    req.on("data", (c) => (body += c));
     req.on("end", () => {
       // Server der ignorerer stream=true og svarer med ét JSON-objekt.
       res.setHeader("content-type", "application/json");
-      res.end(JSON.stringify({ choices: [{ message: { content: "<think>x</think>Kort svar." } }] }));
+      // LOOPTEST: simulerer en model, der er faldet i gentagelsessløjfe.
+      const content = body.includes("LOOPTEST") ? `Jeg kigger på indholdet. ${Array(8).fill("side 6 tabel").join(" ")}` : "Kort svar.";
+      res.end(JSON.stringify({ choices: [{ message: { content } }] }));
     });
   });
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
@@ -68,5 +71,13 @@ describe("executeTask (direkte tilstand)", () => {
 
   it("validerer input", () => {
     expect(() => validateInput(getTask("explain-formula")!, TaskRequest.parse({ context: { host: "excel" } }))).toThrow(InputError);
+  });
+
+  it("afbryder ved gentagelsessløjfe og markerer svaret", async () => {
+    const ev = await run("chat", { context: { host: "word" }, params: { prompt: "LOOPTEST" } });
+    const text = ev.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
+    expect(text).toContain("gentage sig selv");
+    expect(ev.some((e) => e.type === "done")).toBe(true);
+    expect(ev.filter((e) => e.type === "error").length).toBe(0);
   });
 });
