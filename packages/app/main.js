@@ -96,14 +96,22 @@ function installInOffice() {
 }
 
 /**
- * Betror certifikatet i login-keychain (kræver admin-adgang, vises af macOS).
- * Bemærk: stier med " kan ikke håndteres – usandsynligt på macOS.
+ * Betror certifikatet i login-keychain. Kræver ikke admin-adgang (egen login-keychain),
+ * så der vises ingen macOS-dialog. Returnerer { ok, message } med den reelle fejl ved fiasko.
  */
 function trustCert() {
   const keychain = join(homedir(), "Library", "Keychains", "login.keychain-db");
-  const cmd = `security add-trusted-cert -d -r trustRoot -k "${keychain}" "${CERT_FILE}"`;
-  const r = spawnSync("osascript", ["-e", `do shell script ${JSON.stringify(cmd)} with administrator privileges`], { encoding: "utf8" });
-  return r.status === 0;
+  const r = spawnSync("security", ["add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, CERT_FILE], { encoding: "utf8" });
+  return { ok: r.status === 0, message: (r.stderr ?? "").trim() };
+}
+
+function showCertResult(r) {
+  dialog.showMessageBox({
+    type: r.ok ? "info" : "warning",
+    title: "Certifikat",
+    message: r.ok ? "MIAI-certifikatet er nu betroet." : `Certifikatet blev ikke betroet: ${r.message || "ukendt fejl"}`,
+    detail: r.ok ? "Office kan nu forbinde til MIAI Bridge." : "Prøv igen, eller genstart appen.",
+  });
 }
 
 // --- Menu --------------------------------------------------------------------
@@ -132,15 +140,7 @@ function buildMenu() {
     },
     {
       label: "Betro certifikat…",
-      click: () => {
-        const ok = trustCert();
-        dialog.showMessageBox({
-          type: ok ? "info" : "warning",
-          title: "Certifikat",
-          message: ok ? "MIAI-certifikatet er nu betroet." : "Certifikatet blev ikke betroet (afbrudt?).",
-          detail: ok ? "Office kan nu forbinde til MIAI Bridge." : "Prøv igen, eller genstart appen.",
-        });
-      },
+      click: () => showCertResult(trustCert()),
     },
     { label: `Åbn https://localhost:${PORT}`, click: () => void shell.openExternal(`https://localhost:${PORT}`) },
     { type: "separator" },
@@ -194,11 +194,11 @@ if (!gotLock) {
       title: "Velkommen til MIAI",
       message: "MIAI Bridge kører nu på https://localhost:44321",
       detail:
-        "1) Klik 'Betro certifikat' i menuen (kræver en gang admin-adgang).\n" +
+        "1) Klik 'Betro certifikat' i menuen (ét klik – ingen admin-adgang).\n" +
         "2) Klik 'Installer i Office' og genstart Word/Excel/PowerPoint.\n" +
         "3) Vælg dit inference-værktøj og model i add-in'ets fanen Indstillinger.",
       buttons: ["Betro certifikat", "Senere"],
-    }).then((r) => { if (r.response === 0 && trustCert()) void refreshStatus(); });
+    }).then((r) => { if (r.response === 0) showCertResult(trustCert()); });
   });
 
   app.on("before-quit", async () => {
