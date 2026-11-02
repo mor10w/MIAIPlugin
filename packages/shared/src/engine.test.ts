@@ -21,6 +21,31 @@ beforeAll(async () => {
       if (body) lastBody = JSON.parse(body);
       // Server der ignorerer stream=true og svarer med ét JSON-objekt.
       res.setHeader("content-type", "application/json");
+      // TOOLTEST: simulerer en model, der kalder web_search. Uden tools-parameter (sidste runde) svarer den normalt.
+      if (body.includes("TOOLTEST")) {
+        let wants: { messages?: { role?: string }[]; tools?: unknown };
+        try {
+          wants = JSON.parse(body);
+        } catch {
+          wants = {};
+        }
+        if (!wants.tools) {
+          res.end(JSON.stringify({ choices: [{ message: { content: "Endeligt svar uden værktøjer." } }] }));
+          return;
+        }
+        if (!wants.messages?.some((m) => m.role === "tool")) {
+          res.end(
+            JSON.stringify({
+              choices: [
+                { finish_reason: "tool_calls", message: { content: "", tool_calls: [{ id: "call_1", type: "function", function: { name: "web_search", arguments: '{"query":"test query"}' } }] } },
+              ],
+            }),
+          );
+          return;
+        }
+        res.end(JSON.stringify({ choices: [{ message: { content: "Endeligt svar baseret på søgning." } }] }));
+        return;
+      }
       // LOOPTEST: simulerer en model, der er faldet i gentagelsessløjfe.
       const content = body.includes("LOOPTEST") ? `Jeg kigger på indholdet. ${Array(8).fill("side 6 tabel").join(" ")}` : "Kort svar.";
       res.end(JSON.stringify({ choices: [{ message: { content } }] }));
@@ -99,5 +124,52 @@ describe("executeTask (direkte tilstand)", () => {
   it("sender ikke presence_penalty, når den ikke er sat", async () => {
     await run("chat", { context: { host: "word" }, params: { prompt: "hej" } });
     expect(lastBody).not.toHaveProperty("presence_penalty");
+  });
+
+  it("kører tool-løkke (web_search) og udsender search-event", async () => {
+    const calls: string[] = [];
+    const events: TaskEvent[] = [];
+    const s = settings();
+    await executeTask(
+      getTask("chat")!,
+      TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }),
+      {
+        settings: s,
+        endpoint: s.endpoints[0],
+        policy: Policy.parse({}),
+        emit: (e) => events.push(e),
+        signal: new AbortController().signal,
+        tools: {
+          specs: [{ type: "function", function: { name: "web_search", description: "Søg på webbet", parameters: {} } }],
+          run: async (_name, args) => {
+            calls.push(args);
+            return "1. Titel\n   https://eksempel.dk\n   Snippet fra siden.";
+          },
+        },
+      },
+    );
+    expect(calls).toHaveLength(1); // præcis ét værktøjskald, derefter endeligt svar
+    expect(JSON.parse(calls[0])).toEqual({ query: "test query" });
+    const text = events.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
+    expect(text).toContain("Endeligt svar baseret på søgning.");
+    expect(events.some((e) => e.type === "search" && (e as { query: string }).query === "test query")).toBe(true);
+  });
+
+  it("kører ikke værktøjer, når webSearch er slået fra", async () => {
+    const calls: string[] = [];
+    const s = Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base }], activeEndpoint: "x", webSearch: false });
+    await executeTask(
+      getTask("chat")!,
+      TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }),
+      {
+        settings: s,
+        endpoint: s.endpoints[0],
+        policy: Policy.parse({}),
+        emit: () => {},
+        signal: new AbortController().signal,
+        tools: { specs: [], run: async () => (calls.push("x"), "resultat") },
+      },
+    );
+    expect(calls).toHaveLength(0); // eksekvereren må aldrig kaldes
   });
 });

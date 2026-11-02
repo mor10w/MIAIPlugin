@@ -114,8 +114,9 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 3. **Standardmodel** – vælg fra de fundne modeller, eller lad den første tilgængelige bruges.
 4. **Temperatur** (0–2) og **Maks. tokens i svar**.
 5. **Sprog** – Dansk eller English (følger som udgangspunkt Office-sproget).
-6. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge.
-7. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
+6. **Web-søgning** – gør det muligt for modellen at søge online efter aktuelle oplysninger og inspiration (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle; modellen citerer sine kilder. Kræver bridge- eller app-tilstand (direkte tilstand har ingen søgetjeneste). Slåes fra, hvis du vil have modellen til kun at svare ud fra sine egne data.
+7. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge.
+8. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
 
 Klik **Gem** – uden dette virker ændringerne ikke.
 
@@ -164,6 +165,9 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 
 Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument som kontekst** (til som udgangspunkt) giver modellen din aktuelle markering – i Excel dit markerede område – med. De seneste 20 beskeder medsendes som historik. Svar kan indsættes **efter** markeringen, **erstattes** eller indsættes **som kommentar**. **Ny samtale** nulstiller historikken. Enter sender, Shift+Enter linjeskift.
 
+- **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8).
+- **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, til som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
+
 ## Anvendelsesknapper pr. app
 
 | Knap | Word | Excel | PowerPoint |
@@ -176,6 +180,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 | Skriv i celler | | ✅ (oversættelse af et markeret område – vises som tabel inden indsættelse) | |
 | Indsæt formel (+ Fortryd) | | ✅ (formelgenerering) | |
 | Opret slides | | | ✅ (PowerPointApi 1.4) |
+| Indsæt som billede (diagram/figur fra chatten) | ✅ | | ✅ (PowerPointApi 1.8) |
 | Kopiér | ✅ | ✅ | ✅ |
 
 Knapper, som din Office-version ikke understøtter, skjules.

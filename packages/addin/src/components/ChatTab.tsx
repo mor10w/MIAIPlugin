@@ -13,6 +13,7 @@ const useStyles = makeStyles({
   log: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
   user: { alignSelf: "flex-end", background: tokens.colorBrandBackground2, padding: tokens.spacingHorizontalS, borderRadius: tokens.borderRadiusMedium, maxWidth: "90%", whiteSpace: "pre-wrap" },
   bot: { background: tokens.colorNeutralBackground2, padding: tokens.spacingHorizontalS, borderRadius: tokens.borderRadiusMedium },
+  searching: { fontSize: tokens.fontSizeBase200, color: tokens.colorBrandForeground1, marginBottom: tokens.spacingVerticalXS },
   input: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
   grow: { flex: 1 },
   footer: { display: "flex", justifyContent: "space-between", alignItems: "center" },
@@ -64,7 +65,12 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
         )}
         {state.status === "running" && (
           <div className={s.bot}>
-            <Markdown text={state.text || "…"} />
+            {state.searchQuery && (
+              <div className={s.searching}>
+                {t("searching")}: {state.searchQuery}…
+              </div>
+            )}
+            <Markdown text={state.text || (state.searchQuery ? " " : "…")} />
           </div>
         )}
         {state.stopReason === "repetition" && state.status === "done" && (

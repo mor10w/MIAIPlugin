@@ -45,6 +45,8 @@ export type TaskEvent =
   | { type: "delta"; text: string }
   /** Fremdrift for strukturerede (JSON) svar, som ikke vises løbende. */
   | { type: "progress"; chars: number }
+  /** Modellen søger på webbet (vises i UI, fx "Søger på web…"). */
+  | { type: "search"; query: string }
   | { type: "result"; data: unknown }
   | { type: "error"; message: string; code?: string }
   | {
@@ -92,6 +94,8 @@ export const Settings = z.object({
   maxTokens: z.number().int().min(16).max(65_536).default(8_192),
   uiLanguage: z.enum(["da", "en"]).default("da"),
   auditLog: z.boolean().default(false),
+  /** Modellen kan søge på webbet (kræver bridge – direkte tilstand har ingen eksekverer). */
+  webSearch: z.boolean().default(true),
 });
 export type Settings = z.infer<typeof Settings>;
 

@@ -227,6 +227,9 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
         </Dropdown>
       </Field>
       <Switch label={t("auditLog")} checked={settings.auditLog} onChange={(_, d) => setSettings({ ...settings, auditLog: d.checked })} />
+      <Field hint={t("webSearchHint")}>
+        <Switch label={t("webSearch")} checked={settings.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
+      </Field>
       <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : undefined}>
         <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
       </Field>

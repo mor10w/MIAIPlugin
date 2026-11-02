@@ -1,4 +1,4 @@
-import type { ChatMessage, Endpoint } from "./types.js";
+import type { Endpoint } from "./types.js";
 
 /**
  * Minimal klient til OpenAI Chat Completions API – det eneste API, MIAI taler (ADR-0003).
@@ -25,17 +25,45 @@ export interface ClientOptions {
 
 export interface ChatParams {
   model: string;
-  messages: ChatMessage[];
+  messages: ApiMessage[];
   temperature?: number;
   maxTokens?: number;
   presencePenalty?: number;
   responseFormat?: Record<string, unknown>;
+  /** OpenAI-værktøjsdefinitioner (fx web_search). Se ADR-0010. */
+  tools?: ToolSpec[];
   signal?: AbortSignal;
 }
+
+/** OpenAI-værktøjsdefinition (function calling). */
+export interface ToolSpec {
+  type: "function";
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
+/** Et komplet værktøjskald fra modellen. */
+export interface ToolCall {
+  id: string;
+  function: { name: string; arguments: string };
+}
+
+/** Delvist værktøjskald fra en stream-chunk (felterne bygges op over chunks). */
+export interface ToolCallDelta {
+  index: number;
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+/** Besked til /chat/completions. Bredere end ChatMessage: tillader tool-kald og -resultater (ADR-0010). */
+export type ApiMessage =
+  | { role: "system" | "user" | "assistant"; content: string; tool_calls?: ToolCall[] }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 export interface StreamChunk {
   text?: string;
   usage?: { promptTokens?: number; completionTokens?: number };
+  toolCalls?: ToolCallDelta[];
+  finishReason?: string | null;
 }
 
 /** AbortSignal.any findes ikke i ældre WebViews (Safari < 17.4). */
@@ -110,6 +138,7 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   if (p.maxTokens !== undefined) body.max_tokens = p.maxTokens;
   if (p.presencePenalty !== undefined) body.presence_penalty = p.presencePenalty;
   if (p.responseFormat) body.response_format = p.responseFormat;
+  if (p.tools?.length) body.tools = p.tools;
 
   const res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
   const ctype = res.headers.get("content-type") ?? "";
@@ -117,10 +146,17 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   // Nogle servere ignorerer stream=true og svarer med ét JSON-objekt.
   if (!ctype.includes("text/event-stream")) {
     const json = (await res.json().catch(() => null)) as CompletionJson | null;
-    const text = json?.choices?.[0]?.message?.content;
-    if (typeof text !== "string") throw new UpstreamError("Uventet svar fra /chat/completions", "UPSTREAM_PROTOCOL");
-    yield { text, usage: mapUsage(json?.usage) };
-    return;
+    const choice = json?.choices?.[0];
+    const msg = (choice as { message?: { content?: string; tool_calls?: RawToolCall[] } } | undefined)?.message;
+    if (msg && typeof msg.content === "string") {
+      yield { text: msg.content, usage: mapUsage(json?.usage), toolCalls: fullToolCalls(msg.tool_calls), finishReason: choice?.finish_reason ?? null };
+      return;
+    }
+    if (msg?.tool_calls) {
+      yield { toolCalls: fullToolCalls(msg.tool_calls), finishReason: choice?.finish_reason ?? "tool_calls", usage: mapUsage(json?.usage) };
+      return;
+    }
+    throw new UpstreamError("Uventet svar fra /chat/completions", "UPSTREAM_PROTOCOL");
   }
 
   if (!res.body) throw new UpstreamError("Tomt svar fra /chat/completions", "UPSTREAM_PROTOCOL");
@@ -148,10 +184,33 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   }
 }
 
+interface CompletionChoice {
+  finish_reason?: string | null;
+}
+
+type Choice = CompletionChoice &
+  ({ message?: { content?: string; tool_calls?: RawToolCall[] } } | { delta?: { content?: string | null; tool_calls?: RawToolCallDelta[] } });
+
 interface CompletionJson {
-  choices?: { message?: { content?: string }; delta?: { content?: string | null } }[];
+  choices?: Choice[];
   usage?: { prompt_tokens?: number; completion_tokens?: number };
   error?: { message?: string } | string;
+}
+
+interface RawToolCall {
+  id?: string;
+  type?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+interface RawToolCallDelta extends RawToolCall {
+  index?: number;
+}
+
+/** Samler værktøjskald ud af et svar (stream-delta eller komplet message). */
+function fullToolCalls(raw: RawToolCall[] | undefined): ToolCallDelta[] | undefined {
+  if (!raw?.length) return undefined;
+  return raw.map((tc, i) => ({ index: (tc as RawToolCallDelta).index ?? i, id: tc.id, function: { name: tc.function?.name, arguments: tc.function?.arguments ?? "" } }));
 }
 
 function mapUsage(u: CompletionJson["usage"]): StreamChunk["usage"] {
@@ -173,8 +232,10 @@ export function parseSseLine(line: string): StreamChunk | "done" | null {
     const msg = typeof json.error === "string" ? json.error : json.error.message;
     throw new UpstreamError(msg ?? "Ukendt fejl fra endpoint", "UPSTREAM_HTTP");
   }
-  const text = json.choices?.[0]?.delta?.content ?? undefined;
+  const choice = json.choices?.[0];
+  const text = (choice as { delta?: { content?: string | null } } | undefined)?.delta?.content ?? undefined;
+  const toolCalls = fullToolCalls((choice as { delta?: { tool_calls?: RawToolCallDelta[] } } | undefined)?.delta?.tool_calls);
   const usage = mapUsage(json.usage);
-  if (!text && !usage) return null;
-  return { text: text ?? undefined, usage };
+  if (!text && !usage && !toolCalls) return null;
+  return { text: text ?? undefined, usage, toolCalls, finishReason: choice?.finish_reason ?? null };
 }

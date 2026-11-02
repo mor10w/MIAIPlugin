@@ -8,6 +8,8 @@ export interface TaskState {
   result?: unknown;
   model?: string;
   progressChars: number;
+  /** Værende web-søgning (vises i UI, ADR-0010). */
+  searchQuery?: string;
   error?: string;
   /** Sat, hvis motoren afbrød svaret (fx gentagelsessløjfe). */
   stopReason?: "repetition";
@@ -46,6 +48,9 @@ export function useTask() {
               break;
             case "progress":
               update((s) => ({ ...s, progressChars: e.chars }));
+              break;
+            case "search":
+              update((s) => ({ ...s, searchQuery: e.query }));
               break;
             case "result":
               update((s) => ({ ...s, result: e.data }));
