@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+coverage/
+*.log
+.env
+.env.*
+*.pfx
+*.pem
+*.key
+.vs/
+.vscode/*
+!.vscode/extensions.json
+bin/
+obj/
+.DS_Store
