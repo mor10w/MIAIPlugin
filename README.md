@@ -35,6 +35,7 @@ npm install && npm run certs && npm run dev
 Sideload derefter `packages/addin/manifest.dev.xml` med `npm run sideload:mac` eller `npm run sideload:windows`.
 
 ## Dokumentation
+- [Brugervejledning](docs/BRUG.md)
 - [Projektplan](docs/PLAN.md)
 - [Arkitektur](docs/ARKITEKTUR.md)
 - [Udvikling og test](docs/UDVIKLING.md)
@@ -45,4 +46,5 @@ Sideload derefter `packages/addin/manifest.dev.xml` med `npm run sideload:mac` e
 packages/shared   fælles motor: opgaver/prompts, OpenAI-klient, politik
 packages/addin    Office.js task pane (React + Fluent UI), backends, manifest-skabelon
 packages/bridge   valgfri lokal Node.js-service (Fastify)
+packages/app      MIAI App – Electron-menu-bar-app, der kører bridgen (salgsudgave B)
 ```

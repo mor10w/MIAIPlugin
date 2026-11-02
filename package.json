@@ -6,7 +6,8 @@
   "workspaces": [
     "packages/shared",
     "packages/bridge",
-    "packages/addin"
+    "packages/addin",
+    "packages/app"
   ],
   "type": "module",
   "engines": {
@@ -29,5 +30,10 @@
     "concurrently": "^10.0.0",
     "office-addin-dev-certs": "^3.0.0",
     "typescript": "~5.9.0"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
   }
 }
