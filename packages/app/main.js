@@ -1,82 +1,75 @@
 // MIAI App – menu-bar-app, der kører MIAI Bridge på https://localhost:44321.
 // Salgsudgave B (ADR-0008): alt kører lokalt; ingen vendor-cloud, ingen CORS.
-// Bridgen (Fastify) kører i-process – brugeren behøver ikke Node.js.
-import { app, dialog, Menu, Tray, nativeImage, shell } from "electron";
-import { execFileSync, spawnSync } from "node:child_process";
-import https from "node:https";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+// Bridgen (Fastify) kører i en Electron utility-process – brugeren behøver ikke Node.js.
+// VIGTIGT: bridgen kan IKKE køre i main-processen – Chromiums netværksspecifik forstyrrer
+// Node's TLS-server, så håndskaber hænger. I en utility-process (uden Chromium) fungerer
+// TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
+import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
+import { spawnSync } from "node:child_process";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ConfigStore } from "@miai/bridge/dist/config.js";
-import { buildServer, VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
+import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 
 const PORT = Number(process.env.MIAI_PORT ?? 44321);
 const MIAI_DIR = join(homedir(), "Library", "Application Support", "MIAI");
-const TLS_DIR = join(MIAI_DIR, "tls");
-const CERT_FILE = join(TLS_DIR, "localhost.crt");
+const CERT_FILE = join(MIAI_DIR, "tls", "localhost.crt");
+
+/** Fillog: Electron svulger console-output i pakker, så fejl kan ellers ikke ses. */
+function log(msg) {
+  try {
+    appendFileSync(join(MIAI_DIR, "MIAI.log"), `[${new Date().toISOString()}] ${msg}\n`);
+  } catch { /* log skal aldrig fælde appen */ }
+}
 
 // Packaget: filer ligger i Resources/ (electron-builder extraResources). I dev: repoet.
 const ADDIN_DIR = app.isPackaged ? join(process.resourcesPath, "addin") : new URL("../../addin/dist", import.meta.url).pathname;
 const MANIFEST = app.isPackaged ? join(process.resourcesPath, "manifest.xml") : new URL("../../addin/manifest.xml", import.meta.url).pathname;
 
-let server = null;
+let bridgeProc = null;
 let tray = null;
+let quitting = false;
+const bridgeState = { listening: false };
 
-// --- TLS -----------------------------------------------------------------
+// --- Bridgen (utility-process) -------------------------------------------------
 /**
- * Genererer et selvsigneret certifikat for localhost (CN=localhost, SAN: DNS+IP).
- * Office kræver HTTPS; certifikatet skal derefter betroes i keychain (menuen).
+ * Fork'er bridgen som utility-process og afventer, at den lytter (eller fejler).
+ * Returnerer en Promise, der løses senest efter 10 s.
  */
-function ensureTls() {
-  const keyFile = join(TLS_DIR, "localhost.key");
-  if (!existsSync(CERT_FILE) || !existsSync(keyFile)) {
-    mkdirSync(TLS_DIR, { recursive: true });
-    const cnf = join(TLS_DIR, "openssl.cnf");
-    writeFileSync(
-      cnf,
-      [
-        "[req]",
-        "distinguished_name = dn",
-        "x509_extensions = v3_req",
-        "prompt = no",
-        "[dn]",
-        "CN = localhost",
-        "[v3_req]",
-        "subjectAltName = DNS:localhost,IP:127.0.0.1",
-        "keyUsage = digitalSignature, keyEncipherment",
-        "extendedKeyUsage = serverAuth",
-      ].join("\n"),
-    );
-    // /usr/bin/openssl (LibreSSL) medleveres på macOS.
-    execFileSync("/usr/bin/openssl", [
-      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-      "-days", "3650",
-      "-keyout", keyFile, "-out", CERT_FILE, "-config", cnf,
-    ], { stdio: "ignore" });
-  }
-  return { cert: readFileSync(CERT_FILE), key: readFileSync(keyFile) };
-}
+function startBridge() {
+  log("startBridge: fork'er utility-process");
+  bridgeProc = utilityProcess.fork(
+    join(app.getAppPath(), "bridge-process.mjs"),
+    [],
+    { env: { ...process.env, MIAI_PORT: String(PORT), MIAI_ADDIN_DIR: ADDIN_DIR } },
+  );
 
-// --- Bridgen ---------------------------------------------------------------
-async function startBridge() {
-  const store = new ConfigStore();
-  server = await buildServer({ store, port: PORT, addinDir: ADDIN_DIR, https: ensureTls(), fastify: { logger: false } });
-  await server.listen({ host: "127.0.0.1", port: PORT });
-}
+  bridgeProc.on("message", (msg) => {
+    if (msg?.type === "listening") {
+      bridgeState.listening = true;
+      log(`bridge-process: lytter på ${msg.addr} (v${msg.version})`);
+      setStatus("Bridgen kører");
+    } else if (msg?.type === "status") {
+      setStatus(statusFromEndpoint(msg.endpoint));
+    } else if (msg?.type === "error") {
+      log(`bridge-process FEJL: ${msg.message}`);
+      dialog.showErrorBox("MIAI", `Bridgen kunne ikke startes: ${msg.message}`);
+      app.quit();
+    }
+  });
 
-/** Henter /api/health med TLS-verifikation slået fra (eget selvsigneret cert). */
-function health() {
+  bridgeProc.on("exit", (code) => {
+    log(`bridge-process afsluttet med kode ${code}`);
+    if (!quitting && code !== 0) {
+      dialog.showErrorBox("MIAI", `Bridgen stoppede uventet (kode ${code}). Se MIAI.log for detaljer.`);
+      app.quit();
+    }
+  });
+
   return new Promise((resolve) => {
-    const req = https.get(
-      { host: "localhost", port: PORT, path: "/api/health", rejectUnauthorized: false, timeout: 4_000 },
-      (res) => {
-        let body = "";
-        res.on("data", (c) => (body += c));
-        res.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
-      },
-    );
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => { req.destroy(); resolve(null); });
+    const t = setTimeout(resolve, 10_000);
+    bridgeProc.on("message", (m) => { if (m?.type === "listening") { clearTimeout(t); resolve(); } });
+    bridgeProc.on("exit", () => { clearTimeout(t); resolve(); });
   });
 }
 
@@ -148,18 +141,23 @@ function buildMenu() {
   ]);
 }
 
-async function refreshStatus() {
-  if (!tray) return;
-  const h = await health();
-  if (!h?.endpoint) {
-    statusText = "Bridgen svarer ikke";
-  } else if (h.endpoint.reachable) {
-    statusText = `Forbundet · ${h.endpoint.baseUrl}`;
-  } else {
-    statusText = `Modellen svarer ikke (${h.endpoint.error ?? "ukendt fejl"})`;
+let lastStatus = "";
+/** Opdaterer menuens statuslinje (kaldes fra bridge-processens messages). */
+function setStatus(s) {
+  if (s === lastStatus) return;
+  log(`status: ${s}`);
+  lastStatus = s;
+  statusText = s;
+  if (tray) {
+    tray.setToolTip(statusText);
+    tray.setContextMenu(buildMenu());
   }
-  tray.setToolTip(statusText);
-  tray.setContextMenu(buildMenu());
+}
+
+function statusFromEndpoint(ep) {
+  if (!ep) return bridgeState.listening ? "Bridgen kører" : "Bridgen svarer ikke";
+  if (ep.reachable) return `Forbundet · ${ep.baseUrl}`;
+  return `Modellen svarer ikke (${ep.error ?? "ukendt fejl"})`;
 }
 
 // --- Livscyklus -----------------------------------------------------------------
@@ -169,39 +167,48 @@ if (!gotLock) {
 } else {
   app.on("second-instance", () => {});
 
-  app.whenReady().then(async () => {
-    // Kun menu-bar – ingen dock-ikon.
-    app.dock?.hide();
+  process.on("unhandledRejection", (r) => log(`unhandledRejection: ${r}`));
+  process.on("uncaughtException", (e) => log(`uncaughtException: ${e.stack ?? e}`));
 
-    try {
-      await startBridge();
-    } catch (err) {
-      dialog.showErrorBox("MIAI", `Bridgen kunne ikke startes: ${err.message}`);
-      app.quit();
-      return;
-    }
+  app.whenReady()
+    .then(async () => {
+      log("whenReady");
+      // Kun menu-bar – ingen dock-ikon.
+      app.dock?.hide();
 
-    const icon = nativeImage.createFromPath(join(app.getAppPath(), "assets", "tray.png"));
-    icon.setTemplateImage(true);
-    tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+      try {
+        await startBridge();
+      } catch (err) {
+        log(`startBridge FEJL: ${err.stack ?? err}`);
+        dialog.showErrorBox("MIAI", `Bridgen kunne ikke startes: ${err.message}`);
+        app.quit();
+        return;
+      }
 
-    await refreshStatus();
-    setInterval(() => void refreshStatus(), 15_000);
+      const icon = nativeImage.createFromPath(join(app.getAppPath(), "assets", "tray.png"));
+      icon.setTemplateImage(true);
+      tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
+      log("tray oprettet");
 
-    // Første start: vejledning + ét-klik-betroning.
-    dialog.showMessageBox({
-      type: "info",
-      title: "Velkommen til MIAI",
-      message: "MIAI Bridge kører nu på https://localhost:44321",
-      detail:
-        "1) Klik 'Betro certifikat' i menuen (ét klik – ingen admin-adgang).\n" +
-        "2) Klik 'Installer i Office' og genstart Word/Excel/PowerPoint.\n" +
-        "3) Vælg dit inference-værktøj og model i add-in'ets fanen Indstillinger.",
-      buttons: ["Betro certifikat", "Senere"],
-    }).then((r) => { if (r.response === 0) showCertResult(trustCert()); });
-  });
+      // Første start: vejledning + ét-klik-betroning.
+      dialog.showMessageBox({
+        type: "info",
+        title: "Velkommen til MIAI",
+        message: "MIAI Bridge kører nu på https://localhost:44321",
+        detail:
+          "1) Klik 'Betro certifikat' i menuen (ét klik – ingen admin-adgang).\n" +
+          "2) Klik 'Installer i Office' og genstart Word/Excel/PowerPoint.\n" +
+          "3) Vælg dit inference-værktøj og model i add-in'ets fanen Indstillinger.",
+        buttons: ["Betro certifikat", "Senere"],
+      }).then((r) => { if (r.response === 0) showCertResult(trustCert()); });
+    })
+    .catch((err) => {
+      log(`whenReady FEJL: ${err.stack ?? err}`);
+      dialog.showErrorBox("MIAI", `Uventet fejl ved start: ${err.message}`);
+    });
 
-  app.on("before-quit", async () => {
-    try { await server?.close(); } catch { /* afslut alligevel */ }
+  app.on("before-quit", () => {
+    quitting = true;
+    bridgeProc?.kill();
   });
 }
