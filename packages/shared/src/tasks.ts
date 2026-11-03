@@ -9,7 +9,8 @@ export type ApplyMode =
   | "comment" // indsæt som kommentar
   | "newSlides" // opret slides (PowerPoint)
   | "formula" // skriv formel i markeret celle (Excel)
-  | "cells"; // skriv TSV ind i markerede celler (Excel)
+  | "cells" // skriv TSV ind i markerede celler (Excel)
+  | "diagram"; // indsæt diagram (billede i Word, figurer i PowerPoint)
 
 export type Localized = { da: string; en: string };
 
@@ -353,7 +354,7 @@ export const TASKS: TaskDefinition[] = [
     input: "selectionOrDocument",
     output: { kind: "json", schema: DiagramResult, schemaName: "diagram" },
     params: [],
-    applyModes: ["insertAfter"],
+    applyModes: ["diagram"],
     temperature: 0.4,
     buildMessages: (req) => [
       system(

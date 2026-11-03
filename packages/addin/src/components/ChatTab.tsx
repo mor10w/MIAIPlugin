@@ -67,6 +67,11 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
             <Markdown text={state.text || "…"} />
           </div>
         )}
+        {state.stopReason === "repetition" && state.status === "done" && (
+          <MessageBar intent="warning">
+            <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
+          </MessageBar>
+        )}
         {state.error && (
           <MessageBar intent="error">
             <MessageBarBody>{state.error}</MessageBarBody>

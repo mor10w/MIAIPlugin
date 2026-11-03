@@ -19,7 +19,7 @@ Vi sælger to udgaver af samme kodebase (selv ADR-0007's to tilstande er allered
 | | **Udgave A – "hostet"** (M365-kunder) | **Udgave B – "lokal app"** (fx .dmg/.msi) |
 |---|---|---|
 | Add-in'ets filer | Hostes af os på eget domæne (`scripts/make-manifest.mjs hosted https://…`) | Serveres af MIAI Bridge på `https://localhost:44321` |
-| Installation hos kunden | IT-adminen uploader manifestet i Integrated apps portal (én gang) – evt. som SaaS-offer i Commercial Marketplace | Kunden installerer MIAI App (Electron-menu-bar-app, `packages/app`), som kører bridgen i-process |
+| Installation hos kunden | IT-adminen uploader manifestet i Integrated apps portal (én gang) – evt. som SaaS-offer i Commercial Marketplace | Kunden installerer MIAI App (Electron-menu-bar-app, `packages/app`), som kører bridgen i en utility-process |
 | Tilstand | Direkte (webview → model) | Bridge (samme origin – ingen CORS) |
 | Forudsætninger hos kunden | M365-admin + `OLLAMA_ORIGINS` for vores domæne (evt. via GPO/Intune) | Ingen – alt kører lokalt, ingen vendor-cloud, ingen internet |
 | Politik/audit | Brugerens (loopback-standard) | Maskinpolitik + audit-log kan leveres som standard |
@@ -28,8 +28,9 @@ Vi sælger to udgaver af samme kodebase (selv ADR-0007's to tilstande er allered
 **Udgave B er standard for salgs løsninger**, hvor fortrolighed ("dokumenter forlader ikke maskinen") er kernekravet, og den anbefales også til kunder uden M365-admin. Udgave A er vejen, når kunden har en M365-tenant og ønsker central udrulning.
 
 Teknisk indhold i `packages/app` (Udgave B):
-- Electron-menu-bar-app, der kører `@miai/bridge` i-process (ingen Node-installation hos brugeren).
-- Genererer eget TLS-certifikat for `localhost` ved første start (`~/Library/Application Support/MIAI/tls`) og tilbyder ét-klik-betroning i keychain (`security add-trusted-cert` med admin).
+- Electron-menu-bar-app, der kører `@miai/bridge` i en Electron utility-process (ingen Node-installation hos brugeren). Bridgen kan ikke køre i main-processen, fordi TLS-håndtryk hænger der.
+- Genererer eget TLS-certifikat for `localhost` (`~/Library/Application Support/MIAI/tls`). Gyldigheden er **825 dage**, som er macOS' maksimum for TLS-servercertifikater; certifikatet fornyes automatisk 30 dage før udløb. Appen tilbyder at betro det i login-keychain (`security add-trusted-cert`).
+- Opsætningsdialogen vises kun, når noget mangler: certifikatet er ikke betroet (tjekkes med `security verify-cert`), eller manifestet ligger ikke i Office.
 - Sideloader bridge-manifestet i Word/Excel/PowerPoint automatisk (`~/Library/Containers/com.microsoft.*/Data/Documents/wef`).
 - Indstilling af model-URL og valg af model sker **i add-in'ets fanen Indstillinger** (endpointer + standardmodel), som i øvrigt gælder begge udgaver.
 
@@ -38,5 +39,5 @@ Teknisk indhold i `packages/app` (Udgave B):
 + Udgave B har ingen afhængighed af vores infrastruktur – løsningen kører uforandret, hvis vi lukker servere.
 + To distributionsspor at vedligeholde (hosting + app), men samme motor og prompts.
 - Udgave A: webviewet kalder localhost fra et offentligt origin – "Local Network Access"-tilladelser (Chromium) skal afprøves pr. Office-version; CORS kræver `OLLAMA_ORIGINS` for vores domæne på kundens maskiner.
-- Udgave B: Electron er tungt (~150 MB) og kører i menuen; appen skal have admin-adgang én gang (certifikat).
+- Udgave B: Electron er tungt (~150 MB) og kører i menuen. Certifikatet skal betroes én gang og igen ved fornyelse (ca. hvert andet år).
 - Uden kode-signering advarer Gatekeeper/SmartScreen ved første start – signering (Apple Developer / code-signing-certifikat) er en forudsætning for seriøs salgsudlevering.

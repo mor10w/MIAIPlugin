@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diagramToSvg, layoutDiagram, type DiagramResult } from "./diagram.js";
+import { diagramToSvg, layoutDiagram, routeEdges, type DiagramResult } from "./diagram.js";
 
 const sample: DiagramResult = {
   title: "Status",
@@ -53,6 +53,22 @@ describe("layoutDiagram", () => {
     expect(l.nodes).toHaveLength(2);
   });
 
+  it("en feedback-løkke til roden ødelægger ikke lagdelingen", () => {
+    const d: DiagramResult = { ...sample, edges: [...sample.edges, { from: "n3", to: "n1" }] };
+    const byId = new Map(layoutDiagram(d).nodes.map((n) => [n.id, n]));
+    expect(byId.get("n1")!.x).toBeLessThan(byId.get("n2")!.x);
+    expect(byId.get("n2")!.x).toBeLessThan(byId.get("n3")!.x);
+    const routes = routeEdges(d);
+    expect(routes.filter((r) => !r.back)).toHaveLength(2);
+    expect(routes.filter((r) => r.back)).toHaveLength(1);
+  });
+
+  it("selvløkker ignoreres", () => {
+    const d: DiagramResult = { nodes: [{ id: "a", label: "A" }], edges: [{ from: "a", to: "a" }] };
+    expect(layoutDiagram(d).nodes).toHaveLength(1);
+    expect(routeEdges(d)).toHaveLength(0);
+  });
+
   it("ignorerer kanter med ukendte id'er", () => {
     const d: DiagramResult = { ...sample, edges: [...sample.edges, { from: "x", to: "y" }] };
     expect(() => layoutDiagram(d)).not.toThrow();
@@ -92,8 +108,68 @@ describe("diagramToSvg", () => {
     expect(diagramToSvg(d)).toContain("A &lt; &quot;B&quot; &amp; C");
   });
 
-  it("tegner en kant pr. edge", () => {
+  it("tegner en kant og et pilehoved pr. edge", () => {
     const svg = diagramToSvg(sample);
-    expect(svg.match(/d="M [\d.]+ [\d.]+ C /g)?.length).toBe(2); // to buede kanter (pilehoveder medregnes ikke)
+    expect(svg.match(/<polyline /g)?.length).toBe(2);
+    expect(svg.match(/<polygon /g)?.length).toBe(2);
+  });
+
+  it("ombryder lange labels som gyldige <tspan>-elementer", () => {
+    const d: DiagramResult = { nodes: [{ id: "n1", label: "Indsamling af data fra alle afdelinger og eksterne leverandører" }] };
+    const svg = diagramToSvg(d);
+    expect(svg.match(/<tspan /g)?.length).toBeGreaterThan(1);
+    expect(svg.match(/<tspan /g)?.length).toBe(svg.match(/<\/tspan>/g)?.length);
+    expect(svg).not.toMatch(/[^<]tspan x=/); // ingen rå "tspan" som tekst
+  });
+});
+
+describe("knudestørrelse", () => {
+  it("bredden rummer den længste linje", () => {
+    const d: DiagramResult = { nodes: [{ id: "n1", label: "Kort meget-meget-meget-lang-sammensætning" }] };
+    const n = layoutDiagram(d).nodes[0];
+    expect(n.w).toBeGreaterThanOrEqual(Math.min(280, "meget-meget-meget-lang-sammensætning".length * 7 + 36));
+  });
+});
+
+describe("routeEdges", () => {
+  it("laver vinkelrette ruter (kun vandrette/lodrette segmenter)", () => {
+    for (const r of routeEdges(sample)) {
+      for (let i = 1; i < r.points.length; i++) {
+        const [p, q] = [r.points[i - 1], r.points[i]];
+        expect(p.x === q.x || p.y === q.y).toBe(true);
+      }
+    }
+  });
+
+  it("alle kanter ender i målets venstre side; returkanter løber under diagrammet uden at krydse knuder", () => {
+    const d: DiagramResult = {
+      nodes: [
+        { id: "a", label: "A" },
+        { id: "b", label: "B" },
+        { id: "c", label: "C" },
+      ],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "c" },
+        { from: "c", to: "a" },
+      ],
+    };
+    const L = layoutDiagram(d);
+    const by = new Map(L.nodes.map((n) => [n.id, n]));
+    for (const r of routeEdges(d, L)) {
+      const end = r.points.at(-1)!;
+      const t = by.get(r.to)!;
+      expect(end.x).toBeCloseTo(t.x);
+      if (r.back) expect(Math.max(...r.points.map((p) => p.y))).toBeGreaterThan(Math.max(...L.nodes.map((n) => n.y + n.h)));
+      // Lodrette segmenter må ikke skære gennem en knude.
+      for (let i = 1; i < r.points.length; i++) {
+        const [p, q] = [r.points[i - 1], r.points[i]];
+        if (p.x !== q.x) continue;
+        for (const n of L.nodes) {
+          const inside = p.x > n.x && p.x < n.x + n.w && Math.max(p.y, q.y) > n.y && Math.min(p.y, q.y) < n.y + n.h;
+          expect(inside).toBe(false);
+        }
+      }
+    }
   });
 });

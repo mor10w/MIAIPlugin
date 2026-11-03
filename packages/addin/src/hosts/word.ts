@@ -15,7 +15,7 @@ export class WordAdapter implements HostAdapter {
 
   supports(mode: ApplyMode): boolean {
     if (mode === "trackChanges" || mode === "comment") return has("1.4");
-    return mode === "replace" || mode === "insertAfter";
+    return mode === "replace" || mode === "insertAfter" || mode === "diagram";
   }
 
   async getContext(opts: ContextOptions): Promise<DocContext> {
@@ -118,14 +118,24 @@ export class WordAdapter implements HostAdapter {
     });
   }
 
-  /** Indsætter diagrammet som billede ved markeringen (ADR-0009). */
-  async applyDiagram(result: DiagramResult): Promise<ApplyOutcome> {
+  /**
+   * Indsætter diagrammet som billede i et nyt afsnit efter markeringen (eller sidst i
+   * dokumentet, hvis hele dokumentet blev brugt) – ADR-0009.
+   */
+  async applyDiagram(result: DiagramResult, dc: DocContext): Promise<ApplyOutcome> {
     const png = await diagramToPng(result);
+    // PNG'en er renderet i 2x; naturlig størrelse i punkter = px/2 · 0,75. Aldrig bredere end A4's tekstområde.
+    const width = Math.min(450, (png.width / 2) * 0.75);
+    const height = width * (png.height / png.width);
     return this.run(async (ctx, range) => {
-      const pic = range.insertInlinePictureFromBase64(png.base64, "After");
-      pic.width = 450; // punkter – passer i A4's tekstområde
+      const para = dc.isWholeDocument ? ctx.document.body.insertParagraph("", "End") : range.insertParagraph("", "After");
+      const pic = para.insertInlinePictureFromBase64(png.base64, "Start");
+      pic.width = width;
+      pic.height = height;
+      pic.altTextTitle = result.title ?? "Diagram";
+      pic.altTextDescription = result.nodes.map((n) => n.label).join(" → ");
       await ctx.sync();
-      return { message: "Diagrammet er indsat ved markeringen." };
+      return { message: "Diagrammet er indsat efter markeringen." };
     });
   }
 }

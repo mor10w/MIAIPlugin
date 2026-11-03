@@ -78,6 +78,10 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   const temperature = task.temperature ?? settings.temperature;
   const started = Date.now();
   let usage: TaskSummary["usage"];
+  let stopReason: "repetition" | undefined;
+  // Sløjfe-vagten gælder kun fritekst. TSV (Excel-celler) og JSON har legitime gentagelser
+  // og valideres på anden vis.
+  const guardLoops = task.output.kind === "text" && task.output.format !== "tsv";
 
   const run = async (msgs: ChatMessage[], responseFormat: Record<string, unknown> | undefined, onText: (t: string) => void) => {
     const filter = ep.stripThinking ? new ThinkFilter() : undefined;
@@ -94,22 +98,17 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
       full += t;
       onText(t);
     };
-    let degenerated = false;
     for await (const chunk of streamChat(ep, { model, messages: msgs, temperature, maxTokens: settings.maxTokens, responseFormat, signal }, client)) {
       if (chunk.text) push(chunk.text);
       if (chunk.usage) usage = chunk.usage;
-      // Afbryd tidligt, hvis modellen er faldet i en gentagelsessløjfe.
-      if (isDegenerating(full)) {
-        degenerated = true;
+      // Afbryd tidligt, hvis modellen er faldet i en gentagelsessløjfe. Brugeren får besked
+      // via done.stopReason – der skrives intet ind i selve teksten, som kan ende i dokumentet.
+      if (guardLoops && chunk.text && isDegenerating(full)) {
+        stopReason = "repetition";
         break;
       }
     }
     if (filter) push(filter.flush());
-    if (degenerated) {
-      const note = "\n\n_(Svaret blev afbrudt – modellen begyndte at gentage sig selv.)_";
-      full += note;
-      onText(note);
-    }
     return full;
   };
 
@@ -151,7 +150,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     emit({ type: "result", data: parsed.data });
   }
 
-  emit({ type: "done", usage });
+  emit({ type: "done", usage, stopReason });
   return { model, output, usage, durationMs: Date.now() - started, inputChars: messages.reduce((n, m) => n + m.content.length, 0) };
 }
 

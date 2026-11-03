@@ -47,7 +47,12 @@ export type TaskEvent =
   | { type: "progress"; chars: number }
   | { type: "result"; data: unknown }
   | { type: "error"; message: string; code?: string }
-  | { type: "done"; usage?: { promptTokens?: number; completionTokens?: number } };
+  | {
+      type: "done";
+      usage?: { promptTokens?: number; completionTokens?: number };
+      /** Sat, hvis motoren afbrød svaret, fx fordi modellen gik i en gentagelsessløjfe. */
+      stopReason?: "repetition";
+    };
 
 // ---------------------------------------------------------------------------
 // Indstillinger og politik

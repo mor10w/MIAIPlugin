@@ -6,9 +6,10 @@
 // TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
 import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 
 const PORT = Number(process.env.MIAI_PORT ?? 44321);
@@ -23,8 +24,9 @@ function log(msg) {
 }
 
 // Packaget: filer ligger i Resources/ (electron-builder extraResources). I dev: repoet.
-const ADDIN_DIR = app.isPackaged ? join(process.resourcesPath, "addin") : new URL("../../addin/dist", import.meta.url).pathname;
-const MANIFEST = app.isPackaged ? join(process.resourcesPath, "manifest.xml") : new URL("../../addin/manifest.xml", import.meta.url).pathname;
+// main.js ligger i packages/app, så søsterpakken er ../addin.
+const ADDIN_DIR = app.isPackaged ? join(process.resourcesPath, "addin") : fileURLToPath(new URL("../addin/dist", import.meta.url));
+const MANIFEST = app.isPackaged ? join(process.resourcesPath, "manifest.xml") : fileURLToPath(new URL("../addin/manifest.xml", import.meta.url));
 
 let bridgeProc = null;
 let tray = null;
@@ -53,6 +55,7 @@ function startBridge() {
       setStatus(statusFromEndpoint(msg.endpoint));
     } else if (msg?.type === "error") {
       log(`bridge-process FEJL: ${msg.message}`);
+      quitting = true; // undgå en ekstra "stoppede uventet"-dialog, når processen afslutter
       dialog.showErrorBox("MIAI", `Bridgen kunne ikke startes: ${msg.message}`);
       app.quit();
     }
@@ -96,6 +99,22 @@ function trustCert() {
   const keychain = join(homedir(), "Library", "Keychains", "login.keychain-db");
   const r = spawnSync("security", ["add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, CERT_FILE], { encoding: "utf8" });
   return { ok: r.status === 0, message: (r.stderr ?? "").trim() };
+}
+
+/** Er certifikatet betroet til SSL for localhost? (Ingen dialog; læser kun trust settings.) */
+function isCertTrusted() {
+  const r = spawnSync("security", ["verify-cert", "-c", CERT_FILE, "-p", "ssl", "-s", "localhost", "-q"], { encoding: "utf8" });
+  return r.status === 0;
+}
+
+/** Er manifestet allerede lagt i alle tre Office-apps? */
+function isInstalledInOffice() {
+  try {
+    const id = readFileSync(MANIFEST, "utf8").match(/<Id>([^<]+)<\/Id>/)?.[1];
+    return !!id && OFFICE_APPS.every((a) => existsSync(join(homedir(), "Library", "Containers", `com.microsoft.${a}`, "Data", "Documents", "wef", `miai-${id}.xml`)));
+  } catch {
+    return false;
+  }
 }
 
 function showCertResult(r) {
@@ -190,17 +209,33 @@ if (!gotLock) {
       tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
       log("tray oprettet");
 
-      // Første start: vejledning + ét-klik-betroning.
-      dialog.showMessageBox({
-        type: "info",
-        title: "Velkommen til MIAI",
-        message: "MIAI Bridge kører nu på https://localhost:44321",
-        detail:
-          "1) Klik 'Betro certifikat' i menuen (ét klik – ingen admin-adgang).\n" +
-          "2) Klik 'Installer i Office' og genstart Word/Excel/PowerPoint.\n" +
-          "3) Vælg dit inference-værktøj og model i add-in'ets fanen Indstillinger.",
-        buttons: ["Betro certifikat", "Senere"],
-      }).then((r) => { if (r.response === 0) showCertResult(trustCert()); });
+      // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
+      // Tidligere blev velkomstdialogen vist ved hver start.
+      const needTrust = !isCertTrusted();
+      const needInstall = !isInstalledInOffice();
+      log(`opsætning: certifikat betroet=${!needTrust}, installeret i Office=${!needInstall}`);
+      if (needTrust || needInstall) {
+        const steps = [needTrust && "betro MIAI-certifikatet (bruges til den lokale HTTPS-forbindelse)", needInstall && "installere MIAI i Word, Excel og PowerPoint"].filter(Boolean);
+        const r = await dialog.showMessageBox({
+          type: "info",
+          title: "Velkommen til MIAI",
+          message: "MIAI Bridge kører nu på https://localhost:44321",
+          detail: `MIAI skal ${steps.join(" og ")}.\n\nVælg derefter dit inference-værktøj og model under Indstillinger i add-in'et.`,
+          buttons: ["Gør det nu", "Senere"],
+          defaultId: 0,
+        });
+        if (r.response === 0) {
+          if (needTrust) showCertResult(trustCert());
+          if (needInstall) {
+            try {
+              installInOffice();
+              dialog.showMessageBox({ type: "info", title: "MIAI", message: "MIAI er installeret i Office.", detail: "Genstart Word, Excel og PowerPoint. Du finder MIAI som 'AI-assistent' på fanen Hjem." });
+            } catch (err) {
+              dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
+            }
+          }
+        }
+      }
     })
     .catch((err) => {
       log(`whenReady FEJL: ${err.stack ?? err}`);

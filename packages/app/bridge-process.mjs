@@ -4,7 +4,6 @@
 // (uden Chromium) fungerer TLS som i almindelig Node – verificeret med curl.
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import https from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { ConfigStore } from "@miai/bridge/dist/config.js";
@@ -23,13 +22,34 @@ function log(msg) {
   } catch { /* log skal aldrig fælde bridgen */ }
 }
 
+/** macOS afviser TLS-servercertifikater med længere gyldighed end 825 dage (også lokalt betroede). */
+const CERT_DAYS = 825;
+/** Forny i god tid, før certifikatet udløber. */
+const RENEW_BEFORE_DAYS = 30;
+
+/** Skal certifikatet (gen)oprettes? Mangler, for lang gyldighed (ældre versioner brugte 3650 dage) eller snart udløbet. */
+function certNeedsRenewal(keyFile) {
+  if (!existsSync(CERT_FILE) || !existsSync(keyFile)) return true;
+  try {
+    const out = execFileSync("/usr/bin/openssl", ["x509", "-in", CERT_FILE, "-noout", "-startdate", "-enddate"], { encoding: "utf8" });
+    const start = Date.parse(/notBefore=(.+)/.exec(out)?.[1] ?? "");
+    const end = Date.parse(/notAfter=(.+)/.exec(out)?.[1] ?? "");
+    const day = 86_400_000;
+    return !(end > start) || (end - start) / day > CERT_DAYS || (end - Date.now()) / day < RENEW_BEFORE_DAYS;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Genererer et selvsigneret certifikat for localhost (CN=localhost, SAN: DNS+IP).
  * Office kræver HTTPS; certifikatet skal derefter betroes i keychain (menuen).
+ * Et fornyet certifikat skal betroes igen – main-processen opdager det via `security verify-cert`.
  */
 function ensureTls() {
   const keyFile = join(TLS_DIR, "localhost.key");
-  if (!existsSync(CERT_FILE) || !existsSync(keyFile)) {
+  if (certNeedsRenewal(keyFile)) {
+    log("opretter nyt TLS-certifikat");
     mkdirSync(TLS_DIR, { recursive: true });
     const cnf = join(TLS_DIR, "openssl.cnf");
     writeFileSync(
@@ -50,34 +70,33 @@ function ensureTls() {
     // /usr/bin/openssl (LibreSSL) medleveres på macOS.
     execFileSync("/usr/bin/openssl", [
       "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-      "-days", "3650",
+      "-days", String(CERT_DAYS), "-sha256",
       "-keyout", keyFile, "-out", CERT_FILE, "-config", cnf,
     ], { stdio: "ignore" });
   }
   return { cert: readFileSync(CERT_FILE), key: readFileSync(keyFile) };
 }
 
-/** Henter /api/health med TLS-verifikation slået fra (eget selvsigneret cert). */
-function health() {
-  return new Promise((resolve) => {
-    const req = https.get(
-      { host: "127.0.0.1", port: PORT, path: "/api/health", headers: { "X-MIAI": "1" }, rejectUnauthorized: false, timeout: 5_000 },
-      (res) => {
-        let body = "";
-        res.on("data", (c) => (body += c));
-        res.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
-      },
-    );
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => { req.destroy(); resolve(null); });
-  });
-}
+let server;
+let lastStatus = "";
 
-/** Rapporterer model-status til main-processen (menuens statuslinje). */
+/**
+ * Rapporterer model-status til main-processen (menuens statuslinje). Bruger Fastifys
+ * inject – samme kode som /api/health, men uden netværk, TLS eller selvsigneret-undtagelse.
+ * Logger kun ændringer, så MIAI.log ikke vokser med en linje hvert 20. sekund.
+ */
 async function reportStatus() {
-  const h = await health();
-  log(`status-polling: ${h ? JSON.stringify(h.endpoint ?? h) : "null"}`);
-  parentPort?.postMessage({ type: "status", endpoint: h?.endpoint ?? null });
+  let endpoint = null;
+  try {
+    const res = await server.inject({ method: "GET", url: "/api/health", headers: { host: `localhost:${PORT}`, "x-miai": "1" } });
+    endpoint = res.json().endpoint ?? null;
+  } catch (err) {
+    log(`status-fejl: ${err?.message ?? err}`);
+  }
+  const s = JSON.stringify(endpoint);
+  if (s !== lastStatus) log(`status: ${s}`);
+  lastStatus = s;
+  parentPort?.postMessage({ type: "status", endpoint });
 }
 
 try {
@@ -85,7 +104,7 @@ try {
   const store = new ConfigStore();
   const tls = ensureTls();
   log(`TLS OK (cert ${tls.cert.length} bytes)`);
-  const server = await buildServer({ store, port: PORT, addinDir: process.env.MIAI_ADDIN_DIR, https: tls });
+  server = await buildServer({ store, port: PORT, addinDir: process.env.MIAI_ADDIN_DIR, https: tls });
   const addr = await server.listen({ host: "127.0.0.1", port: PORT });
   log(`lytter på ${addr}`);
   parentPort?.postMessage({ type: "listening", addr, version: BRIDGE_VERSION });

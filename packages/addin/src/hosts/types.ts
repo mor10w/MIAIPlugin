@@ -25,7 +25,7 @@ export interface HostAdapter {
   applySlides?(result: SlidesResult): Promise<ApplyOutcome>;
   applyFormula?(result: FormulaResult, ctx: DocContext): Promise<ApplyOutcome>;
   /** Indsætter diagrammet visuelt (billede i Word, native shapes i PowerPoint). */
-  applyDiagram?(result: DiagramResult): Promise<ApplyOutcome>;
+  applyDiagram?(result: DiagramResult, ctx: DocContext): Promise<ApplyOutcome>;
 }
 
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */

@@ -1,4 +1,4 @@
-import { applyEdits, layoutDiagram, type ApplyMode, type DiagramResult, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
+import { applyEdits, diagramBounds, layoutDiagram, routeEdges, type ApplyMode, type DiagramResult, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
 
@@ -26,7 +26,7 @@ export class PowerPointAdapter implements HostAdapter {
   readonly host = "powerpoint" as const;
 
   supports(mode: ApplyMode): boolean {
-    if (mode === "newSlides") return has("1.4");
+    if (mode === "newSlides" || mode === "diagram") return has("1.4");
     return mode === "replace" || mode === "insertAfter";
   }
 
@@ -109,52 +109,71 @@ export class PowerPointAdapter implements HostAdapter {
   }
 
   /**
-   * Indsætter diagrammet som native shapes på den valgte slide (ADR-0009):
-   * afrounded rektangler med label + flowChartConnector-linjer. Brugeren kan
-   * derefter klikke på, flytte og redigere hver del.
+   * Indsætter diagrammet som native figurer på den valgte slide (ADR-0009), så brugeren kan
+   * klikke på, flytte og redigere hver del.
+   *
+   * PowerPoint-API'et kan hverken vende linjer (negative mål afvises) eller sætte pilehoveder,
+   * så kanterne tegnes som vinkelrette ruter fra `routeEdges` – kun vandrette og lodrette
+   * segmenter – med en lille chevron som pilehoved. Med PowerPointApi 1.8 grupperes det hele.
    */
   async applyDiagram(result: DiagramResult): Promise<ApplyOutcome> {
     if (!has("1.4")) throw new Error("Din PowerPoint-version understøtter ikke figurer fra add-ins (kræver PowerPointApi 1.4).");
     const L = layoutDiagram(result);
-    // Skalér layoutet til at passe i en 16:9-slide med margin, og centrer.
-    const s = Math.min((W - 80) / L.width, (H - 80) / L.height);
-    const ox = (W - L.width * s) / 2;
-    const oy = (H - L.height * s) / 2;
+    const routes = routeEdges(result, L);
+    const B = diagramBounds(L, routes);
+    // Skalér til slidens indholdsområde (højst 1,25x, så små diagrammer ikke bliver kæmpestore), og centrér.
+    const s = Math.min(1.25, (W - 80) / B.width, (H - 80) / B.height);
+    const ox = (W - B.width * s) / 2;
+    const oy = (H - B.height * s) / 2;
+    const X = (x: number) => ox + (x - B.x) * s;
+    const Y = (y: number) => oy + (y - B.y) * s;
+    const fontSize = Math.max(9, Math.min(20, Math.round(13 * s)));
+
     await PowerPoint.run(async (ctx) => {
       const sel = ctx.presentation.getSelectedSlides();
       sel.load("items");
       await ctx.sync();
       if (!sel.items.length) throw new Error("Vælg en slide, og prøv igen.");
-      const slide = sel.items[0];
+      const shapes = sel.items[0].shapes;
+      const added: PowerPoint.Shape[] = [];
 
-      // Kanter først, så knuderne tegnes ovenpå. flowChartConnector er en ren
-      // linje (ingen pilehoved), så rektangelens retning er ligegyldig.
-      const pos = new Map(L.nodes.map((n) => [n.id, n]));
-      for (const e of result.edges ?? []) {
-        const a = pos.get(e.from);
-        const b = pos.get(e.to);
-        if (!a || !b) continue;
-        const x1 = ox + (a.x + a.w) * s, y1 = oy + (a.y + a.h / 2) * s;
-        const x2 = ox + b.x * s, y2 = oy + (b.y + b.h / 2) * s;
-        slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.flowChartConnector, {
-          left: Math.min(x1, x2),
-          top: Math.min(y1, y2),
-          width: Math.max(1, Math.abs(x2 - x1)),
-          height: Math.max(1, Math.abs(y2 - y1)),
-        });
+      // Kanter først, så knuderne ligger ovenpå.
+      for (const r of routes) {
+        for (let i = 1; i < r.points.length; i++) {
+          const p = r.points[i - 1];
+          const q = r.points[i];
+          if (p.x === q.x && p.y === q.y) continue;
+          added.push(
+            shapes.addLine(PowerPoint.ConnectorType.straight, {
+              left: X(Math.min(p.x, q.x)),
+              top: Y(Math.min(p.y, q.y)),
+              width: Math.abs(q.x - p.x) * s,
+              height: Math.abs(q.y - p.y) * s,
+            }),
+          );
+        }
+        // Pilehoved: alle kanter ender i målets venstre side, så en chevron (peger mod højre
+        // uden rotation) passer altid.
+        const end = r.points[r.points.length - 1];
+        const a = Math.max(6, 8 * s);
+        added.push(shapes.addGeometricShape(PowerPoint.GeometricShapeType.chevron, { left: X(end.x) - a, top: Y(end.y) - a / 2, width: a, height: a }));
       }
 
       for (const n of L.nodes) {
-        const sh = slide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.roundRectangle, {
-          left: ox + n.x * s,
-          top: oy + n.y * s,
-          width: Math.max(40, n.w * s),
-          height: Math.max(24, n.h * s),
-        });
+        const sh = shapes.addGeometricShape(PowerPoint.GeometricShapeType.roundRectangle, { left: X(n.x), top: Y(n.y), width: n.w * s, height: n.h * s });
         sh.textFrame.textRange.text = n.label;
+        sh.textFrame.textRange.font.size = fontSize;
+        sh.textFrame.wordWrap = true;
+        added.push(sh);
       }
       await ctx.sync();
+
+      if (has("1.8") && added.length > 1) {
+        shapes.addGroup(added);
+        await ctx.sync();
+      }
     });
-    return { message: `${result.nodes.length} figurer og ${(result.edges ?? []).length} linjer er placeret på den valgte slide – klik på dem for at redigere.` };
+    const edges = routes.length;
+    return { message: `${result.nodes.length} figurer og ${edges} forbindelser er placeret på den valgte slide${has("1.8") ? " som én gruppe" : ""} – klik på dem for at redigere.` };
   }
 }

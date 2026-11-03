@@ -69,11 +69,11 @@ Tilstanden (direkte vs. bridge) vælges automatisk ved start; task pane viser de
 
 ### D. MIAI App (.dmg) – uden Node.js, til salgs
 
-MIAI App er en menu-bar-app, der kører bridgen i-process – brugeren behøver hverken Node.js eller at drive en web-side ([ADR-0008](adr/0008-distribution-af-solgte-loesninger.md)):
+MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hverken Node.js eller at drive en web-side ([ADR-0008](adr/0008-distribution-af-solgte-loesninger.md)):
 
 1. Træk **MIAI** fra .dmg'en til Applications og start appen (første gang: højreklik → Åbn, mens den ikke er signerede).
-2. Appen genererer et TLS-certifikat for `localhost` og beder om at betro det (admin-adgang, én gang).
-3. Klik **Installer i Office** i menuen og genstart Word/Excel/PowerPoint.
+2. Ved første start genererer appen et TLS-certifikat for `localhost` og tilbyder at betro det og installere MIAI i Office i ét trin (**Gør det nu**). Dialogen vises kun igen, hvis noget mangler, fx når certifikatet fornyes (ca. hvert andet år).
+3. Genstart Word/Excel/PowerPoint. Begge trin findes også i menuen (**Betro certifikat…**, **Installer i Office…**).
 4. Vælg endpoint (model-URL) og model i add-in'ets fanen **Indstillinger**.
 
 Alt kører lokalt: ingen vendor-cloud, ingen CORS (add-in og bridge er samme origin), indstillinger ligger i `~/Library/Application Support/MIAI/config.json`.
@@ -144,7 +144,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Opsummér** – markering, eller uden markering: hele dokumentet. Længde: punktform (3-5 punkter), ét afsnit eller én sætning. Indsættes **efter** markeringen eller **som kommentar**.
 - **Skriv artikel ud fra idé** – skriv en linje (fx "5 grunde til at køre AI lokalt"), vælg tone og længde (~300/700/1500 ord). Markér evt. et udkast, den bygges videre på. Indsættes som formateret tekst med overskrifter.
 - **Præsentationsdisposition** – emne + antal slides (5/8/10/15).
-- **Lav diagram** – markér tekst (fx. en tabel eller disposition) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsgrebet vises i task pane; **Indsæt efter markeringen** indsætter det som billede ved markeringen.
+- **Lav diagram** – markér tekst (fx. en tabel eller disposition) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsvisningen vises i task pane; **Indsæt diagram** indsætter det som billede i et nyt afsnit efter markeringen.
 
 ### Excel
 
@@ -156,7 +156,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 
 - **Omskriv / Parafrasér / Forenkl** – markér tekst i en tekstboks; resultatet erstatter teksten i boksen.
 - **Tekst til slides** – indsæt tekst eller beskriv et emne, vælg antal slides (3/5/8/10). Modellen foreslår titler, punkter og taler-notes; **Opret slides** indsætter dem i præsentationen (pladsholdere udfyldes; uden pladsholdere oprettes tekstbokse).
-- **Lav diagram** – markér tekst (fx. en tabel) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsgrebet vises i task pane; **Indsæt efter markeringen** placerer diagrammet som **native figurer** på den valgte slide (afrounded rektangler + linjer) – klik på dem for at flytte, farve og redigere hver del.
+- **Lav diagram** – markér tekst (fx. en tabel) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsvisningen vises i task pane; **Indsæt diagram** placerer diagrammet som **native figurer** på den valgte slide (afrundede rektangler, linjer og pile, samlet i én gruppe i nyere PowerPoint). Opløs gruppen for at flytte, farve og redigere hver del.
 - **Opsummér** – markering, eller hele præsentationen (slide for slide).
 - **Præsentationsdisposition** – som i Word.
 
@@ -171,6 +171,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 | Erstat markeringen | ✅ | ✅ (celleværdi) | ✅ (tekst i boksen) |
 | Indsæt som sporede ændringer | ✅ (WordApi 1.4) | | |
 | Indsæt efter markeringen | ✅ | | ✅ |
+| Indsæt diagram | ✅ (billede) | | ✅ (figurer) |
 | Som kommentar | ✅ (WordApi 1.4) | ✅ (ExcelApi 1.10) | |
 | Skriv i celler | | ✅ (oversættelse) | |
 | Indsæt formel (+ Fortryd) | | ✅ (formelgenerering) | |
@@ -182,7 +183,8 @@ Knapper, som din Office-version ikke understøtter, skjules.
 ## Tips
 
 - **Modellens størrelde** afgør kvaliteten. `qwen3:4b` er et pænt udgangspunkt; brug en større model (7B+) til artikler og oversættelser, hvis maskinen rækker.
-- **Reasoning-modeller** (fx Qwen3) sender `<think>`-blokke med – skruen *Skjul <think>-tankegang* er slået til som standard, så tankegangen ikke ender i dokumentet.
+- **Reasoning-modeller** (fx Qwen3) sender `<think>`-blokke med – indstillingen *Skjul <think>-tankegang* er slået til som standard, så tankegangen ikke ender i dokumentet.
+- **Gentagelsessløjfer**: små, kvantiserede modeller kan gå i stå og gentage den samme frase. MIAI afbryder svaret, når slutningen gentager sig selv mange gange i træk, og viser en advarsel. Teksten forurenes ikke med en note. Vagten gælder kun fritekst; Excel-celler (TSV) og strukturerede svar (JSON) har legitime gentagelser og valideres på anden vis. Sker det ofte, så prøv en større model, eller sæt `presence_penalty` (fx 1.0–1.5, som Qwen anbefaler) i endpointens `extraBody` i konfigurationen.
 - **Struktureret output**: opgaver som grammatik, slides, formler og diagrammer kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
 - **Dokumenttekst behandles som data**, aldrig som instruktioner, så markeringer med fx "ignorer ovenstående" ikke styrer modellen.
 - **Indstillinger i direkte tilstand** ligger i add-in'ets `localStorage` på maskinen. Nogle webview-bygninger rydder den; i så fald gendannes standardindstillingerne.
@@ -194,7 +196,7 @@ To salgsveje på samme kodebase – se [ADR-0008](adr/0008-distribution-af-solgt
 | Udgave | Installation hos kunden | Krav |
 |---|---|---|
 | **Hostet** (M365) | IT-adminen uploader manifestet i M365-admin center (Integrated apps portal); endbruger ser add-in'et uden opsætning. Web-indhold hostes af leverandøren på eget domæne | M365-admin + `OLLAMA_ORIGINS` for leverandørens domæne |
-| **Lokal app** (.dmg/.msi) | Kunden installerer MIAI App (Installation D ovenfor); bridgen kører i-process, manifest sideloades automatisk | Ingen – alt lokalt, ingen internet |
+| **Lokal app** (.dmg/.msi) | Kunden installerer MIAI App (Installation D ovenfor); bridgen kører lokalt, manifest sideloades automatisk | Ingen – alt lokalt, ingen internet |
 
 Model-URL og valg af model sker i add-in'ets fanen **Indstillinger** i begge udgaver.
 

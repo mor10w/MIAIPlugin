@@ -76,8 +76,8 @@ describe("executeTask (direkte tilstand)", () => {
   it("afbryder ved gentagelsessløjfe og markerer svaret", async () => {
     const ev = await run("chat", { context: { host: "word" }, params: { prompt: "LOOPTEST" } });
     const text = ev.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
-    expect(text).toContain("gentage sig selv");
-    expect(ev.some((e) => e.type === "done")).toBe(true);
+    expect(text).not.toContain("gentage sig selv"); // ingen note i selve teksten
+    expect(ev.find((e) => e.type === "done")).toMatchObject({ stopReason: "repetition" });
     expect(ev.filter((e) => e.type === "error").length).toBe(0);
   });
 });

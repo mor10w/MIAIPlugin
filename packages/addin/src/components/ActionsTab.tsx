@@ -31,6 +31,7 @@ const useStyles = makeStyles({
   edit: { padding: `${tokens.spacingVerticalXS} 0`, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
   del: { textDecoration: "line-through", color: tokens.colorPaletteRedForeground1 },
   ins: { color: tokens.colorPaletteGreenForeground1, fontWeight: tokens.fontWeightSemibold },
+  diagram: { "& svg": { maxWidth: "100%", height: "auto", display: "block" } },
   mono: { fontFamily: tokens.fontFamilyMonospace, wordBreak: "break-all" },
 });
 
@@ -74,7 +75,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     if (task.output.kind === "text") return adapter.applyText(shownText, task.output.format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);
-    if (task.id === "diagram") return adapter.applyDiagram!(state.result as DiagramResult);
+    if (task.id === "diagram") return adapter.applyDiagram!(state.result as DiagramResult, ctx);
     if (task.id === "generate-formula") return adapter.applyFormula!(state.result as FormulaResult, ctx);
     throw new Error("Ukendt resultattype");
   };
@@ -140,6 +141,11 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
       {task && (state.text || state.result !== undefined) && (
         <Card className={s.result}>
           <ResultView task={task} text={shownText} result={state.result} />
+          {state.stopReason === "repetition" && (
+            <MessageBar intent="warning">
+              <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
+            </MessageBar>
+          )}
           {state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length) && (
             <ApplyBar key={state.text + JSON.stringify(state.result)} modes={modes} apply={apply} copyText={task.output.kind === "text" ? shownText : undefined} />
           )}
@@ -171,7 +177,8 @@ function ResultView({ task, text, result }: { task: TaskDefinition; text: string
   }
   if (task.id === "diagram") {
     const r = result as DiagramResult;
-    return <div dangerouslySetInnerHTML={{ __html: diagramToSvg(r) }} />;
+    // diagramToSvg escaper alle labels, så indholdet er sikkert at indsætte.
+    return <div className={s.diagram} dangerouslySetInnerHTML={{ __html: diagramToSvg(r) }} />;
   }
   if (task.id === "text-to-slides") {
     const r = result as SlidesResult;

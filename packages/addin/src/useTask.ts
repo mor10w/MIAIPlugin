@@ -9,6 +9,8 @@ export interface TaskState {
   model?: string;
   progressChars: number;
   error?: string;
+  /** Sat, hvis motoren afbrød svaret (fx gentagelsessløjfe). */
+  stopReason?: "repetition";
 }
 
 const initial: TaskState = { status: "idle", text: "", progressChars: 0 };
@@ -52,7 +54,7 @@ export function useTask() {
               update((s) => ({ ...s, status: "error", error: e.message }));
               break;
             case "done":
-              update((s) => ({ ...s, status: "done" }));
+              update((s) => ({ ...s, status: "done", stopReason: e.stopReason }));
               break;
           }
         },
