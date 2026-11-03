@@ -110,6 +110,10 @@ Eksempel på maskinpolitik, der kun tillader en intern inference-server:
 ```json
 { "allowedHosts": ["127.0.0.1", "localhost", "llm.firma.local"], "locked": true, "webSearch": false }
 ```
+Eller med søgning via organisationens egen SearXNG:
+```json
+{ "allowedHosts": ["127.0.0.1", "localhost", "llm.firma.local", "search.firma.local"], "locked": true, "search": { "provider": "searxng", "url": "https://search.firma.local" } }
+```
 
 ## Fase 0 – manuel testliste
 Skal afprøves i Office desktop.

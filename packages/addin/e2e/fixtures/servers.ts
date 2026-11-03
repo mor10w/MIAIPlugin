@@ -17,8 +17,8 @@ export type ModelReply =
   | { status: number; error: string }
   /** Server, der ignorerer stream=true og svarer med ét JSON-objekt. */
   | { json: string }
-  /** Værktøjskald (OpenAI tool_calls). */
-  | { toolCall: { name: string; args: unknown } };
+  /** Værktøjskald (OpenAI tool_calls), evt. med indledende tekst før kaldet. */
+  | { toolCall: { name: string; args: unknown }; text?: string };
 
 export interface ChatRequestBody {
   model: string;
@@ -74,7 +74,10 @@ export class MockModel {
       res.writeHead(200, { "content-type": "text/event-stream" });
       const chunks =
         "toolCall" in r
-          ? [{ choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: r.toolCall.name, arguments: JSON.stringify(r.toolCall.args) } }] }, finish_reason: "tool_calls" }] }]
+          ? [
+              ...(r.text ? [{ choices: [{ delta: { content: r.text } }] }] : []),
+              { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: r.toolCall.name, arguments: JSON.stringify(r.toolCall.args) } }] }, finish_reason: "tool_calls" }] },
+            ]
           : [
               ...r.stream.map((content, i) => ({ choices: [{ delta: { content }, finish_reason: i === r.stream.length - 1 ? (r.finishReason ?? "stop") : null }] })),
               ...(r.promptTokens !== undefined && body.stream_options ? [{ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 10 } }] : []),

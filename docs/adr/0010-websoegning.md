@@ -63,3 +63,10 @@ politikken (ADR-0006) eller audit-loggen. Rettet:
 - Hver søgning skrives i audit-loggen (`kind: "search"`, host `html.duckduckgo.com`, varighed – aldrig søgeord).
 - Værktøjskald sendes tilbage med `type: "function"`, som OpenAI-specifikationen kræver (vLLM m.fl. afviser ellers).
 - Indstillingen vises kun i bridge-tilstand og er låst, når politikken forbyder søgning.
+
+## Tillæg (#12, 2026-11-03): selvhostet søgetjeneste
+
+- **Indstilling:** `Settings.search = { provider: "duckduckgo" | "searxng", url }`. SearXNG bruges via JSON-API'et (`/search?format=json`).
+- **Politik:** adressen valideres mod `allowedHosts` både ved gem og ved hver søgning. En maskinpolitik kan låse tjenesten med `Policy.search`.
+- **Audit-log:** registrerer den faktiske søgehost.
+- **DuckDuckGo:** en side med resultater, som ikke kan læses (ændret markup), skelnes nu fra "ingen resultater". Modellen og loggen får besked, så et brud opdages.

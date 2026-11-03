@@ -345,6 +345,32 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
           <Switch label={t("webSearch")} disabled={!policy.webSearch} checked={settings.webSearch && policy.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
         </Field>
       )}
+      {/* Søgetjeneste (#12): DuckDuckGo eller selvhostet SearXNG; kan låses af organisationens politik. */}
+      {api.mode === "bridge" && policy.webSearch && settings.webSearch && (
+        <div className={s.row}>
+          <Field label={t("searchProvider")} hint={policy.search ? t("searchLocked") : undefined}>
+            <Dropdown
+              disabled={!!policy.search}
+              value={(policy.search ?? settings.search).provider === "searxng" ? "SearXNG" : "DuckDuckGo"}
+              selectedOptions={[(policy.search ?? settings.search).provider]}
+              onOptionSelect={(_, d) => setSettings({ ...settings, search: { ...settings.search, provider: d.optionValue as "duckduckgo" | "searxng" } })}
+            >
+              <Option value="duckduckgo">DuckDuckGo</Option>
+              <Option value="searxng">SearXNG</Option>
+            </Dropdown>
+          </Field>
+          {(policy.search ?? settings.search).provider === "searxng" && (
+            <Field label={t("searxngUrl")} hint={policy.search ? undefined : t("searxngHint")}>
+              <Input
+                disabled={!!policy.search}
+                placeholder="https://search.firma.local"
+                value={(policy.search ?? settings.search).url ?? ""}
+                onChange={(_, d) => setSettings({ ...settings, search: { ...settings.search, url: d.value || undefined } })}
+              />
+            </Field>
+          )}
+        </div>
+      )}
       <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : undefined}>
         <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
       </Field>

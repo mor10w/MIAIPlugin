@@ -29,5 +29,10 @@ export function checkSettings(next: Settings, policy: Policy, isAllowed: (url: s
     ids.add(e.id);
     if (!isAllowed(e.baseUrl, policy)) return `Host for '${e.name}' (${e.baseUrl}) er ikke tilladt af politikken. Tilføj hosten under "Tilladte hosts".`;
   }
+  // SearXNG-adressen håndhæves som model-endpoints (#12). En låst søgetjeneste i politikken valideres ikke her.
+  if (!policy.search && next.search.provider === "searxng") {
+    if (!next.search.url) return "Angiv adressen på din SearXNG.";
+    if (!isAllowed(next.search.url, policy)) return `Søgetjenesten (${next.search.url}) er ikke tilladt af politikken. Tilføj hosten under "Tilladte hosts".`;
+  }
   return undefined;
 }

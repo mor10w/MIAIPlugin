@@ -1,6 +1,6 @@
 import { appendAudit, auditFile } from "./audit.js";
-import { errorEvent, executeTask, type AuditEntry, type ParsedTaskRequest, type TaskDefinition, type TaskEvent } from "@miai/shared";
-import { webSearch } from "./search.js";
+import { effectiveSearch, errorEvent, executeTask, isUrlAllowed, type AuditEntry, type Policy, type SearchConfig, type ParsedTaskRequest, type TaskDefinition, type TaskEvent } from "@miai/shared";
+import { searchWeb } from "./search.js";
 import type { ConfigStore } from "./config.js";
 
 interface RunOptions {
@@ -16,11 +16,8 @@ function baseEntry(task: TaskDefinition, epHost: string): Pick<AuditEntry, "ts" 
   return { ts: new Date().toISOString(), kind: "task", task: task.id, host: epHost };
 }
 
-/** Søgetjenestens host – logges i audit-loggen (aldrig selve søgeordene). */
-const SEARCH_HOST = "html.duckduckgo.com";
-
 /** Værktøjskald fra modellen (ADR-0010). Kun web_search leveres – ukendte navne afvises. */
-function makeToolExecutor(signal: AbortSignal, onSearch: (ok: boolean, durationMs: number) => Promise<void>) {
+function makeToolExecutor(signal: AbortSignal, search: SearchConfig, policy: Policy, onSearch: (ok: boolean, durationMs: number, host: string) => Promise<void>) {
   return {
     specs: [
       {
@@ -46,9 +43,9 @@ function makeToolExecutor(signal: AbortSignal, onSearch: (ok: boolean, durationM
       }
       if (!query) return "Manglende søgeforespørgsel i argumenterne.";
       const started = Date.now();
-      const result = await webSearch(query, signal);
-      await onSearch(!result.startsWith("Søgetjenesten"), Date.now() - started);
-      return result;
+      const r = await searchWeb(search, query, (url) => isUrlAllowed(url, policy), signal);
+      await onSearch(r.ok, Date.now() - started, r.host);
+      return r.text;
     },
   };
 }
@@ -65,10 +62,10 @@ export async function runTask({ task, req, store, emit, signal }: RunOptions): P
   }
   try {
     // Søgninger er udgående kald til en ekstern tjeneste og logges derfor også (kun host og tid).
-    const onSearch = async (ok: boolean, durationMs: number) => {
-      if (settings.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "search", task: task.id, host: SEARCH_HOST, status: ok ? "ok" : "error", durationMs });
+    const onSearch = async (ok: boolean, durationMs: number, searchHost: string) => {
+      if (settings.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "search", task: task.id, host: searchHost, status: ok ? "ok" : "error", durationMs });
     };
-    const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal, onSearch) });
+    const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal, effectiveSearch(settings, store.getPolicy()), store.getPolicy(), onSearch) });
     if (settings.auditLog) {
       await appendAudit(auditFile(store.dir), {
         ...baseEntry(task, host),

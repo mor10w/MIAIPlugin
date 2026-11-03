@@ -70,6 +70,18 @@ export type TaskEvent =
 
 export type TaskWarning = "input-truncated" | "output-truncated";
 
+/**
+ * Søgetjeneste til web-søgning (#12). duckduckgo = offentlig, uden opsætning (søgeord sendes til
+ * DuckDuckGo). searxng = selvhostet metasøgemaskine (fx organisationens egen), så søgeord ikke
+ * sendes direkte til en tredjepart.
+ */
+export const SearchConfig = z.object({
+  provider: z.enum(["duckduckgo", "searxng"]).default("duckduckgo"),
+  /** SearXNG: basisadresse, fx https://search.firma.local */
+  url: z.string().url().optional(),
+});
+export type SearchConfig = z.infer<typeof SearchConfig>;
+
 export const StructuredOutputMode = z.enum(["json_schema", "json_object", "none"]);
 export type StructuredOutputMode = z.infer<typeof StructuredOutputMode>;
 
@@ -115,6 +127,8 @@ export const Settings = z.object({
    * ekstern søgetjeneste, så det skal være et aktivt valg (løftet om, at data bliver lokalt).
    */
   webSearch: z.boolean().default(false),
+  /** Hvilken søgetjeneste web-søgningen bruger (#12). */
+  search: SearchConfig.default({ provider: "duckduckgo" }),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
 });
@@ -127,8 +141,15 @@ export const Policy = z.object({
   locked: z.boolean().default(false),
   /** Må web-søgning slås til? En organisation kan forbyde den helt (søgeord forlader maskinen). */
   webSearch: z.boolean().default(true),
+  /** Låser søgetjenesten, fx til organisationens egen SearXNG (#12). Har forrang for brugerens valg. */
+  search: SearchConfig.optional(),
 });
 export type Policy = z.infer<typeof Policy>;
+
+/** Den søgetjeneste, der faktisk bruges: politikkens, hvis den er låst, ellers brugerens. */
+export function effectiveSearch(settings: Settings, policy: Policy): SearchConfig {
+  return policy.search ?? settings.search;
+}
 
 /** Det, add-in'et får fra GET /api/settings (API-nøgler maskeres). */
 export interface SettingsView {
