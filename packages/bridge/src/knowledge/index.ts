@@ -74,6 +74,7 @@ export class KnowledgeIndex {
   private watchers: FSWatcher[] = [];
   private timer: NodeJS.Timeout | undefined;
   private abort = new AbortController();
+  private closed = false;
 
   constructor(
     private readonly store: ConfigStore,
@@ -88,6 +89,7 @@ export class KnowledgeIndex {
   }
 
   get db(): KnowledgeStore {
+    if (this.closed) throw new Error("Vidensindekset er lukket.");
     if (!this.store_) throw new Error(this.unavailable);
     return this.store_;
   }
@@ -142,17 +144,23 @@ export class KnowledgeIndex {
 
   /** Bringer indekset i overensstemmelse med mapperne. Kører én ad gangen; kald under en kørsel køres bagefter. */
   reindex(): Promise<void> {
+    if (this.closed) return Promise.resolve();
     if (this.running) {
       this.again = true;
       return this.running;
     }
-    this.running = this.run().finally(() => {
-      this.running = undefined;
-      if (this.again) {
-        this.again = false;
-        void this.reindex();
-      }
-    });
+    this.running = this.run()
+      .catch((err: Error) => {
+        // En kørsel, der var i gang, da indekset blev lukket (fx ved nedlukning), er ikke en fejl.
+        if (!this.closed) this.status = { ...this.status, state: "error", error: err.message };
+      })
+      .finally(() => {
+        this.running = undefined;
+        if (this.again && !this.closed) {
+          this.again = false;
+          void this.reindex();
+        }
+      });
     return this.running;
   }
 
@@ -287,6 +295,7 @@ export class KnowledgeIndex {
   }
 
   close(): void {
+    this.closed = true;
     this.abort.abort();
     clearTimeout(this.timer);
     for (const w of this.watchers) w.close();
