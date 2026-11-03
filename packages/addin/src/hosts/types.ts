@@ -1,4 +1,4 @@
-import type { AgentAction, ApplyMode, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
+import type { AgentAction, ApplyMode, DesignPlan, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 
@@ -31,6 +31,16 @@ export interface AgentOutcome extends ApplyOutcome {
    * røres ikke); snapshot = gendanner dokumentets indhold fra før sessionen; cells = Excel-celler.
    */
   undoKind: "tracked" | "snapshot" | "cells" | "slides" | "text";
+}
+
+export interface DesignOutcome {
+  /** Antal indsatte slides. */
+  inserted: number;
+  /** Antal fjernede (gamle) slides. */
+  removed: number;
+  /** Sat, hvis de gamle slides ikke kunne fjernes (fx ældre PowerPoint). */
+  keptOld?: boolean;
+  undo: () => Promise<void>;
 }
 
 export interface AgentOptions {
@@ -68,6 +78,11 @@ export interface HostAdapter {
   applyImage?(text: string, ctx?: DocContext): Promise<ApplyOutcome>;
   /** Agent-tilstand (#6): udfører de bekræftede handlinger og returnerer fortryd for hele sessionen. */
   applyAgent?(actions: AgentAction[], ctx: DocContext, opts?: AgentOptions): Promise<AgentOutcome>;
+  /**
+   * PowerPoint (ADR-0014): sætter designets master og slides ind. replace = fjern de nuværende
+   * slides bagefter (kræver PowerPointApi 1.8, så det kan fortrydes).
+   */
+  applyDesign?(plan: DesignPlan, opts: { replace: boolean; lang: "da" | "en" }): Promise<DesignOutcome>;
   /** Kan agentens ændringer udføres som sporede ændringer? */
   agentTracking?(): boolean;
 }

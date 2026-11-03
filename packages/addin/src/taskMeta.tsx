@@ -4,6 +4,7 @@ import {
   BotSparkle20Regular,
   CalculatorMultiple20Regular,
   DataBarVertical20Regular,
+  DesignIdeas20Regular,
   DocumentEdit20Regular,
   Flowchart20Regular,
   MathFormula20Regular,
@@ -38,6 +39,7 @@ const META: Record<string, { icon: FluentIcon; category: TaskCategory }> = {
   "generate-formula": { icon: CalculatorMultiple20Regular, category: "analyze" },
   "analyze-data": { icon: DataBarVertical20Regular, category: "analyze" },
   agent: { icon: BotSparkle20Regular, category: "agent" },
+  "design-deck": { icon: DesignIdeas20Regular, category: "present" },
 };
 
 export function taskMeta(task: Pick<TaskView, "id" | "custom">): { icon: FluentIcon; category: TaskCategory } {

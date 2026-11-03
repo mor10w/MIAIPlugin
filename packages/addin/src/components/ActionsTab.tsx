@@ -25,6 +25,7 @@ import {
   parseTsv,
   stripEmphasis,
   type AgentPlan,
+  type DesignPlan,
   type ApplyMode,
   type DiagramResult,
   type DocContext,
@@ -43,6 +44,7 @@ import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
 import { AgentPlanView } from "./AgentPlanView";
+import { DesignPreview } from "./DesignPreview";
 import type { AgentRequest } from "./ChatTab";
 import { ApplyBar } from "./ApplyBar";
 import { EmptyState, IconTile, SectionLabel, TextSkeleton, useKitStyles } from "./kit";
@@ -198,7 +200,7 @@ export function ActionsTab({
         // Agenten arbejder på markeringen eller – uden markering – hele dokumentet (#6).
         wholeDocumentFallback: task.input === "selectionOrDocument" || task.id === "agent",
         // Agenten ser afsnittene med typografi, så den kan bevare formateringen.
-        structure: task.id === "agent",
+        structure: task.id === "agent" || task.id === "design-deck",
         // Kolonnestatistik over hele arket er dyr at hente og bruges kun af dataanalysen.
         overview: task.id === "analyze-data" ? "stats" : "headers",
         // Opgaver, der deler lange tekster op, kan få meget mere end standardgrænsen.
@@ -298,7 +300,9 @@ export function ActionsTab({
   const running = state.status === "running";
   const hasResult = !!state.text || state.result !== undefined;
   const isAgent = task.id === "agent";
-  const showApply = !isAgent && state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length);
+  const isDesign = task.id === "design-deck";
+  const showApply =
+    !isAgent && !isDesign && state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length);
 
   return (
     <div className={mergeClasses(s.root, kit.appear)}>
@@ -377,10 +381,12 @@ export function ActionsTab({
             <Subtitle2 as="h3">{t("result")}</Subtitle2>
             {running && task.output.kind === "json" && <Caption1 className={s.muted}>{t("generatingStructured", { chars: state.progressChars })}</Caption1>}
           </div>
-          <div className={mergeClasses(s.resultBody, isAgent && s.agentBody)} aria-live="polite" aria-busy={running}>
+          <div className={mergeClasses(s.resultBody, (isAgent || isDesign) && s.agentBody)} aria-live="polite" aria-busy={running}>
             {isAgent && state.status === "done" && state.result !== undefined && ctxRef.current ? (
               <AgentPlanView key={JSON.stringify(state.result)} plan={state.result as AgentPlan} ctx={ctxRef.current} adapter={adapter} />
-            ) : hasResult && !isAgent ? (
+            ) : isDesign && state.status === "done" && state.result !== undefined && ctxRef.current ? (
+              <DesignPreview key={JSON.stringify(state.result)} plan={state.result as DesignPlan} ctx={ctxRef.current} adapter={adapter} />
+            ) : hasResult && !isAgent && !isDesign ? (
               <ResultView task={task} format={format} text={shownText} result={state.result} />
             ) : (
               <TextSkeleton label={t("working")} />

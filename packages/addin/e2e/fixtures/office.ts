@@ -741,6 +741,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     }));
     const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
     (w.__miai as Record<string, unknown>).deck = () => clone(deck);
+    (w.__miai as Record<string, unknown>).pptx = [] as string[];
 
     const textRange = (sh: Sh) =>
       strict("PowerPoint.TextRange", {
@@ -832,10 +833,22 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         load() {},
         items: [{ id: "M1", layouts: { items: layouts.map((l) => ({ id: l.id, name: l.name })) } }],
       }),
-      insertSlidesFromBase64(b64: string, opts: { targetSlideId?: string }) {
-        const sl = JSON.parse(b64) as Sl;
-        record({ kind: "insertSlides", after: opts.targetSlideId ?? null });
+      insertSlidesFromBase64(b64: string, opts: { targetSlideId?: string; formatting?: string }) {
         const at = opts.targetSlideId ? deck.findIndex((x) => x.id === opts.targetSlideId) + 1 : 0;
+        let sl: Sl | undefined;
+        try {
+          sl = JSON.parse(b64) as Sl; // et slide eksporteret af simuleringen selv
+        } catch {
+          // En rigtig .pptx (designets master og slides): filnavnene står ukomprimeret i zip-filen,
+          // så antallet af slides kan tælles. Filen gemmes, så testen kan pakke den ud.
+          const names = new Set(atob(b64).match(/ppt\/slides\/slide\d+\.xml/g) ?? []);
+          record({ kind: "insertPptx", after: opts.targetSlideId ?? null, formatting: opts.formatting, slides: names.size });
+          ((w.__miai as Record<string, unknown>).pptx as string[]).push(b64);
+          const added = [...names].map(() => ({ id: `S${nextId++}`, layout: "(fra designet)", shapes: [] as Sh[] }));
+          deck.splice(at, 0, ...added);
+          return;
+        }
+        record({ kind: "insertSlides", after: opts.targetSlideId ?? null });
         deck.splice(at, 0, { ...sl, id: `S${nextId++}` });
       },
     });

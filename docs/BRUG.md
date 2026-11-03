@@ -174,6 +174,15 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Lav diagram** – markér tekst (fx. en tabel) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsvisningen vises i task pane; **Indsæt diagram** placerer diagrammet som **native figurer** på den valgte slide (afrundede rektangler, linjer og pile, samlet i én gruppe i nyere PowerPoint). Opløs gruppen for at flytte, farve og redigere hver del.
 - **Opsummér** – markering, eller hele præsentationen (slide for slide).
 - **Præsentationsdisposition** – som i Word.
+- **Design: master og layout** – MIAI læser præsentationens indhold, eller dit emne hvis den er tom, og designer én sammenhængende designskabelon til hele præsentationen:
+  - **Stil:** ren, markant eller redaktionel.
+  - **Farver:** en palet valgt ud fra emnet og publikummet, tjekket for læsbar kontrast.
+  - **Skrifttyper:** fra Office' standardsæt.
+  - **Layout pr. slide:** titel, sektion, punkter, to kolonner, citat, nøgletal og afslutning.
+
+  Skriv gerne ønsker, fx *"rolig til bestyrelsen, vores farve er #0A5C8A"*. Før noget ændres, ser du navn, begrundelse, farver og en miniature af hvert slide. **Opret** sætter en rigtig slidemaster med navngivne layouts (fx "Nordisk klar – Punkter") og slides med indholdet ind i præsentationen.
+  - **Erstat de nuværende slides** fjerner de gamle bagefter (Microsoft 365). Billeder, diagrammer og noter på de gamle slides flyttes ikke med, så kontrollér resultatet. Med **Fortryd** kommer de gamle slides tilbage med al formatering.
+  - Layoutene ligger derefter under **Nyt slide**, og agenten bruger dem, når den laver nye slides, så præsentationen bliver ved med at følge designet.
 
 ### Chat (alle tre apps)
 

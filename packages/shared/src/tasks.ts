@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ChatMessage, DocContext, HostKind, ParsedTaskRequest, Source } from "./types.js";
 import { DiagramResult } from "./diagram.js";
+import { DesignPlan, DESIGN_GUIDE } from "./design.js";
 import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, renderExcelStructure, renderParagraphs, renderSlides } from "./agent.js";
 
 export type ApplyMode =
@@ -13,7 +14,8 @@ export type ApplyMode =
   | "formula" // skriv formel i markeret celle (Excel)
   | "cells" // skriv TSV ind i markerede celler (Excel)
   | "diagram" // indsæt diagram (billede i Word, figurer i PowerPoint)
-  | "agent"; // udfør de valgte handlinger fra agentens plan (#6)
+  | "agent" // udfør de valgte handlinger fra agentens plan (#6)
+  | "design"; // opret præsentationens master og slides ud fra designet (PowerPoint, ADR-0014)
 
 export type Localized = { da: string; en: string };
 
@@ -653,6 +655,47 @@ export const TASKS: TaskDefinition[] = [
                 ? `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"} as numbered paragraphs:\n${doc(renderParagraphs(c.paragraphs))}`
                 : `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"}:\n${doc(c.text)}`,
         ),
+      ];
+    },
+  },
+  {
+    id: "design-deck",
+    label: { da: "Design: master og layout", en: "Design: master and layout" },
+    description: {
+      da: "Laver en designskabelon (master) ud fra indholdet og lægger præsentationen ud, så alle slides følger samme design.",
+      en: "Creates a design template (master) from the content and lays out the deck so every slide follows the same design.",
+    },
+    hosts: ["powerpoint"],
+    input: "prompt",
+    output: { kind: "json", schema: DesignPlan, schemaName: "design_plan" },
+    params: [
+      {
+        name: "prompt",
+        label: { da: "Ønsker til designet (valgfrit)", en: "Design wishes (optional)" },
+        kind: "text",
+        placeholder: {
+          da: "Fx: rolig og professionel til bestyrelsen, vores farve er #0A5C8A – eller beskriv indholdet, hvis præsentationen er tom",
+          en: "E.g. calm and professional for the board, our colour is #0A5C8A – or describe the content if the deck is empty",
+        },
+      },
+    ],
+    applyModes: ["design"],
+    temperature: 0.4,
+    buildMessages: (req) => {
+      const c = req.context;
+      const content = c.slides?.some((s) => s.shapes.some((sh) => sh.text.trim()))
+        ? `The current presentation (use this content, restructure it into good slides):\n${doc(renderSlides(c.slides))}`
+        : c.text.trim()
+          ? `Content:\n${doc(c.text)}`
+          : "The presentation is empty: create the content from the request.";
+      return [
+        system(
+          req,
+          DESIGN_GUIDE,
+          "If the user names brand colours or fonts, use them (fonts only from the allowed list – pick the closest).",
+          `Write name and rationale in ${req.params.language ?? "Danish"}; keep slide text in the language of the content. Respond with JSON only.`,
+        ),
+        user(`Request: ${req.params.prompt?.trim() || "Design a professional, consistent deck for this content."}`, content),
       ];
     },
   },

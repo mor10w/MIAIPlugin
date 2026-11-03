@@ -98,3 +98,59 @@ for (const theme of ["light", "dark"] as const) {
     await tp.page.screenshot({ path: `${OUT}/8-agent-udfoert-${theme}.png`, animations: "disabled", fullPage: true });
   });
 }
+
+for (const style of ["clean", "bold", "editorial"] as const) {
+  test(`billeder: design – ${style}`, async ({ open }) => {
+    const tp = await open({
+      host: "PowerPoint",
+      apiSets: { PowerPointApi: "1.8" },
+      slides: [{ layout: "Title Slide", shapes: [{ name: "Title 1", ph: "Title", text: "Kvartalsrapport" }] }],
+    });
+    const palettes = {
+      clean: { background: "#FFFFFF", text: "#1B2A3A", muted: "#5B6B7B", primary: "#0A5C8A", accent: "#E07A1F" },
+      bold: { background: "#F7F7F5", text: "#1D1D1F", muted: "#5E5E63", primary: "#1F3A5F", accent: "#2BB3A3" },
+      editorial: { background: "#FBF8F3", text: "#2B2622", muted: "#6B625A", primary: "#7A2E2E", accent: "#B5651D" },
+    };
+    tp.model.reply = () => ({
+      json: JSON.stringify({
+        name: { clean: "Nordisk klar", bold: "Markant blå", editorial: "Varm redaktionel" }[style],
+        rationale: "Rolig og troværdig til bestyrelsen; farverne understøtter tallene.",
+        style,
+        palette: palettes[style],
+        fonts: style === "editorial" ? { heading: "Georgia", body: "Aptos" } : { heading: "Aptos Display", body: "Aptos" },
+        slides: [
+          { layout: "title", title: "Kvartalsrapport Q3", subtitle: "Bestyrelsesmøde · november" },
+          {
+            layout: "kpi",
+            title: "Resultater",
+            kpis: [
+              { value: "+12 %", label: "Omsætning" },
+              { value: "38 %", label: "Bruttomargin" },
+              { value: "127", label: "Medarbejdere" },
+            ],
+          },
+          { layout: "section", title: "Næste skridt" },
+          {
+            layout: "twoColumn",
+            title: "Norge og Sverige",
+            left: { heading: "Norge", bullets: ["To nye butikker", "Vækst 18 %"] },
+            right: { heading: "Sverige", bullets: ["Webshop i marts", "Ny betalingsløsning"] },
+          },
+          { layout: "quote", quote: "Det bedste kvartal i virksomhedens historie", attribution: "CFO" },
+          { layout: "closing", title: "Tak", subtitle: "Spørgsmål?" },
+        ],
+      }),
+    });
+    await tp.run("Design: master og layout");
+    await expect(tp.page.getByRole("img", { name: "6. Afslutning" })).toBeVisible();
+    await tp.page.setViewportSize({ width: 450, height: 1300 });
+    await tp.page
+      .getByText("Farver", { exact: false })
+      .first()
+      .scrollIntoViewIfNeeded()
+      .catch(() => {});
+    await tp.page.locator("[role=img]").first().scrollIntoViewIfNeeded();
+    await settle(tp.page);
+    await tp.page.screenshot({ path: `${OUT}/9-design-${style}.png`, animations: "disabled" });
+  });
+}

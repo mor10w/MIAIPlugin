@@ -30,6 +30,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 - **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
 - **`userTasks.ts`**: brugerdefinerede opgaver (F14, ADR-0011) – `UserTaskFile`-skema (JSON-filer med prompt-skabelon), `renderTemplate`, omsætning til `TaskDefinition` og det serialiserbare `TaskView`.
 - **`agent.ts`**: agent-tilstand (#6, ADR-0012) – `AgentPlan`/`AgentAction` (lukket union af Word- og Excel-handlinger), værktøjsbeskrivelse til prompten og `checkPlan`, der markerer handlinger, som ikke kan udføres. Udførelsen sker i add-in'ets host-adaptere (`applyAgent`) med fortryd for hele sessionen.
+- **`design.ts`**: præsentationsdesign (ADR-0014) – `DesignPlan` (stil, palet, skrifttyper, slides på syv layouttyper), kontrastretning (`fixPalette`) og designregler til modellen. Add-in'et bygger masteren med `deck/templates.ts` og `deck/buildDeck.ts` (pptxgenjs) og sætter den ind med `insertSlidesFromBase64`.
 - **`knowledge.ts`**: lokal RAG (F15, ADR-0013) – opdeling i uddrag (`chunkText`), normalisering og brute force-søgning (`topK`). `openai.ts` har `embed()` og `embeddingPrefix()`; chat-opgaven giver modellen uddrag som nummererede `<source>`-blokke.
 - **`audit.ts`**: `AuditEntry`-skema (kun metadata) og grænser for loggen.
 - **`engine.ts`** (`executeTask`):

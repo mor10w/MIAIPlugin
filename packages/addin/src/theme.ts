@@ -68,6 +68,8 @@ export const ui = {
   motion: "160ms",
   /** Hvor langt indhold glider ind ved indtoning. */
   appearOffset: "4px",
+  /** Mindste bredde på slide-miniaturer i designforhåndsvisningen (to kolonner i et bredt panel). */
+  thumbMin: "150px",
   /** Mindste kolonnebredde i formularer med to kolonner (bryder til én kolonne i et smalt panel). */
   colMin: "130px",
   /** Brudpunkter for task pane. */

@@ -3,6 +3,7 @@ import {
   minimalEdit,
   parseBlocks,
   type AgentAction,
+  type DesignPlan,
   diagramBounds,
   layoutDiagram,
   routeEdges,
@@ -22,9 +23,11 @@ import {
   type AgentStepResult,
   type ApplyOutcome,
   type ContextOptions,
+  type DesignOutcome,
   type HostAdapter,
   type TextFormat,
 } from "./types";
+import { buildDeck } from "../deck/buildDeck";
 
 const has = (v: string) => Office.context.requirements.isSetSupported("PowerPointApi", v);
 
@@ -55,6 +58,8 @@ export class PowerPointAdapter implements HostAdapter {
     if (mode === "newSlides" || mode === "diagram") return has("1.4");
     if (mode === "image") return has("1.8"); // billedfyldning kræver PowerPointApi 1.8
     if (mode === "agent") return has("1.4");
+    // Indsættelse af slides fra en fil (med master og layouts) kræver PowerPointApi 1.2.
+    if (mode === "design") return has("1.2");
     return mode === "replace" || mode === "insertAfter";
   }
 
@@ -532,5 +537,65 @@ export class PowerPointAdapter implements HostAdapter {
       offset += b.inline.text.length + 1;
     }
     await ctx.sync();
+  }
+
+  // --- Design: master og layout (ADR-0014) ---------------------------------------------------
+
+  /**
+   * Sætter designets slides – og dermed dets master og layouts – ind sidst i præsentationen
+   * ("behold kildeformatering"). Med replace fjernes de nuværende slides bagefter; de gemmes
+   * først (PowerPointApi 1.8), så fortryd kan lægge dem tilbage med al formatering.
+   */
+  async applyDesign(plan: DesignPlan, opts: { replace: boolean; lang: "da" | "en" }): Promise<DesignOutcome> {
+    const base64 = await buildDeck(plan, opts.lang);
+    const full = has("1.8");
+    return PowerPoint.run(async (ctx) => {
+      const col = ctx.presentation.slides;
+      col.load("items/id");
+      await ctx.sync();
+      const before = col.items.map((s) => s.id);
+      const removeOld = opts.replace && full && before.length > 0;
+      const saved = removeOld ? col.items.map((s) => s.exportAsBase64()) : [];
+      await ctx.sync();
+      ctx.presentation.insertSlidesFromBase64(base64, {
+        formatting: PowerPoint.InsertSlideFormatting.keepSourceFormatting,
+        ...(before.length ? { targetSlideId: before[before.length - 1] } : {}),
+      });
+      await ctx.sync();
+      const after = ctx.presentation.slides;
+      after.load("items/id");
+      await ctx.sync();
+      const inserted = after.items.map((s) => s.id).filter((id) => !before.includes(id));
+      if (removeOld) {
+        for (const s of after.items) if (before.includes(s.id)) s.delete();
+        await ctx.sync();
+      }
+      const oldSlides = saved.map((r) => r.value);
+      const undo = () =>
+        PowerPoint.run(async (c) => {
+          const cur = c.presentation.slides;
+          cur.load("items/id");
+          await c.sync();
+          // De gamle slides lægges tilbage forrest i den oprindelige rækkefølge …
+          const known = new Set(cur.items.map((x) => x.id));
+          let target: string | undefined;
+          for (const b64 of oldSlides) {
+            c.presentation.insertSlidesFromBase64(b64, {
+              formatting: PowerPoint.InsertSlideFormatting.keepSourceFormatting,
+              ...(target ? { targetSlideId: target } : {}),
+            });
+            await c.sync();
+            const now = c.presentation.slides;
+            now.load("items/id");
+            await c.sync();
+            target = now.items.find((x) => !known.has(x.id))?.id ?? target;
+            if (target) known.add(target);
+          }
+          // … og designets slides fjernes.
+          for (const s of cur.items) if (inserted.includes(s.id)) s.delete();
+          await c.sync();
+        });
+      return { inserted: inserted.length, removed: removeOld ? before.length : 0, keptOld: opts.replace && !removeOld && before.length > 0, undo };
+    });
   }
 }

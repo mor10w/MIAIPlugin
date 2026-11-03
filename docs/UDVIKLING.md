@@ -162,3 +162,11 @@ Skal afprøves i Office desktop.
 - [ ] "Tilføj et slide": oprettes med et layout fra skabelonen og står det rigtige sted; teksten står i pladsholderne
 - [ ] Slet og flyt slides (Microsoft 365), og fortryd: slides er tilbage på deres plads med al formatering (billeder, noter, animationer)
 - [ ] PowerPoint 2016/2019: sletning og flytning afvises med en forklaring; fortryd gendanner teksten
+
+**Design: master og layout (PowerPoint)**, prøv alle tre stile med en præsentation med tekst og tal:
+- [ ] Forhåndsvisningen svarer til resultatet (farver, placering, skrifttyper)
+- [ ] Under Vis → Diasmaster findes én ny master med layoutene "‹navn› – Titel/Punkter/…" og deres pladsholdere
+- [ ] Nyt slide → layoutene vises og kan bruges; agentens "addSlide" bruger dem
+- [ ] Tekst i pladsholderne har designets skrifttype, størrelse og farve; punkter har punkttegn
+- [ ] "Erstat de nuværende slides" + Fortryd: de gamle slides er tilbage i rækkefølge med billeder, noter og animationer
+- [ ] Aptos uden Microsoft 365 (fx PowerPoint 2019): erstattes af en læselig skrifttype

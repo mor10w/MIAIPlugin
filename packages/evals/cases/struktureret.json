@@ -182,5 +182,126 @@
       }
     ],
     "rubric": "Org chart with CEO → CFO/CTO/Head of Sales and CTO → Platform/Apps; nothing invented."
+  },
+  {
+    "id": "design-deck-da",
+    "task": "design-deck",
+    "lang": "da",
+    "feature": "Design",
+    "note": "Design af hele præsentationen: tal skal blive nøgletal-slides, lange punktlister deles op, og farverne skal passe til en bestyrelse.",
+    "context": {
+      "host": "powerpoint",
+      "text": "",
+      "isWholeDocument": true,
+      "slides": [
+        {
+          "layout": "Title Slide",
+          "shapes": [
+            {
+              "name": "Title 1",
+              "kind": "title",
+              "text": "Kvartalsrapport Q3"
+            },
+            {
+              "name": "Subtitle 2",
+              "kind": "body",
+              "text": "Bestyrelsesmøde"
+            }
+          ]
+        },
+        {
+          "layout": "Title and Content",
+          "shapes": [
+            {
+              "name": "Title 1",
+              "kind": "title",
+              "text": "Resultater"
+            },
+            {
+              "name": "Content 2",
+              "kind": "body",
+              "text": "Omsætningen steg 12 % til 48,3 mio. kr.\nBruttomarginen faldt fra 41 % til 38 %\nSygefraværet er 3,1 %, det laveste i fem år\nForventet årsomsætning 185-190 mio. kr.\nWebshop i Sverige udskudt til marts\nTo nye butikker i Bergen og Trondheim"
+            }
+          ]
+        }
+      ],
+      "layouts": ["Title Slide", "Title and Content"]
+    },
+    "params": {
+      "prompt": "Rolig og professionel til bestyrelsen"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "slides",
+        "minItems": 4,
+        "maxItems": 12
+      },
+      {
+        "type": "result",
+        "path": "slides.0.layout",
+        "pattern": "^title$"
+      },
+      {
+        "type": "regex",
+        "pattern": "\"layout\"\\s*:\\s*\"kpi\""
+      },
+      {
+        "type": "contains",
+        "values": ["48,3", "12 %"],
+        "any": true
+      }
+    ],
+    "rubric": "Ét sammenhængende design (rolig palet, læsbare farver); titel-slide først; tallene som kpi-slide; højst 6 korte punkter pr. slide; ingen opdigtede tal; dansk tekst."
+  },
+  {
+    "id": "design-deck-en-empty",
+    "task": "design-deck",
+    "lang": "en",
+    "feature": "Design",
+    "note": "Tom præsentation: modellen skal både skrive indhold og vælge design ud fra emnet.",
+    "context": {
+      "host": "powerpoint",
+      "text": "",
+      "isWholeDocument": true,
+      "slides": [
+        {
+          "layout": "Title Slide",
+          "shapes": [
+            {
+              "name": "Title 1",
+              "kind": "title",
+              "text": ""
+            }
+          ]
+        }
+      ],
+      "layouts": ["Title Slide"]
+    },
+    "params": {
+      "prompt": "A 6-slide pitch for a sustainable coffee subscription, warm and modern"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "slides",
+        "minItems": 5,
+        "maxItems": 8
+      },
+      {
+        "type": "result",
+        "path": "slides.0.layout",
+        "pattern": "^title$"
+      },
+      {
+        "type": "regex",
+        "pattern": "\"layout\"\\s*:\\s*\"closing\""
+      },
+      {
+        "type": "language",
+        "lang": "en"
+      }
+    ],
+    "rubric": "Warm, modern palette fitting sustainability/coffee; consistent style; title first, closing last; concise slides; no invented statistics presented as facts."
   }
 ]
