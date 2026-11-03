@@ -38,6 +38,43 @@ export const DocContext = z.object({
     )
     .max(5_000)
     .optional(),
+  /**
+   * Excel, agent-tilstand: tabeller (ListObjects) på arket og kolonnernes talformat, så nye
+   * rækker og celler kan få samme formatering som data.
+   */
+  excel: z
+    .object({
+      tables: z
+        .array(z.object({ name: z.string().max(255), address: z.string().max(100), headers: z.array(z.string().max(255)).max(100) }))
+        .max(50)
+        .default([]),
+      /** Talformat pr. kolonne i used range (fx "A: General", "C: #,##0.00 kr"). */
+      columnFormats: z.array(z.string().max(120)).max(100).default([]),
+    })
+    .optional(),
+  /**
+   * PowerPoint, agent-tilstand: slides med layout og figurer (som "2.1"), og præsentationens
+   * layouts, så nye slides kan oprettes fra skabelonen i stedet for med egne tekstbokse.
+   */
+  slides: z
+    .array(
+      z.object({
+        layout: z.string().max(120),
+        shapes: z
+          .array(
+            z.object({
+              name: z.string().max(255),
+              /** title/body = pladsholdere fra layoutet; text = egen tekstboks; other = figur uden tekst. */
+              kind: z.enum(["title", "body", "text", "other"]),
+              text: z.string().max(10_000),
+            }),
+          )
+          .max(100),
+      }),
+    )
+    .max(300)
+    .optional(),
+  layouts: z.array(z.string().max(120)).max(100).optional(),
 });
 export type DocContext = z.infer<typeof DocContext>;
 

@@ -182,13 +182,14 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8).
 - **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, fra som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
 
-### Agent (Word og Excel)
+### Agent (Word, Excel og PowerPoint)
 
 **Agent: redigér dokumentet** udfører ændringer for dig. Beskriv, hvad der skal ændres, fx *"ret alle 'kunde' til 'klient' og tilføj overskriften 'Vilkår' øverst"* eller i Excel *"tilføj en total-række under tabellen"*.
 
 1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
    - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit og kommentér.
-   - Excel: skriv værdier, skriv en formel og ryd et område.
+   - Excel: skriv værdier, skriv en formel, tilføj rækker i en Excel-tabel og ryd et område.
+   - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
    - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
@@ -203,14 +204,25 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - **Tabeller** kan få deres tekst rettet, men agenten må ikke slette, flytte eller indsætte i dem.
 - Har du ændret dokumentet, efter planen blev lavet, rører agenten ikke de berørte afsnit. Kør den igen.
 
+**I Excel** bevares formateringen også:
+- Værdier og formler ændrer aldrig cellernes format.
+- Tomme celler, der fyldes ud lige under eller ved siden af data, får naboens format. En ny total-række får altså kolonnens valuta- eller procentformat.
+- Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner.
+
+**I PowerPoint** følger agenten skabelonen:
+- Erstat ændrer kun de ord, der er forskellige.
+- Ny tekst i en figur beholder figurens skrifttype, størrelse, farve og punkttegn.
+- Nye slides oprettes fra præsentationens egne layouts med teksten i pladsholderne. Agenten laver aldrig egne tekstbokse, farver eller skrifttyper.
+
 Hele sessionen kan fortrydes med **Fortryd agent-session**:
 - I Word med sporede ændringer (standard, Word 2021/Microsoft 365) afvises agentens ændringer og kommentarer, og resten af dokumentet røres ikke.
 - I ældre Word eller uden sporede ændringer gendannes indholdet fra lige før. Det fjerner også ændringer, du selv har lavet siden.
-- I Excel gendannes de berørte celler.
+- I Excel gendannes de berørte celler med deres formatering, og tilføjede tabelrækker fjernes.
+- I PowerPoint (Microsoft 365) lægges de berørte slides tilbage med al formatering, nye slides slettes, og flyttede flyttes tilbage. Ældre PowerPoint kan kun gendanne teksten, og derfor sletter og flytter agenten ikke slides dér.
 
 Fra **chatten** kan du sende et ændringsønske videre med **Gør det med agenten**. Agenten bruger chatsvaret, du lige har set, som indhold i stedet for at skrive en ny tekst.
 
-Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark. Den har ingen adgang til netværk eller filer, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
+Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark, og i PowerPoint ser den hele præsentationen. Den har ingen adgang til netværk eller filer, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
 
 ### Viden fra mine mapper (bridge og MIAI App)
 

@@ -186,7 +186,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                     }}
                     copyText={m.content}
                   />
-                  {onUseAgent && (adapter.host === "word" || adapter.host === "excel") && lastUserPrompt && looksLikeEditRequest(lastUserPrompt) && (
+                  {onUseAgent && adapter.supports("agent") && lastUserPrompt && looksLikeEditRequest(lastUserPrompt) && (
                     <div className={s.agentSuggest}>
                       <span>
                         <Text weight="semibold">{t("agentSuggestTitle")}</Text>

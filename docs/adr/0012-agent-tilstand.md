@@ -59,3 +59,27 @@ Kravet er, at agenten kan redigere uden at ødelægge formateringen, og at den s
 7. **Chat → agent:** chatsvaret følger med som `<material>`, så agenten indsætter den tekst, brugeren har set.
 
 **Test:** den simulerede Word i e2e har en dokumentmodel, der efterligner Words regler: arv ved indsættelse, første tegns formatering ved erstatning og sporede ændringer. Testene tjekker dokumentets typografier og formatering efter hver handling og efter fortryd. Reglerne skal stadig bekræftes i rigtig Word; tjeklisten står i UDVIKLING.md.
+
+### Excel og PowerPoint
+
+Samme principper: modellen ser strukturen, handlingerne ændrer kun det nødvendige, nyt indhold får dokumentets egen formatering, og fortryd gendanner også formateringen.
+
+**Excel**
+- **Kontekst:** arkets Excel-tabeller (navn, område, overskrifter) og kolonnernes talformat i første datarække.
+- **`appendRows {table, values}`** bruger `table.rows.add`, så rækkerne får tabellens formatering og beregnede kolonner (`null` = lad Excel udfylde).
+- **Værdier som JSON-tal**, ikke tekst, så tal ikke tolkes efter landestandard.
+- **Naboformat:** celler, der var tomme, får formatet fra rækken over eller kolonnen til venstre (`copyFrom(…, formats)`, ExcelApi 1.9), før værdien skrives.
+- **Fortryd:** formler, talformat og celleegenskaber (`getCellProperties`/`setCellProperties`, ExcelApi 1.9) gendannes, og tilføjede tabelrækker slettes. Cellerne gendannes først og rækkerne bagefter, så adresserne passer.
+
+**PowerPoint**
+- **Kontekst:** alle slides med layout og figurer som `2.1 [title|body|text|other] navn: tekst`, plus præsentationens layouts.
+- **Handlinger:**
+  - `replace` deles med Word og ændrer kun det forskellige via `TextRange.getSubstring` (PowerPointApi 1.4).
+  - `setText` skriver én linje pr. afsnit; punkttegnene kommer fra figuren, og fed/kursiv sættes via delstrenge.
+  - `addSlide` opretter fra et navngivet layout (ellers forrige slides layout) og udfylder pladsholderne. Der laves aldrig egne tekstbokse.
+  - `deleteSlide` og `moveSlide`.
+- **Fortryd** (PowerPointApi 1.8): berørte slides eksporteres (`exportAsBase64`) før første ændring og lægges tilbage med `insertSlidesFromBase64` (behold kildeformatering) på deres plads. Nye slides slettes, og flyttede flyttes tilbage.
+- **Uden 1.8:** kun teksten kan gendannes, så sletning og flytning af slides afvises, og UI'et siger, at formatering kan gå tabt ved fortryd.
+- **Agenten kræver PowerPointApi 1.4** (PowerPoint 2019/Microsoft 365).
+
+Tests: simuleret Excel med formater og tabeller og simuleret PowerPoint med slides, layouts og formateret tekst. Testene tjekker formatering efter handlinger og efter fortryd. Tjeklister til rigtig Office står i UDVIKLING.md.

@@ -30,7 +30,7 @@ export interface AgentOutcome extends ApplyOutcome {
    * Hvordan fortryd virker: tracked = afviser sessionens sporede ændringer (resten af dokumentet
    * røres ikke); snapshot = gendanner dokumentets indhold fra før sessionen; cells = Excel-celler.
    */
-  undoKind: "tracked" | "snapshot" | "cells";
+  undoKind: "tracked" | "snapshot" | "cells" | "slides" | "text";
 }
 
 export interface AgentOptions {

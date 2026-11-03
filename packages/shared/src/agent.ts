@@ -66,15 +66,43 @@ export const AgentAction = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("setStyle"), paragraph, style: WordStyle, reason }),
   z.object({ action: z.literal("comment"), find, text: z.string().min(1).max(2_000), reason }),
+  // --- PowerPoint (replace deles med Word) --------------------------------------
+  z.object({
+    action: z.literal("setText"),
+    shape: z
+      .string()
+      .regex(/^\d{1,3}\.\d{1,3}$/)
+      .describe("Shape reference 'slide.shape' from the structure, e.g. '2.1'"),
+    text: z
+      .string()
+      .max(6_000)
+      .describe("New text, one line per paragraph ('- ' prefixes are optional: the shape's own bullet style is used); **bold**, *italic*"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("addSlide"),
+    after: z.number().int().min(0).max(1_000).describe("Insert after this slide number (0 = first)"),
+    layout: z.string().max(120).optional().describe("Layout name from the presentation's layouts (default: the layout of the slide before)"),
+    title: z.string().max(500),
+    body: z.string().max(6_000).optional().describe("Body text, one line per bullet"),
+    reason,
+  }),
+  z.object({ action: z.literal("deleteSlide"), slide: z.number().int().min(1).max(1_000), reason }),
+  z.object({
+    action: z.literal("moveSlide"),
+    slide: z.number().int().min(1).max(1_000),
+    to: z.number().int().min(1).max(1_000).describe("New position (slide number)"),
+    reason,
+  }),
   // --- Excel -----------------------------------------------------------------
   z.object({
     action: z.literal("setValues"),
     address: z.string().min(2).max(40).describe("Top-left cell or range on the active sheet, e.g. 'D2' or 'D2:E5'"),
     values: z
-      .array(z.array(z.string().max(1_000)))
+      .array(z.array(z.union([z.string().max(1_000), z.number(), z.boolean(), z.null()])))
       .min(1)
       .max(200)
-      .describe("Rows of cell values written from the top-left cell"),
+      .describe("Rows of cell values written from the top-left cell. Numbers as JSON numbers (not text), null = leave empty"),
     reason,
   }),
   z.object({
@@ -84,6 +112,16 @@ export const AgentAction = z.discriminatedUnion("action", [
     reason,
   }),
   z.object({ action: z.literal("clear"), address: z.string().min(2).max(40).describe("Range on the active sheet whose contents are cleared"), reason }),
+  z.object({
+    action: z.literal("appendRows"),
+    table: z.string().max(255).describe("Excel table name from the structure"),
+    values: z
+      .array(z.array(z.union([z.string().max(1_000), z.number(), z.boolean(), z.null()])))
+      .min(1)
+      .max(200)
+      .describe("Rows to add at the end of the table, one value per column (null for calculated columns)"),
+    reason,
+  }),
 ]);
 export type AgentAction = z.infer<typeof AgentAction>;
 export type AgentActionKind = AgentAction["action"];
@@ -95,11 +133,36 @@ export const AgentPlan = z.object({
 export type AgentPlan = z.infer<typeof AgentPlan>;
 
 export const WORD_ACTIONS: AgentActionKind[] = ["replace", "insert", "delete", "move", "setStyle", "comment"];
-export const EXCEL_ACTIONS: AgentActionKind[] = ["setValues", "setFormula", "clear"];
-export const agentActionsFor = (host: HostKind): AgentActionKind[] => (host === "word" ? WORD_ACTIONS : host === "excel" ? EXCEL_ACTIONS : []);
+export const EXCEL_ACTIONS: AgentActionKind[] = ["setValues", "setFormula", "appendRows", "clear"];
+export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide"];
+export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
+  host === "word" ? WORD_ACTIONS : host === "excel" ? EXCEL_ACTIONS : host === "powerpoint" ? POWERPOINT_ACTIONS : [];
 
 /** Destruktive handlinger fremhæves i planen. */
-export const isDestructive = (a: AgentAction) => a.action === "delete" || a.action === "clear" || (a.action === "replace" && !a.replace);
+export const isDestructive = (a: AgentAction) =>
+  a.action === "delete" ||
+  a.action === "clear" ||
+  a.action === "deleteSlide" ||
+  (a.action === "replace" && !a.replace) ||
+  (a.action === "setText" && !a.text.trim());
+
+/** PowerPoint-strukturen til prompten: slides med layout og figurer som "2.1 [body] …". */
+export function renderSlides(slides: NonNullable<DocContext["slides"]>, layouts?: string[]): string {
+  const lines = slides.flatMap((sl, i) => [
+    `Slide ${i + 1} (layout: ${sl.layout})`,
+    ...sl.shapes.map((sh, j) => `  ${i + 1}.${j + 1} [${sh.kind}] ${sh.name}: ${sh.text.replace(/\n/g, " ⏎ ")}`),
+  ]);
+  if (layouts?.length) lines.push("", `Layouts: ${layouts.join(" | ")}`);
+  return lines.join("\n");
+}
+
+/** Excel-strukturen til prompten: tabeller og kolonnernes talformat. */
+export function renderExcelStructure(x: NonNullable<DocContext["excel"]>): string {
+  const lines: string[] = [];
+  if (x.tables.length) lines.push("Tables:", ...x.tables.map((t) => `- ${t.name} (${t.address}): ${t.headers.join(" | ")}`));
+  if (x.columnFormats.length) lines.push(`Number formats: ${x.columnFormats.join("; ")}`);
+  return lines.join("\n");
+}
 
 /**
  * Dokumentets afsnit som tekst til prompten: "¶3 [Heading2] Priser", med (list) og (table).
@@ -114,10 +177,22 @@ export function agentToolGuide(host: HostKind): string {
   if (host === "excel")
     return [
       "Available actions (Excel, active sheet only):",
-      '- setValues {address, values}: write a 2D array of values starting at address (e.g. "D2"). Use it for new columns, labels and data.',
+      '- setValues {address, values}: write a 2D array of values starting at address (e.g. "D2"). Use JSON numbers for numbers (1200.5, not "1.200,50"); null leaves a cell empty.',
       '- setFormula {address, formula}: put ONE formula in ONE cell (e.g. "F2"). For a column of formulas, use one action per cell (max 20 actions).',
-      "- clear {address}: clear the contents of a range. Only when the user asks to remove data.",
+      "- appendRows {table, values}: add rows at the end of an Excel table (listed under Tables). The rows get the table's formatting and calculated columns – always prefer this over setValues below a table. Use null for calculated columns.",
+      "- clear {address}: clear the contents of a range (formatting is kept). Only when the user asks to remove data.",
+      "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats (number format, font, fill). Do not try to format cells.",
       "Use addresses that match the sheet overview. Never write over existing data unless the user asked for it.",
+    ].join("\n");
+  if (host === "powerpoint")
+    return [
+      "Available actions (PowerPoint). The presentation is shown slide by slide with layout and shapes referenced as slide.shape (e.g. 2.1); [title]/[body] are placeholders from the layout, [text] is a free text box.",
+      "- replace {find, replace, all?}: change words inside a shape's text. `find` is copied verbatim from one shape; only the words that differ are replaced, so formatting is kept.",
+      "- setText {shape, text}: replace all text in one shape. One line per paragraph (no bullet characters needed – the placeholder adds its own); **bold**, *italic*. The shape keeps its own font, size, colour and bullet style.",
+      "- addSlide {after, layout?, title, body?}: add a slide from one of the presentation's layouts (listed under Layouts) so it follows the template; the title and body go into the layout's placeholders.",
+      "- deleteSlide {slide}, moveSlide {slide, to}: remove or reorder slides.",
+      "Preserve the design: prefer replace for small changes, setText only when most of a shape's text changes, and addSlide with an existing layout instead of rebuilding slides. Never add your own text boxes, colours or fonts.",
+      "Slide and shape numbers refer to the presentation as shown, before any of your actions.",
     ].join("\n");
   return [
     "Available actions (Word). The document is shown as numbered paragraphs: ¶number [style] text; (list) = list item, (table) = inside a table.",
@@ -146,7 +221,13 @@ export type AgentProblem =
   /** Handlingen er ufuldstændig (fx delete uden afsnit og tekst). */
   | "invalid"
   /** Word uden afsnitsstruktur (før WordApi 1.3): afsnitshandlinger kan ikke bruges. */
-  | "no-structure";
+  | "no-structure"
+  /** PowerPoint: slide eller figur findes ikke; layout findes ikke i præsentationen. */
+  | "bad-slide"
+  | "bad-shape"
+  | "bad-layout"
+  /** Excel: tabellen findes ikke på arket. */
+  | "bad-table";
 
 export interface CheckedAction {
   action: AgentAction;
@@ -170,12 +251,17 @@ export function cellCount(address: string): number {
  * Tjekker planen mod værten og dokumentet, før den vises: handlinger til den forkerte vært,
  * tekst, der ikke findes i dokumentet, ugyldige adresser og for store skrivninger markeres.
  */
-export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text" | "paragraphs">): CheckedAction[] {
+export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text" | "paragraphs" | "slides" | "layouts" | "excel">): CheckedAction[] {
   const allowed = agentActionsFor(ctx.host);
   const paras = ctx.paragraphs;
+  const slides = ctx.slides;
   const text = paras ? paras.map((p) => p.text).join("\n") : (ctx.text ?? "");
-  // Søgning i Word sker inden for ét afsnit ad gangen.
-  const inDoc = (s?: string) => !!s && !s.includes("\n") && (paras ? paras.some((p) => p.text.includes(s)) : text.includes(s));
+  // Søgning sker inden for ét afsnit (Word) eller én figur (PowerPoint) ad gangen.
+  const inDoc = (s?: string) =>
+    !!s &&
+    !s.includes("\n") &&
+    (slides ? slides.some((sl) => sl.shapes.some((sh) => sh.text.includes(s))) : paras ? paras.some((p) => p.text.includes(s)) : text.includes(s));
+  const slideOk = (n: number) => !!slides && n >= 1 && n <= slides.length;
   /** Problem med et afsnitsnummer, eller undefined hvis det er i orden. */
   const para = (n: number | undefined, structural: boolean): AgentProblem | undefined => {
     if (n === undefined) return "invalid";
@@ -203,6 +289,28 @@ export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text"
       case "insert":
         if (action.position === "before" || action.position === "after") return ok(action, para(action.paragraph, true));
         return ok(action);
+      case "setText": {
+        if (!slides) return ok(action, "no-structure");
+        const [sn, shn] = action.shape.split(".").map(Number);
+        const sh = slides[sn - 1]?.shapes[shn - 1];
+        return ok(action, !slides[sn - 1] ? "bad-slide" : !sh ? "bad-shape" : sh.kind === "other" ? "invalid" : undefined);
+      }
+      case "addSlide":
+        if (!slides) return ok(action, "no-structure");
+        if (action.after > slides.length) return ok(action, "bad-slide");
+        return ok(action, action.layout && ctx.layouts && !ctx.layouts.includes(action.layout) ? "bad-layout" : undefined);
+      case "deleteSlide":
+        return ok(action, !slides ? "no-structure" : slideOk(action.slide) ? undefined : "bad-slide");
+      case "moveSlide":
+        if (!slides) return ok(action, "no-structure");
+        if (action.slide === action.to) return ok(action, "invalid");
+        return ok(action, slideOk(action.slide) && slideOk(action.to) ? undefined : "bad-slide");
+      case "appendRows": {
+        const t = ctx.excel?.tables.find((x) => x.name === action.table);
+        if (!t) return ok(action, "bad-table");
+        if (action.values.some((r) => r.length > t.headers.length)) return ok(action, "invalid");
+        return ok(action, action.values.reduce((n, r) => n + r.length, 0) > MAX_AGENT_CELLS ? "too-large" : undefined);
+      }
       case "setFormula":
         return CELL.test(action.address.split("!").pop()!) ? { action } : { action, problem: "bad-address" };
       case "setValues": {

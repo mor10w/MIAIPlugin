@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ChatMessage, DocContext, HostKind, ParsedTaskRequest, Source } from "./types.js";
 import { DiagramResult } from "./diagram.js";
-import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, renderParagraphs } from "./agent.js";
+import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, renderExcelStructure, renderParagraphs, renderSlides } from "./agent.js";
 
 export type ApplyMode =
   | "replace" // erstat markeringen
@@ -604,7 +604,7 @@ export const TASKS: TaskDefinition[] = [
       da: "Beskriv en ændring. MIAI foreslår konkrete handlinger, du godkender, før noget ændres.",
       en: "Describe a change. MIAI proposes concrete actions you approve before anything changes.",
     },
-    hosts: ["word", "excel"],
+    hosts: ["word", "excel", "powerpoint"],
     input: "prompt",
     output: { kind: "json", schema: AgentPlan, schemaName: "agent_plan" },
     params: [
@@ -643,12 +643,15 @@ export const TASKS: TaskDefinition[] = [
                 `Selected range: ${c.address ?? "?"}`,
                 c.table && `Selected values (TSV):\n${doc(c.table)}`,
                 c.surroundings && `Sheet overview:\n${doc(c.surroundings)}`,
+                c.excel && renderExcelStructure(c.excel) && `Sheet structure:\n${doc(renderExcelStructure(c.excel))}`,
               ]
                 .filter(Boolean)
                 .join("\n\n")
-            : c.paragraphs?.length
-              ? `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"} as numbered paragraphs:\n${doc(renderParagraphs(c.paragraphs))}`
-              : `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"}:\n${doc(c.text)}`,
+            : c.host === "powerpoint" && c.slides
+              ? `The presentation:\n${doc(renderSlides(c.slides, c.layouts))}`
+              : c.paragraphs?.length
+                ? `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"} as numbered paragraphs:\n${doc(renderParagraphs(c.paragraphs))}`
+                : `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"}:\n${doc(c.text)}`,
         ),
       ];
     },

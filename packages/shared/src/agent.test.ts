@@ -192,3 +192,93 @@ describe("chat → agent", () => {
     expect(msgs[1].content).toContain("<material>\n## Levering\nVi leverer på 3 dage.\n</material>");
   });
 });
+
+describe("agent i PowerPoint og Excel", () => {
+  const slides = [
+    {
+      layout: "Title Slide",
+      shapes: [
+        { name: "Title 1", kind: "title" as const, text: "Kvartalsrapport" },
+        { name: "Subtitle 2", kind: "body" as const, text: "Q3 2026" },
+      ],
+    },
+    {
+      layout: "Title and Content",
+      shapes: [
+        { name: "Title 1", kind: "title" as const, text: "Resultater" },
+        { name: "Content 2", kind: "body" as const, text: "Omsætning +12 %\nMargin 38 %" },
+        { name: "Picture 3", kind: "other" as const, text: "" },
+      ],
+    },
+  ];
+  it("checkPlan (PowerPoint): figurer, slides og layouts", () => {
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "replace", find: "+12 %", replace: "+14 %", reason: "" },
+        { action: "setText", shape: "2.2", text: "- Omsætning +14 %\n- Margin 39 %", reason: "" },
+        { action: "setText", shape: "2.3", text: "x", reason: "" },
+        { action: "setText", shape: "3.1", text: "x", reason: "" },
+        { action: "addSlide", after: 2, layout: "Title and Content", title: "Næste skridt", reason: "" },
+        { action: "addSlide", after: 2, layout: "Mit eget layout", title: "x", reason: "" },
+        { action: "deleteSlide", slide: 5, reason: "" },
+        { action: "moveSlide", slide: 2, to: 1, reason: "" },
+        { action: "delete", paragraph: 1, reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "powerpoint", text: "", slides, layouts: ["Title Slide", "Title and Content"] }).map((c) => c.problem)).toEqual([
+      undefined,
+      undefined,
+      "invalid",
+      "bad-slide",
+      undefined,
+      "bad-layout",
+      "bad-slide",
+      undefined,
+      "wrong-host",
+    ]);
+  });
+
+  it("checkPlan (Excel): appendRows kræver en kendt tabel og højst én værdi pr. kolonne", () => {
+    const excel = { tables: [{ name: "Salg", address: "Ark1!A1:C4", headers: ["Region", "Beløb", "Andel"] }], columnFormats: [] };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "appendRows", table: "Salg", values: [["Fyn", 70, null]], reason: "" },
+        { action: "appendRows", table: "Findes", values: [["x"]], reason: "" },
+        { action: "appendRows", table: "Salg", values: [["a", 1, 2, 3]], reason: "" },
+        { action: "setValues", address: "E2", values: [[1200.5, true, null, "tekst"]], reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([undefined, "bad-table", "invalid", undefined]);
+  });
+
+  it("prompten viser slides med layout og figurer, og Excels tabeller og talformater", () => {
+    const ppt = agent.buildMessages(
+      TaskRequest.parse({
+        context: { host: "powerpoint", text: "", slides, layouts: ["Title Slide", "Title and Content"] },
+        params: { prompt: "Opdater tallene" },
+      }),
+    );
+    expect(ppt[1].content).toContain(
+      "Slide 2 (layout: Title and Content)\n  2.1 [title] Title 1: Resultater\n  2.2 [body] Content 2: Omsætning +12 % ⏎ Margin 38 %",
+    );
+    expect(ppt[1].content).toContain("Layouts: Title Slide | Title and Content");
+    expect(ppt[0].content).toContain("addSlide {after, layout?, title, body?}");
+    expect(ppt[0].content).not.toContain("setFormula");
+
+    const xl = agent.buildMessages(
+      TaskRequest.parse({
+        context: {
+          host: "excel",
+          text: "",
+          address: "Ark1!A1",
+          excel: { tables: [{ name: "Salg", address: "Ark1!A1:C4", headers: ["Region", "Beløb", "Andel"] }], columnFormats: ["B: #,##0 kr", "C: 0%"] },
+        },
+        params: { prompt: "Tilføj Fyn" },
+      }),
+    );
+    expect(xl[1].content).toContain("- Salg (Ark1!A1:C4): Region | Beløb | Andel\nNumber formats: B: #,##0 kr; C: 0%");
+    expect(xl[0].content).toMatch(/appendRows \{table, values\}/);
+  });
+});

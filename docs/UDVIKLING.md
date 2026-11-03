@@ -149,3 +149,16 @@ Skal afprøves i Office desktop.
 - [ ] Fortryd med sporede ændringer (Microsoft 365): kun agentens ændringer og kommentarer forsvinder; egne sporede ændringer før sessionen er urørte
 - [ ] Fortryd i Word 2016/2019 (uden WordApi 1.6): dokumentet er som før; nummerering i lister og sidehoveder er intakte
 - [ ] Ændr et afsnit mellem plan og "Udfør": handlinger på det afsnit afvises med "Dokumentet er ændret siden planen"
+
+**Agent i Excel – formatering** (ark med en Excel-tabel, valuta- og procentformat, fed overskrift og fyldfarve):
+- [ ] "Tilføj en række": rækken lægges i tabellen (tabellen udvides), med tabellens formatering og beregnede kolonner
+- [ ] "Tilføj en total under tabellen": totalen får kolonnens talformat (fx kr.), ikke "Standard"
+- [ ] Skriv i celler, der allerede har formatering: formateringen er urørt
+- [ ] Fortryd: værdier, talformater, fed og fyld er som før, og tabellen har sin oprindelige størrelse
+
+**Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
+- [ ] Erstat et tal i et punkt med fed tekst foran: kun tallet skifter, fed og farve bevares
+- [ ] Ny tekst i en pladsholder: skabelonens skrifttype, størrelse, farve og punkttegn bevares; fed på markerede ord
+- [ ] "Tilføj et slide": oprettes med et layout fra skabelonen og står det rigtige sted; teksten står i pladsholderne
+- [ ] Slet og flyt slides (Microsoft 365), og fortryd: slides er tilbage på deres plads med al formatering (billeder, noter, animationer)
+- [ ] PowerPoint 2016/2019: sletning og flytning afvises med en forklaring; fortryd gendanner teksten

@@ -257,5 +257,106 @@
       }
     ],
     "rubric": "One replace whose find is short (e.g. '49 EUR') rather than the whole paragraph, so the rest keeps its formatting."
+  },
+  {
+    "id": "agent-ppt-minimal-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent",
+    "note": "Formatering i PowerPoint: et tal i et punkt rettes med en lille replace, ikke ved at skrive hele figuren om.",
+    "context": {
+      "host": "powerpoint",
+      "text": "",
+      "isWholeDocument": true,
+      "slides": [
+        {
+          "layout": "Title Slide",
+          "shapes": [
+            {
+              "name": "Title 1",
+              "kind": "title",
+              "text": "Kvartalsrapport"
+            },
+            {
+              "name": "Subtitle 2",
+              "kind": "body",
+              "text": "Q3 2026"
+            }
+          ]
+        },
+        {
+          "layout": "Title and Content",
+          "shapes": [
+            {
+              "name": "Title 1",
+              "kind": "title",
+              "text": "Resultater"
+            },
+            {
+              "name": "Content 2",
+              "kind": "body",
+              "text": "Omsætning +12 % i Q3\nMargin 38 %"
+            }
+          ]
+        }
+      ],
+      "layouts": ["Title Slide", "Title and Content"]
+    },
+    "params": {
+      "prompt": "Omsætningen steg faktisk 14 %, ikke 12 %"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 1,
+        "include": ["replace"],
+        "exclude": ["setText", "addSlide", "deleteSlide"],
+        "valid": true
+      }
+    ],
+    "rubric": "Én replace af '+12 %' → '+14 %' (kort find); intet andet ændres."
+  },
+  {
+    "id": "agent-excel-table-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent",
+    "note": "Formatering i Excel: en ny række i en Excel-tabel skal tilføjes med appendRows, ikke setValues under tabellen.",
+    "context": {
+      "host": "excel",
+      "text": "Region\tBeløb\nJylland\t120\nSjælland\t200",
+      "table": "Region\tBeløb\nJylland\t120\nSjælland\t200",
+      "address": "Ark1!A1:B3",
+      "excel": {
+        "tables": [
+          {
+            "name": "Salg",
+            "address": "Ark1!A1:B3",
+            "headers": ["Region", "Beløb"]
+          }
+        ],
+        "columnFormats": ["B: #,##0 kr"]
+      }
+    },
+    "params": {
+      "prompt": "Tilføj Fyn med 70"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 1,
+        "include": ["appendRows"],
+        "exclude": ["setValues", "clear"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "\\[\\s*\"Fyn\"\\s*,\\s*70\\s*\\]",
+        "flags": ""
+      }
+    ],
+    "rubric": "appendRows i tabellen Salg med [\"Fyn\", 70] – tallet som tal, ikke tekst."
   }
 ]

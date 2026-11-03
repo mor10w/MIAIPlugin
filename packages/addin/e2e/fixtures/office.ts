@@ -33,9 +33,30 @@ export interface FakeOfficeOptions {
     bold?: boolean;
     marks?: { start: number; end: number; bold?: boolean; italic?: boolean; link?: string }[];
   }[];
-  /** Excel: arkets værdier (række 1 = A1). Markeringen er hele området. */
-  excel?: { sheet: string; values: (string | number)[][] };
+  /** Excel: arkets værdier (række 1 = A1). Markeringen er hele området. Formater og tabeller er valgfri. */
+  excel?: {
+    sheet: string;
+    values: (string | number)[][];
+    /** Fx { "B2:B4": { numberFormat: "#,##0 kr" }, "A1:C1": { bold: true } }. */
+    formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
+    /** Excel-tabeller, fx [{ name: "Salg", range: "A1:C4" }]. */
+    tables?: { name: string; range: string }[];
+  };
   displayLanguage?: string;
+  /** PowerPoint med præsentationsmodel (agent-tilstand): slides med layout og figurer. */
+  slides?: {
+    layout: string;
+    shapes: {
+      name: string;
+      type?: string;
+      ph?: string;
+      text: string;
+      style?: Record<string, unknown>;
+      marks?: { start: number; end: number; bold?: boolean; italic?: boolean }[];
+    }[];
+  }[];
+  /** Præsentationens layouts og deres pladsholdere (til nye slides). */
+  layouts?: { name: string; placeholders: string[] }[];
   /** Office' tema. Kan skiftes undervejs med window.__miai.setTheme("dark"). */
   theme?: "light" | "dark";
 }
@@ -481,37 +502,123 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   }
 
   // --- Excel ------------------------------------------------------------------
+  // Et ark med værdier, formater (talformat, fed, fyld) og tabeller, der ændres af det,
+  // adapterne skriver. Tilstanden kan læses med window.__miai.sheet().
   if (o.host === "Excel") {
     const sheet = o.excel?.sheet ?? "Ark1";
-    const grid = o.excel?.values ?? [[""]];
+    const grid: unknown[][] = (o.excel?.values ?? [[""]]).map((r) => [...r]);
+    interface Fmt {
+      numberFormat?: string;
+      bold?: boolean;
+      fill?: string;
+    }
+    const fmts = new Map<string, Fmt>();
+    const key = (r: number, c: number) => `${r},${c}`;
+    const fmtOf = (r: number, c: number): Fmt => fmts.get(key(r, c)) ?? {};
+    const setFmt = (r: number, c: number, f: Fmt) => fmts.set(key(r, c), { ...fmtOf(r, c), ...f });
+    const tables = (o.excel?.tables ?? []).map((t) => ({ ...t }));
     const col = (i: number) => String.fromCharCode(65 + i);
+    const cellOf = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
+    /** "B2" eller "B2:D4" → [r0, c0, rows, cols] (kun enkelt-bogstavs kolonner i simuleringen). */
+    const parseA = (a: string): [number, number, number, number] => {
+      const [from, to = from] = a.replace(/^.*!/, "").toUpperCase().split(":");
+      const f = cellOf(from);
+      const t = cellOf(to);
+      return [f.r, f.c, t.r - f.r + 1, t.c - f.c + 1];
+    };
+    for (const [a, f] of Object.entries(o.excel?.formats ?? {})) {
+      const [r0, c0, rows, cols] = parseA(a);
+      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) setFmt(r0 + r, c0 + c, f);
+    }
     const addr = (r0: number, c0: number, rows: number, cols: number) =>
       `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
+    const width = () => Math.max(1, ...grid.map((r) => r.length));
+    const put = (r: number, c: number, v: unknown) => {
+      while (grid.length <= r) grid.push([]);
+      grid[r][c] = v;
+    };
+    (w.__miai as Record<string, unknown>).sheet = () => ({
+      values: grid.map((r) => Array.from({ length: width() }, (_, c) => r[c] ?? "")),
+      formats: Object.fromEntries(
+        [...fmts]
+          .map(([k, f]) => [k, Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined))] as [string, Fmt])
+          .filter(([, f]) => Object.keys(f).length)
+          .map(([k, f]) => [
+            k
+              .split(",")
+              .map(Number)
+              .reverse()
+              .map((n, i) => (i === 0 ? col(n) : n + 1))
+              .join(""),
+            f,
+          ]),
+      ),
+      tables: tables.map((t) => ({ name: t.name, range: t.range })),
+    });
+
     function rng(r0: number, c0: number, rows: number, cols: number): unknown {
       // Udfyldt med "" uden for arkets data, som i Excel.
       const slice = () => Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r0 + r]?.[c0 + c] ?? ""));
+      const each = (fn: (r: number, c: number) => void) => {
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) fn(r0 + r, c0 + c);
+      };
+      const write = (v: unknown[][]) => v.forEach((row, r) => row.forEach((x, c) => x !== null && put(r0 + r, c0 + c, x)));
       const target = {
         address: addr(r0, c0, rows, cols),
         rowCount: rows,
         columnCount: cols,
+        rowIndex: r0,
+        columnIndex: c0,
         isNullObject: false,
         load() {},
         getCell: (r: number, c: number) => rng(r0 + r, c0 + c, 1, 1),
         getResizedRange: (dr: number, dc: number) => rng(r0, c0, rows + dr, cols + dc),
+        getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
+        getRow: (i: number) => rng(r0 + i, c0, 1, cols),
         worksheet: undefined as unknown,
         get values() {
           return slice();
         },
-        set values(v: unknown) {
+        set values(v: unknown[][]) {
           record({ kind: "values", address: addr(r0, c0, rows, cols), values: v });
+          write(v);
         },
         get formulas() {
           return slice();
         },
-        set formulas(v: unknown) {
+        set formulas(v: unknown[][]) {
           record({ kind: "formulas", address: addr(r0, c0, rows, cols), formulas: v });
+          write(v);
         },
-        clear: (applyTo: string) => record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo }),
+        get numberFormat() {
+          return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => fmtOf(r0 + r, c0 + c).numberFormat ?? "General"));
+        },
+        set numberFormat(v: string[][]) {
+          v.forEach((row, r) => row.forEach((f, c) => setFmt(r0 + r, c0 + c, { numberFormat: f === "General" ? undefined : f })));
+        },
+        copyFrom(src: { rowIndex: number; columnIndex: number }, type: string) {
+          record({ kind: "copyFrom", address: addr(r0, c0, rows, cols), type });
+          each((r, c) => fmts.set(key(r, c), { ...fmtOf(src.rowIndex + (r - r0), src.columnIndex + (c - c0)) }));
+        },
+        getCellProperties: () => ({
+          value: Array.from({ length: rows }, (_, r) =>
+            Array.from({ length: cols }, (_, c) => {
+              const f = fmtOf(r0 + r, c0 + c);
+              return { format: { font: { bold: !!f.bold }, fill: { color: f.fill ?? "#FFFFFF" } } };
+            }),
+          ),
+        }),
+        setCellProperties(p: { format: { font: { bold: boolean }; fill: { color: string } } }[][]) {
+          p.forEach((row, r) =>
+            row.forEach((x, c) =>
+              setFmt(r0 + r, c0 + c, { bold: x.format.font.bold || undefined, fill: x.format.fill.color === "#FFFFFF" ? undefined : x.format.fill.color }),
+            ),
+          );
+        },
+        clear(applyTo: string) {
+          record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo });
+          each((r, c) => put(r, c, ""));
+        },
         get valueTypes() {
           return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
         },
@@ -519,34 +626,228 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       target.worksheet = worksheet;
       return strict("Excel.Range", target);
     }
-    const used = () => rng(0, 0, grid.length, grid[0]?.length ?? 1);
-    /** "B2" eller "B2:D4" → område (kun enkelt-bogstavs kolonner i simuleringen). */
-    const parse = (a: string) => {
-      const [from, to = from] = a.toUpperCase().split(":");
-      const cell = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
-      const f = cell(from);
-      const t = cell(to);
-      return rng(f.r, f.c, t.r - f.r + 1, t.c - f.c + 1);
-    };
-    const worksheet = strict("Excel.Worksheet", { name: sheet, load() {}, getUsedRangeOrNullObject: used });
+    const used = () => rng(0, 0, grid.length, width());
+    const parse = (a: string) => rng(...parseA(a));
+    const tableObj = (t: { name: string; range: string }) =>
+      strict("Excel.Table", {
+        name: t.name,
+        getRange: () => parse(t.range),
+        getHeaderRowRange: () => {
+          const [r0, c0, , cols] = parseA(t.range);
+          return rng(r0, c0, 1, cols);
+        },
+        rows: strict("Excel.TableRowCollection", {
+          load() {},
+          get count() {
+            return parseA(t.range)[2] - 1;
+          },
+          add(_index: unknown, values: unknown[][]) {
+            // Som Excel: rækkerne lægges ind i tabellen og får formatet fra tabellens sidste række.
+            const [r0, c0, rows, cols] = parseA(t.range);
+            record({ kind: "tableRowsAdd", table: t.name, values });
+            values.forEach((row, i) => {
+              const r = r0 + rows + i;
+              for (let c = 0; c < cols; c++) {
+                put(r, c0 + c, row[c] ?? "");
+                fmts.set(key(r, c0 + c), { ...fmtOf(r0 + rows - 1, c0 + c) });
+              }
+            });
+            t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
+          },
+          getItemAt: (k: number) =>
+            strict("Excel.TableRow", {
+              delete() {
+                const [r0, c0, rows, cols] = parseA(t.range);
+                record({ kind: "tableRowDelete", table: t.name, index: k });
+                const gone = r0 + 1 + k;
+                grid.splice(gone, 1);
+                // Formaterne følger cellerne: rækken forsvinder, og rækkerne under rykker op.
+                const moved = [...fmts].flatMap(([kk, f]) => {
+                  const [r, c] = kk.split(",").map(Number);
+                  return r === gone ? [] : [[key(r > gone ? r - 1 : r, c), f] as const];
+                });
+                fmts.clear();
+                for (const [kk, f] of moved) fmts.set(kk, f);
+                t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows - 1}`;
+              },
+            }),
+        }),
+      });
+    const worksheet = strict("Excel.Worksheet", {
+      name: sheet,
+      load() {},
+      getUsedRangeOrNullObject: used,
+      getRange: (a?: string) => (a ? parse(a) : used()),
+      tables: strict("Excel.TableCollection", {
+        load() {},
+        get items() {
+          return tables.map(tableObj);
+        },
+        getItem: (name: string) => {
+          const t = tables.find((x) => x.name === name);
+          if (!t) throw new Error(`ItemNotFound: ${name}`);
+          return tableObj(t);
+        },
+      }),
+    });
     const workbook = strict("Excel.Workbook", {
       getSelectedRange: used,
       worksheets: strict("Excel.WorksheetCollection", {
         load() {},
-        items: [strict("Excel.Worksheet", { name: sheet, getUsedRangeOrNullObject: used })],
-        getItem: () => strict("Excel.Worksheet", { getRange: (a?: string) => (a ? parse(a) : used()) }),
+        items: [worksheet],
+        getItem: () => worksheet,
       }),
       comments: { add: (address: string, text: string) => record({ kind: "comment", address, text }) },
     });
     w.Excel = strict("Excel", {
       RangeValueType: { error: "Error" },
       ClearApplyTo: { contents: "Contents" },
+      RangeCopyType: { formats: "Formats" },
       run: async (fn: (c: unknown) => unknown) => fn(strict("Excel.RequestContext", { workbook, sync })),
     });
   }
 
+  // --- PowerPoint med præsentationsmodel (agent-tilstand, #6) ------------------------
+  // Slides med layout, pladsholdere og formateret tekst. Som PowerPoint: ny tekst i en figur får
+  // figurens formatering (første tegns), og en del af teksten kan ændres for sig (getSubstring).
+  // Tilstanden kan læses med window.__miai.deck().
+  if (o.host === "PowerPoint" && o.slides) {
+    interface Mark {
+      start: number;
+      end: number;
+      bold?: boolean;
+      italic?: boolean;
+    }
+    interface Sh {
+      name: string;
+      type: string;
+      ph?: string;
+      text: string;
+      /** Figurens egen formatering (fx farve og størrelse fra skabelonen) – skal bevares. */
+      style: Record<string, unknown>;
+      marks: Mark[];
+    }
+    interface Sl {
+      id: string;
+      layout: string;
+      shapes: Sh[];
+    }
+    const layouts = (o.layouts ?? [{ name: "Title and Content", placeholders: ["Title", "Body"] }]).map((l, i) => ({ id: `L${i + 1}`, ...l }));
+    let nextId = 100;
+    let deck: Sl[] = o.slides.map((sl, i) => ({
+      id: `S${i + 1}`,
+      layout: sl.layout,
+      shapes: sl.shapes.map((sh) => ({ type: "Placeholder", style: {}, marks: [], ...sh })),
+    }));
+    const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+    (w.__miai as Record<string, unknown>).deck = () => clone(deck);
+
+    const textRange = (sh: Sh) =>
+      strict("PowerPoint.TextRange", {
+        load() {},
+        get text() {
+          return sh.text;
+        },
+        set text(v: string) {
+          // Hele teksten erstattes; den nye tekst får formateringen fra første tegn.
+          record({ kind: "setText", shape: sh.name, text: v });
+          const first = sh.marks.find((m) => m.start === 0);
+          sh.marks = first ? [{ ...first, start: 0, end: v.length }] : [];
+          sh.text = v;
+        },
+        getSubstring: (start: number, len: number) =>
+          strict("PowerPoint.TextRange(sub)", {
+            set text(v: string) {
+              record({ kind: "replace", shape: sh.name, from: sh.text.slice(start, start + len), to: v });
+              const delta = v.length - len;
+              sh.marks = sh.marks
+                .map((m) =>
+                  m.start >= start + len
+                    ? { ...m, start: m.start + delta, end: m.end + delta }
+                    : m.end > start && m.start <= start
+                      ? { ...m, end: Math.max(start + v.length, m.end + delta) }
+                      : m,
+                )
+                .filter((m) => m.end > m.start);
+              sh.text = sh.text.slice(0, start) + v + sh.text.slice(start + len);
+            },
+            font: {
+              set bold(b: boolean) {
+                if (b) sh.marks.push({ start, end: start + len, bold: true });
+              },
+              set italic(b: boolean) {
+                if (b) sh.marks.push({ start, end: start + len, italic: true });
+              },
+            },
+          }),
+      });
+    const shapeObj = (sh: Sh) =>
+      strict("PowerPoint.Shape", {
+        name: sh.name,
+        type: sh.type,
+        textFrame: strict("PowerPoint.TextFrame", { hasText: sh.text.length > 0, textRange: textRange(sh) }),
+        placeholderFormat: strict("PowerPoint.PlaceholderFormat", { type: sh.ph ?? "Body", load() {} }),
+      });
+    const slideObj = (sl: Sl) =>
+      strict("PowerPoint.Slide", {
+        id: sl.id,
+        load() {},
+        get index() {
+          return deck.indexOf(sl);
+        },
+        layout: { name: sl.layout, id: layouts.find((l) => l.name === sl.layout)?.id ?? "L1" },
+        shapes: { load() {}, items: sl.shapes.map(shapeObj) },
+        delete() {
+          record({ kind: "deleteSlide", id: sl.id });
+          deck = deck.filter((x) => x !== sl);
+        },
+        moveTo(i: number) {
+          record({ kind: "moveSlide", id: sl.id, to: i });
+          deck = deck.filter((x) => x !== sl);
+          deck.splice(i, 0, sl);
+        },
+        exportAsBase64: () => ({ value: JSON.stringify(sl) }),
+      });
+    const slidesCol = () =>
+      strict("PowerPoint.SlideCollection", {
+        load() {},
+        get items() {
+          return deck.map(slideObj);
+        },
+        add(opts?: { layoutId?: string }) {
+          const l = layouts.find((x) => x.id === opts?.layoutId) ?? layouts[0];
+          record({ kind: "addSlide", layout: l.name });
+          deck.push({
+            id: `S${nextId++}`,
+            layout: l.name,
+            shapes: l.placeholders.map((ph, i) => ({ name: `${ph} ${i + 1}`, type: "Placeholder", ph, text: "", style: { fromLayout: l.name }, marks: [] })),
+          });
+        },
+      });
+    const presentation = strict("PowerPoint.Presentation", {
+      get slides() {
+        return slidesCol();
+      },
+      slideMasters: strict("PowerPoint.SlideMasterCollection", {
+        load() {},
+        items: [{ id: "M1", layouts: { items: layouts.map((l) => ({ id: l.id, name: l.name })) } }],
+      }),
+      insertSlidesFromBase64(b64: string, opts: { targetSlideId?: string }) {
+        const sl = JSON.parse(b64) as Sl;
+        record({ kind: "insertSlides", after: opts.targetSlideId ?? null });
+        const at = opts.targetSlideId ? deck.findIndex((x) => x.id === opts.targetSlideId) + 1 : 0;
+        deck.splice(at, 0, { ...sl, id: `S${nextId++}` });
+      },
+    });
+    w.PowerPoint = strict("PowerPoint", {
+      ShapeType: { placeholder: "Placeholder" },
+      InsertSlideFormatting: { keepSourceFormatting: "KeepSourceFormatting" },
+      run: async (fn: (c: unknown) => unknown) => fn(strict("PowerPoint.RequestContext", { presentation, sync })),
+    });
+  }
+
   // --- PowerPoint -------------------------------------------------------------
-  if (o.host === "PowerPoint") {
+  if (o.host === "PowerPoint" && !o.slides) {
     const textFrame = () => ({ textRange: { text: "", font: {} }, wordWrap: false });
     const shape = (kind: string, type: string, opts: Record<string, number>) => {
       const s = {

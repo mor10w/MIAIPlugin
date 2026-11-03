@@ -81,6 +81,22 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_setStyle", { paragraph: paraLabel(a.paragraph, ctx), style: t(`agentStyle_${a.style}` as const) });
     case "comment":
       return t("agentAct_comment", { find: clip(a.find, 40), text: clip(a.text) });
+    case "setText": {
+      const [sn, shn] = a.shape.split(".").map(Number);
+      const sh = ctx?.slides?.[sn - 1]?.shapes[shn - 1];
+      const plain = parseBlocks(a.text)
+        .map((b) => b.inline.text)
+        .join(" · ");
+      return t("agentAct_setText", { shape: sh ? `${sh.name} (slide ${sn})` : a.shape, text: clip(plain) });
+    }
+    case "addSlide":
+      return t("agentAct_addSlide", { title: clip(a.title, 50), after: a.after, layout: a.layout ?? "" }).replace(/ \(\)$/, "");
+    case "deleteSlide":
+      return t("agentAct_deleteSlide", { slide: a.slide, title: clip(ctx?.slides?.[a.slide - 1]?.shapes.find((s) => s.kind === "title")?.text ?? "", 40) });
+    case "moveSlide":
+      return t("agentAct_moveSlide", { slide: a.slide, to: a.to });
+    case "appendRows":
+      return t("agentAct_appendRows", { n: a.values.length, table: a.table });
     case "setValues":
       return t("agentAct_setValues", { n: a.values.reduce((n, r) => n + r.length, 0), address: a.address });
     case "setFormula":
@@ -214,7 +230,17 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
             </Button>
           </div>
           <Caption1 className={s.muted}>
-            {t(phase.outcome.undoKind === "snapshot" ? "agentUndoNote" : phase.outcome.undoKind === "tracked" ? "agentUndoTracked" : "agentUndoCells")}
+            {t(
+              phase.outcome.undoKind === "snapshot"
+                ? "agentUndoNote"
+                : phase.outcome.undoKind === "tracked"
+                  ? "agentUndoTracked"
+                  : phase.outcome.undoKind === "slides"
+                    ? "agentUndoSlides"
+                    : phase.outcome.undoKind === "text"
+                      ? "agentUndoText"
+                      : "agentUndoCells",
+            )}
           </Caption1>
         </>
       ) : (

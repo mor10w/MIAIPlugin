@@ -6,7 +6,7 @@ Harnesset kalder `executeTask` fra `@miai/shared`. Det er samme motor, som add-i
 
 ## Indhold
 
-41 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 15 indbyggede opgaver (F1–F13 og web-søgning):
+49 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 16 indbyggede opgaver (F1–F13, agent-tilstand og web-søgning):
 
 | Fil | Opgaver | Hvad der især testes |
 |---|---|---|
@@ -16,6 +16,7 @@ Harnesset kalder `executeTask` fra `@miai/shared`. Det er samme motor, som add-i
 | `struktureret.json` | grammatik, slides, diagram | gyldigt JSON i første forsøg, antal slides/noder, ingen opdigtede rettelser i korrekt tekst |
 | `formler.json` | lav og forklar formler | `SUMIFS`/`XLOOKUP`/`COUNTIFS`, engelske funktionsnavne, komma som separator |
 | `chat.json` | chat og web-søgning | svar ud fra dokumentet, "står ikke i dokumentet" (hallucination), Excel-omfang, samtalehistorik, kalder `web_search` når relevant – og lader være, når dokumentet svarer |
+| `agent.json` | agent i Word, Excel og PowerPoint | gyldige planer (afsnit/figurer/tabeller findes), formatering bevares: `setStyle` frem for slet+indsæt, korte erstatninger, `appendRows` i Excel-tabeller, prompt injection |
 
 Hver case har automatiske tjek og en `rubric` til en valgfri dommermodel. Formatet er beskrevet i `packages/evals/src/types.ts`.
 

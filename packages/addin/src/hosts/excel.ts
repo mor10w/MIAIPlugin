@@ -167,7 +167,9 @@ export class ExcelAdapter implements HostAdapter {
 
       const f = topLeft.formulas[0][0];
       const table = toTsv(view.values);
+      const excel = opts.structure ? await this.structure(ctx, ws, used) : undefined;
       return {
+        ...(excel ? { excel } : {}),
         host: "excel",
         address: sel.address,
         text: table,
@@ -177,6 +179,36 @@ export class ExcelAdapter implements HostAdapter {
         isWholeDocument: false,
       };
     });
+  }
+
+  /**
+   * Agent-tilstand: arkets Excel-tabeller (navn, område, overskrifter) og hver kolonnes talformat
+   * i første datarække, så agenten kan tilføje rækker i tabellen og skrive tal i det rigtige format.
+   */
+  private async structure(ctx: Excel.RequestContext, ws: Excel.Worksheet, used: Excel.Range): Promise<NonNullable<DocContext["excel"]>> {
+    const tbls = ws.tables;
+    tbls.load("items/name");
+    await ctx.sync();
+    const ranges = tbls.items.map((t) => {
+      const r = t.getRange();
+      r.load("address");
+      const h = t.getHeaderRowRange();
+      h.load("values");
+      return { name: t.name, r, h };
+    });
+    let firstData: Excel.Range | undefined;
+    if (!used.isNullObject && used.rowCount > 1) {
+      firstData = used.getRow(1).getResizedRange(0, Math.min(used.columnCount, MAX_COLS) - used.columnCount);
+      firstData.load("numberFormat,columnIndex");
+    }
+    await ctx.sync();
+    const columnFormats = firstData
+      ? (firstData.numberFormat[0] ?? []).flatMap((fmt, i) => (fmt && fmt !== "General" ? [`${colName(firstData!.columnIndex + i)}: ${fmt}`] : []))
+      : [];
+    return {
+      tables: ranges.map((x) => ({ name: x.name, address: x.r.address, headers: (x.h.values[0] ?? []).map((v) => String(v ?? "")) })),
+      columnFormats,
+    };
   }
 
   private async withRange<T>(address: string, fn: (ctx: Excel.RequestContext, r: Excel.Range) => Promise<T>): Promise<T> {
@@ -246,14 +278,28 @@ export class ExcelAdapter implements HostAdapter {
    * områders formler gemmes først, så hele sessionen kan fortrydes (Excel kan ikke altid
    * fortryde add-in-ændringer med Ctrl+Z).
    */
+  /**
+   * Agent-tilstand (#6): skriver de bekræftede handlinger på markeringens ark og bevarer
+   * formateringen:
+   *  - værdier og formler ændrer aldrig cellernes format;
+   *  - celler, der var tomme, får naboens format (rækken over eller kolonnen til venstre), så en
+   *    ny total-række eller kolonne får samme talformat, skrift og fyld som data (ExcelApi 1.9);
+   *  - rækker i en Excel-tabel tilføjes med tabellen selv, så de får tabellens formatering og
+   *    beregnede kolonner.
+   * Fortryd gendanner formler og (ExcelApi 1.9) formater i alle berørte områder og fjerner
+   * tilføjede tabelrækker.
+   */
   async applyAgent(actions: AgentAction[], dc: DocContext): Promise<AgentOutcome> {
     if (!dc.address) throw new Error("Ingen markering.");
     const sheetName = splitAddress(dc.address).sheet;
+    const formats = Office.context.requirements.isSetSupported("ExcelApi", "1.9");
     return Excel.run(async (ctx) => {
       const sheet = ctx.workbook.worksheets.getItem(sheetName);
       const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
-      // 1) Find målområderne og gem deres nuværende formler (= værdier for celler uden formel).
+
+      // 1) Find målområderne.
       const targets = actions.map((a, i): Excel.Range | undefined => {
+        if (a.action === "appendRows") return undefined;
         if (a.action !== "setValues" && a.action !== "setFormula" && a.action !== "clear") {
           results[i] = { ok: false, error: "failed", detail: `${a.action} findes ikke i Excel` };
           return undefined;
@@ -270,17 +316,64 @@ export class ExcelAdapter implements HostAdapter {
         }
         return a.action === "setFormula" ? r.getCell(0, 0) : r;
       });
-      for (const t of targets) t?.load("address,formulas");
+      const tables = actions.map((a) => (a.action === "appendRows" ? sheet.tables.getItem(a.table) : undefined));
+      for (const t of targets) t?.load("address,formulas,numberFormat,rowIndex,columnIndex");
+      for (const t of tables) t?.rows.load("count");
+      // Naboer til tomme mål: rækken over og kolonnen til venstre (samme størrelse).
+      const above = targets.map((t, i) => (t && actions[i].action !== "clear" ? t : undefined));
       await ctx.sync();
-      const snapshots = targets.flatMap((t) => (t ? [{ address: t.address, formulas: t.formulas }] : []));
+      const neighbours = above.map((t) => {
+        if (!t || !formats) return undefined;
+        const up = t.rowIndex > 0 ? t.getOffsetRange(-1, 0) : undefined;
+        const left = t.columnIndex > 0 ? t.getOffsetRange(0, -1) : undefined;
+        up?.load("formulas");
+        left?.load("formulas");
+        return { up, left };
+      });
+      // Formater gemmes til fortryd (ExcelApi 1.9).
+      const FORMAT_PROPS = {
+        format: {
+          fill: { color: true },
+          font: { bold: true, italic: true, color: true, name: true, size: true, underline: true, strikethrough: true },
+          horizontalAlignment: true,
+          verticalAlignment: true,
+          wrapText: true,
+          indentLevel: true,
+        },
+      } as Excel.CellPropertiesLoadOptions;
+      const props = targets.map((t) => (t && formats ? t.getCellProperties(FORMAT_PROPS) : undefined));
+      await ctx.sync();
+
+      const snapshots = targets.flatMap((t, i) =>
+        t
+          ? [{ address: t.address, formulas: t.formulas, numberFormat: t.numberFormat, props: props[i]?.value as Excel.SettableCellProperties[][] | undefined }]
+          : [],
+      );
+      const added = tables.flatMap((t, i) => (t ? [{ name: (actions[i] as Extract<AgentAction, { action: "appendRows" }>).table, from: t.rows.count }] : []));
+      const isEmpty = (f: unknown[][]) => f.every((row) => row.every((v) => v === "" || v === null));
+      const hasData = (r?: Excel.Range) => !!r && !isEmpty(r.formulas);
 
       // 2) Udfør.
       actions.forEach((a, i) => {
         const t = targets[i];
+        if (a.action === "appendRows") {
+          const tbl = tables[i]!;
+          const width = (dc.excel?.tables.find((x) => x.name === a.table)?.headers.length ?? Math.max(...a.values.map((r) => r.length))) || 1;
+          // null = Excel udfylder selv (beregnede kolonner) / lader cellen være.
+          tbl.rows.add(undefined, a.values.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill(null)]) as (string | number | boolean)[][]);
+          results[i] = { ok: true, count: a.values.length };
+          return;
+        }
         if (!t) return;
+        // Tomme celler får naboens format, før værdien skrives (så fx talformatet gælder med det samme).
+        const n = neighbours[i];
+        if (n && isEmpty(t.formulas)) {
+          const src = hasData(n.up) ? n.up : hasData(n.left) ? n.left : undefined;
+          if (src) t.copyFrom(src, Excel.RangeCopyType.formats);
+        }
         if (a.action === "setValues") {
           const cols = Math.max(...a.values.map((row) => row.length));
-          t.values = a.values.map((row) => [...row, ...Array(cols - row.length).fill("")]);
+          t.values = a.values.map((row) => [...row, ...Array(cols - row.length).fill(null)]) as (string | number | boolean)[][];
           results[i] = { ok: true, count: a.values.length * cols };
         } else if (a.action === "setFormula") {
           const f = a.formula.trim();
@@ -304,7 +397,21 @@ export class ExcelAdapter implements HostAdapter {
       const undo = () =>
         this.withRange(dc.address!, async (c) => {
           const ws = c.workbook.worksheets.getItem(sheetName);
-          for (const snap of [...snapshots].reverse()) ws.getRange(splitAddress(snap.address).range).formulas = snap.formulas as string[][];
+          // Først cellerne (på de adresser, de havde under sessionen) …
+          for (const snap of [...snapshots].reverse()) {
+            const r = ws.getRange(splitAddress(snap.address).range);
+            r.formulas = snap.formulas as string[][];
+            r.numberFormat = snap.numberFormat;
+            if (snap.props) r.setCellProperties(snap.props);
+          }
+          await c.sync();
+          // … så de tilføjede tabelrækker (bagfra, så indeks ikke flytter sig). Celler under tabellen rykker op igen.
+          for (const t of [...added].reverse()) {
+            const rows = ws.tables.getItem(t.name).rows;
+            rows.load("count");
+            await c.sync();
+            for (let k = rows.count - 1; k >= t.from; k--) rows.getItemAt(k).delete();
+          }
           await c.sync();
         });
       return { results, undo, undoKind: "cells" };
