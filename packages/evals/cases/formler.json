@@ -1,0 +1,142 @@
+[
+  {
+    "id": "formula-sumif-da",
+    "task": "generate-formula",
+    "lang": "da",
+    "feature": "F11",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Ark1!D2",
+      "surroundings": "Ark1: A=Region (tekst), B=Omsætning (tal), rækker 2-200"
+    },
+    "params": {
+      "prompt": "summen af kolonne B hvor kolonne A er 'Jylland'"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "^=\\s*SUMIFS?\\(",
+        "flags": "i"
+      },
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "Jylland"
+      },
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "^[^;]*$"
+      }
+    ],
+    "note": "Engelske funktionsnavne og komma som separator (Office.js oversætter selv).",
+    "rubric": "Korrekt SUMIF/SUMIFS over A og B med 'Jylland'; kort dansk forklaring."
+  },
+  {
+    "id": "formula-xlookup-en",
+    "task": "generate-formula",
+    "lang": "en",
+    "feature": "F11",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Sheet1!E2",
+      "surroundings": "Sheet1: A=Product ID, B=Name, C=Price; Sheet2: A=Product ID (lookup values)"
+    },
+    "params": {
+      "prompt": "look up the price for the product ID in Sheet2!A2 from Sheet1"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "^=\\s*(XLOOKUP|VLOOKUP|INDEX)\\(",
+        "flags": "i"
+      },
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "Sheet2!A2",
+        "flags": "i"
+      }
+    ],
+    "rubric": "Working lookup (XLOOKUP preferred) returning column C."
+  },
+  {
+    "id": "formula-countifs-da",
+    "task": "generate-formula",
+    "lang": "da",
+    "feature": "F11",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Ark1!H1",
+      "surroundings": "Ark1: A=Dato, B=Status ('Åben'/'Lukket'), C=Ansvarlig; rækker 2-500"
+    },
+    "params": {
+      "prompt": "antal åbne sager for Mette"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "^=\\s*COUNTIFS\\(",
+        "flags": "i"
+      },
+      {
+        "type": "result",
+        "path": "formula",
+        "pattern": "Mette"
+      }
+    ],
+    "rubric": "COUNTIFS med begge betingelser (Status = Åben og Ansvarlig = Mette)."
+  },
+  {
+    "id": "formula-explain-da",
+    "task": "explain-formula",
+    "lang": "da",
+    "feature": "F12",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Ark1!F2",
+      "formula": "=IFERROR(VLOOKUP(A2,Priser!A:C,3,FALSE),\"Ukendt\")"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["Priser", "Ukendt"]
+      }
+    ],
+    "rubric": "Forklarer opslag af A2 i Priser kolonne 3 med eksakt match og 'Ukendt' ved fejl; korrekt dansk."
+  },
+  {
+    "id": "formula-explain-en",
+    "task": "explain-formula",
+    "lang": "en",
+    "feature": "F12",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Sheet1!G5",
+      "formula": "=SUMPRODUCT((B2:B100=\"North\")*(C2:C100>1000)*D2:D100)"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["North", "1000"]
+      }
+    ],
+    "rubric": "Explains it sums D where B is North and C > 1000; correct and concise."
+  }
+]

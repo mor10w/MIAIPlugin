@@ -7,7 +7,8 @@
     "packages/shared",
     "packages/bridge",
     "packages/addin",
-    "packages/app"
+    "packages/app",
+    "packages/evals"
   ],
   "type": "module",
   "engines": {
@@ -28,7 +29,8 @@
     "test:e2e": "npm run test:e2e -w @miai/addin",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "eval": "npm run eval -w @miai/evals --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "translate-da-en",
+    "task": "translate",
+    "lang": "da",
+    "feature": "F6",
+    "context": {
+      "host": "word",
+      "text": "Hej alle\n\nJeg vil bare lige sige at mødet i morgen er rykket fordi der er mange der ikke kan komme og vi har derfor valgt at flytte det til torsdag kl 10 i stedet, hvis det ikke passer så sig til så finder vi en anden løsning.\n\nMvh Lone"
+    },
+    "params": {
+      "targetLanguage": "English"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["thursday", "10"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxRatio": 1.5,
+        "minRatio": 0.6
+      }
+    ],
+    "rubric": "Korrekt og naturlig engelsk oversættelse; alle fakta bevaret; ingen tilføjelser."
+  },
+  {
+    "id": "translate-en-da",
+    "task": "translate",
+    "lang": "en",
+    "feature": "F6",
+    "context": {
+      "host": "word",
+      "text": "Project Falcon – status update\n\nThe migration of the customer database to the new platform is 80% complete. Three of the five regional databases have been moved without downtime. The remaining two (APAC and LATAM) are scheduled for the weekend of 14 November.\n\nBudget: we have spent 1.2 million of the approved 1.5 million euros. The extra licence costs for the monitoring tool (about 60,000 euros) were not in the original budget.\n\nRisks: the LATAM database has an unsupported character encoding that must be converted first. If the conversion fails, the go-live date of 1 December may slip by up to two weeks. The team recommends a test conversion next week."
+    },
+    "params": {
+      "targetLanguage": "Danish"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["80", "1,2"]
+      },
+      {
+        "type": "regex",
+        "pattern": "14\\.? nov",
+        "flags": "i"
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxRatio": 1.5,
+        "minRatio": 0.6
+      }
+    ],
+    "note": "Tjekker også dansk talformat (1,2 mio.) og datoformat.",
+    "rubric": "Naturligt dansk, dansk talformat, alle tal, datoer og risici bevaret."
+  },
+  {
+    "id": "translate-da-de",
+    "task": "translate",
+    "lang": "da",
+    "feature": "F6",
+    "context": {
+      "host": "word",
+      "text": "Tak for jeres tilbud. Vi vil gerne bestille 200 stk. til levering i uge 48. Kan I bekræfte prisen på 45 kr. pr. stk.?"
+    },
+    "params": {
+      "targetLanguage": "German"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "de"
+      },
+      {
+        "type": "contains",
+        "values": ["200", "48", "45"]
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Korrekt tysk forretningssprog; antal, uge og pris bevaret."
+  },
+  {
+    "id": "translate-excel-tsv",
+    "task": "translate",
+    "lang": "da",
+    "feature": "F6",
+    "context": {
+      "host": "excel",
+      "text": "Produkt\tBeskrivelse\nStol\tSort kontorstol med armlæn\nBord\tHæve-sænkebord i eg",
+      "table": "Produkt\tBeskrivelse\nStol\tSort kontorstol med armlæn\nBord\tHæve-sænkebord i eg",
+      "address": "Ark1!A1:B3"
+    },
+    "params": {
+      "targetLanguage": "English"
+    },
+    "checks": [
+      {
+        "type": "tsv",
+        "columns": 2,
+        "rows": 3
+      },
+      {
+        "type": "language",
+        "lang": "en"
+      }
+    ],
+    "rubric": "Hver celle oversat, samme tabelform (3 rækker × 2 kolonner)."
+  }
+]

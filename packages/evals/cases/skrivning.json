@@ -1,0 +1,326 @@
+[
+  {
+    "id": "rewrite-da-mail-professional",
+    "task": "rewrite",
+    "lang": "da",
+    "feature": "F2",
+    "context": {
+      "host": "word",
+      "text": "Hej alle\n\nJeg vil bare lige sige at mødet i morgen er rykket fordi der er mange der ikke kan komme og vi har derfor valgt at flytte det til torsdag kl 10 i stedet, hvis det ikke passer så sig til så finder vi en anden løsning.\n\nMvh Lone"
+    },
+    "params": {
+      "tone": "professional"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["torsdag", "10"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxRatio": 1.6,
+        "minRatio": 0.4
+      }
+    ],
+    "rubric": "Bevarer alle fakta (mødet flyttet til torsdag kl. 10, grunden, tilbud om anden løsning), professionel tone, korrekt dansk, intet tilføjet."
+  },
+  {
+    "id": "rewrite-en-mail-concise",
+    "task": "rewrite",
+    "lang": "en",
+    "feature": "F2",
+    "context": {
+      "host": "word",
+      "text": "Hi team, so basically the release is gonna be late because QA found a bunch of bugs and we kinda need more time to fix them, probably like two weeks or so, sorry about that."
+    },
+    "params": {
+      "tone": "concise"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["two weeks", "2 weeks"],
+        "any": true
+      },
+      {
+        "type": "notContains",
+        "values": ["gonna", "kinda"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxRatio": 1.1
+      }
+    ],
+    "rubric": "Shorter and more precise, keeps the facts (release late, QA bugs, about two weeks), no slang, no invented details."
+  },
+  {
+    "id": "paraphrase-da",
+    "task": "paraphrase",
+    "lang": "da",
+    "feature": "F2",
+    "context": {
+      "host": "word",
+      "text": "Vores kundeservice er åben alle hverdage fra kl. 8 til 16. Uden for åbningstiden kan du skrive til os via kontaktformularen, så svarer vi næste hverdag."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["8", "16"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxRatio": 1.6,
+        "minRatio": 0.5
+      }
+    ],
+    "rubric": "Samme betydning med andre ord; åbningstider og svar næste hverdag bevaret."
+  },
+  {
+    "id": "simplify-da-legal",
+    "task": "simplify",
+    "lang": "da",
+    "feature": "F2",
+    "context": {
+      "host": "word",
+      "text": "Lejer er forpligtet til, inden for en frist af 14 dage regnet fra modtagelsen af påkravet, at foretage betaling af det skyldige beløb, idet udlejer i modsat fald vil være berettiget til at ophæve lejeaftalen uden yderligere varsel, jf. lejelovens bestemmelser herom."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["14 dage"]
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Let forståeligt dansk med korte sætninger; bevarer fristen på 14 dage og at udlejer kan ophæve aftalen."
+  },
+  {
+    "id": "simplify-en-tech",
+    "task": "simplify",
+    "lang": "en",
+    "feature": "F2",
+    "context": {
+      "host": "word",
+      "text": "The application leverages an asynchronous, event-driven architecture wherein incoming requests are enqueued and subsequently dispatched to a horizontally scalable pool of stateless worker processes, thereby facilitating elastic throughput under variable load conditions."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "regex",
+        "pattern": "queue|line|wait",
+        "flags": "i"
+      }
+    ],
+    "rubric": "Plain English a non-technical reader understands; keeps the idea of a queue and many workers that scale with load."
+  },
+  {
+    "id": "article-da",
+    "task": "expand-article",
+    "lang": "da",
+    "feature": "F3",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "3 grunde til at små virksomheder bør køre AI lokalt",
+      "tone": "professional",
+      "length": "about 300 words"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "length",
+        "minWords": 150,
+        "maxWords": 600
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Sammenhængende dansk artikel med præcis tre tydelige grunde (fx privatliv, omkostninger, kontrol), ingen opdigtede tal eller kilder."
+  },
+  {
+    "id": "article-en",
+    "task": "expand-article",
+    "lang": "en",
+    "feature": "F3",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Why every team needs a written onboarding checklist",
+      "tone": "friendly and warm",
+      "length": "about 300 words"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "length",
+        "minWords": 150,
+        "maxWords": 600
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Warm, well-structured article on onboarding checklists; concrete advice; no invented statistics."
+  },
+  {
+    "id": "sales-da-espresso",
+    "task": "sales-copy",
+    "lang": "da",
+    "feature": "F4",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Vores nye espressomaskine: hurtig (klar på 30 sekunder), stille, nem at rengøre, 2.499 kr."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["30 sekunder", "2.499"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxWords": 250
+      }
+    ],
+    "rubric": "Overbevisende dansk salgstekst; bruger de fire oplyste fakta uden at finde på nye egenskaber eller priser."
+  },
+  {
+    "id": "sales-en-saas",
+    "task": "sales-copy",
+    "lang": "en",
+    "feature": "F4",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "TimeTrack: time tracking for small agencies. One-click timers, invoices from tracked hours, 9 euros per user per month."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["9"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxWords": 250
+      }
+    ],
+    "rubric": "Persuasive English copy; mentions timers, invoicing and the price; no invented features."
+  },
+  {
+    "id": "outline-da",
+    "task": "outline",
+    "lang": "da",
+    "feature": "F5",
+    "context": {
+      "host": "powerpoint",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Kvartalsrapport Q3 for ledelsen",
+      "slideCount": "5"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "bullets",
+        "min": 5
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Disposition med ca. fem slides i logisk rækkefølge for en kvartalsrapport."
+  },
+  {
+    "id": "outline-en",
+    "task": "outline",
+    "lang": "en",
+    "feature": "F5",
+    "context": {
+      "host": "powerpoint",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Introducing a new expense policy to all employees",
+      "slideCount": "8"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "bullets",
+        "min": 8
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "rubric": "Outline with about eight slides covering why, what changes, how to submit, deadlines, Q&A."
+  }
+]

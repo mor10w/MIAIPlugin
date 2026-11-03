@@ -91,6 +91,8 @@ Modelvalg er konfiguration. Bridgen lister modeller fra endpointen
 | Laptop uden GPU | Qwen3 4B, Gemma 3 4B, Phi-4-mini | 4–6 GB |
 | Formler, struktureret output | Qwen3, Qwen2.5-Coder | – |
 
+Forslagene evalueres med eval-sættet i `packages/evals` (se [EVAL.md](EVAL.md)).
+
 Struktureret output (grammatik-rettelser, slides, formler) bruger
 `response_format: json_schema`, når endpointen understøtter det. Ellers bruges
 `json_object` eller prompt + parsing + ét genforsøg. Dette sættes pr. endpoint

@@ -39,6 +39,7 @@ Sideload derefter `packages/addin/manifest.dev.xml` med `npm run sideload:mac` e
 - [Projektplan](docs/PLAN.md)
 - [Arkitektur](docs/ARKITEKTUR.md)
 - [Brugerflade og designsystem](docs/ui/README.md)
+- [Eval-sæt og modelvalg](docs/EVAL.md)
 - [Udvikling og test](docs/UDVIKLING.md)
 - [Arkitekturbeslutninger (ADR)](docs/adr/)
 

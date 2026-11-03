@@ -1,0 +1,186 @@
+[
+  {
+    "id": "grammar-da",
+    "task": "grammar",
+    "lang": "da",
+    "feature": "F1",
+    "context": {
+      "host": "word",
+      "text": "Vi har modtaget jeres bestiling og den vil blive sendt imorgen. Hvis i har spørgsmål er i velkommen til at kontakte os."
+    },
+    "checks": [
+      {
+        "type": "edits",
+        "expect": [
+          {
+            "fix": "bestilling"
+          },
+          {
+            "fix": "i morgen"
+          }
+        ],
+        "maxEdits": 6
+      }
+    ],
+    "rubric": "Finder stavefejl (bestilling, i morgen, I/I) uden at ændre korrekt tekst."
+  },
+  {
+    "id": "grammar-en",
+    "task": "grammar",
+    "lang": "en",
+    "feature": "F1",
+    "context": {
+      "host": "word",
+      "text": "Their going to recieve the package tomorow, and they has asked for a invoice."
+    },
+    "checks": [
+      {
+        "type": "edits",
+        "expect": [
+          {
+            "fix": "they're"
+          },
+          {
+            "fix": "receive"
+          },
+          {
+            "fix": "tomorrow"
+          },
+          {
+            "fix": "have"
+          },
+          {
+            "fix": "an invoice"
+          }
+        ],
+        "maxEdits": 7
+      }
+    ],
+    "rubric": "Finds all five errors with short explanations in English."
+  },
+  {
+    "id": "grammar-da-clean",
+    "task": "grammar",
+    "lang": "da",
+    "feature": "F1",
+    "context": {
+      "host": "word",
+      "text": "Mødet starter klokken ti i det store mødelokale på første sal."
+    },
+    "checks": [
+      {
+        "type": "edits",
+        "expect": [],
+        "maxEdits": 0
+      }
+    ],
+    "note": "Korrekt tekst: modellen må ikke finde på rettelser.",
+    "rubric": "Returnerer ingen rettelser."
+  },
+  {
+    "id": "slides-da",
+    "task": "text-to-slides",
+    "lang": "da",
+    "feature": "F8",
+    "context": {
+      "host": "powerpoint",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
+      "slideCount": "3"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "slides",
+        "minItems": 3,
+        "maxItems": 4
+      },
+      {
+        "type": "language",
+        "lang": "da"
+      }
+    ],
+    "rubric": "Tre danske slides med korte punkter, der dækker vækst, marginer og forventninger."
+  },
+  {
+    "id": "slides-en",
+    "task": "text-to-slides",
+    "lang": "en",
+    "feature": "F8",
+    "context": {
+      "host": "powerpoint",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Benefits of a four-day work week: productivity, wellbeing, recruitment, risks",
+      "slideCount": "5"
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "slides",
+        "minItems": 5,
+        "maxItems": 6
+      },
+      {
+        "type": "language",
+        "lang": "en"
+      }
+    ],
+    "rubric": "Five English slides, 3-6 short bullets each, one per topic plus intro/summary."
+  },
+  {
+    "id": "diagram-da-process",
+    "task": "diagram",
+    "lang": "da",
+    "feature": "F9",
+    "context": {
+      "host": "word",
+      "text": "Når en kunde bestiller, kontrollerer lageret varen. Er den på lager, pakkes og sendes den. Ellers bestilles den hjem fra leverandøren, og kunden får besked om forsinkelsen."
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "nodes",
+        "minItems": 4,
+        "maxItems": 12
+      },
+      {
+        "type": "result",
+        "path": "edges",
+        "minItems": 3
+      },
+      {
+        "type": "language",
+        "lang": "da"
+      }
+    ],
+    "rubric": "Flowdiagram med bestilling, lagerkontrol, forgrening (på lager / ikke på lager), afsendelse og hjembestilling."
+  },
+  {
+    "id": "diagram-en-org",
+    "task": "diagram",
+    "lang": "en",
+    "feature": "F9",
+    "context": {
+      "host": "word",
+      "text": "The CEO has three direct reports: the CFO, the CTO and the Head of Sales. The CTO leads two teams: Platform and Apps."
+    },
+    "checks": [
+      {
+        "type": "result",
+        "path": "nodes",
+        "minItems": 6,
+        "maxItems": 8
+      },
+      {
+        "type": "result",
+        "path": "edges",
+        "minItems": 5
+      }
+    ],
+    "rubric": "Org chart with CEO → CFO/CTO/Head of Sales and CTO → Platform/Apps; nothing invented."
+  }
+]

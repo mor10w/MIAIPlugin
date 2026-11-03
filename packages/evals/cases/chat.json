@@ -1,0 +1,213 @@
+[
+  {
+    "id": "chat-da-doc-question",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F13",
+    "context": {
+      "host": "word",
+      "text": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Hvorfor faldt bruttomarginen?"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["fragt"]
+      }
+    ],
+    "rubric": "Svarer ud fra dokumentet: fragtpriser og kampagne på vinterkollektionen; intet opdigtet."
+  },
+  {
+    "id": "chat-en-doc-question",
+    "task": "chat",
+    "lang": "en",
+    "feature": "F13",
+    "context": {
+      "host": "word",
+      "text": "Project Falcon – status update\n\nThe migration of the customer database to the new platform is 80% complete. Three of the five regional databases have been moved without downtime. The remaining two (APAC and LATAM) are scheduled for the weekend of 14 November.\n\nBudget: we have spent 1.2 million of the approved 1.5 million euros. The extra licence costs for the monitoring tool (about 60,000 euros) were not in the original budget.\n\nRisks: the LATAM database has an unsupported character encoding that must be converted first. If the conversion fails, the go-live date of 1 December may slip by up to two weeks. The team recommends a test conversion next week.",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "What could delay go-live?"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["encoding"]
+      }
+    ],
+    "rubric": "Names the LATAM encoding conversion and the up-to-two-week slip."
+  },
+  {
+    "id": "chat-da-not-in-doc",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F13",
+    "context": {
+      "host": "word",
+      "text": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Hvad var omsætningen i Q2?"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "regex",
+        "pattern": "fremgår ikke|står ikke|ikke oplyst|ikke nævnt|kan ikke se|findes ikke|oplyser ikke|ikke angivet|ikke i dokumentet",
+        "flags": "i"
+      }
+    ],
+    "note": "Hallucinationstest: Q2-omsætningen står ikke i teksten (kan højst udledes groft af 12 %).",
+    "rubric": "Siger tydeligt, at Q2-tallet ikke står i dokumentet (evt. med forbehold om en udregning); finder ikke på et tal."
+  },
+  {
+    "id": "chat-excel-scope",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F13",
+    "context": {
+      "host": "excel",
+      "text": "Navn\tBeløb\nAnna\t1200\nBo\t800",
+      "table": "Navn\tBeløb\nAnna\t1200\nBo\t800",
+      "address": "Ark1!A10:B12",
+      "surroundings": "Ark1: used range A1:B500; kolonne B (Beløb): sum 154.300, gennemsnit 312"
+    },
+    "params": {
+      "prompt": "Hvad er summen af kolonne B?"
+    },
+    "checks": [
+      {
+        "type": "contains",
+        "values": ["154"]
+      }
+    ],
+    "rubric": "Bruger kolonnestatistikken (154.300) for hele kolonnen, ikke kun markeringens 2.000, og siger hvilket område tallet gælder."
+  },
+  {
+    "id": "chat-history-da",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F13",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Og hvad med i weekenden?"
+    },
+    "history": [
+      {
+        "role": "user",
+        "content": "Vores butik har åbent 10-18 på hverdage og 10-14 lørdag. Søndag er lukket. Hvornår har vi åbent på hverdage?"
+      },
+      {
+        "role": "assistant",
+        "content": "I har åbent kl. 10-18 på hverdage."
+      }
+    ],
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["14"]
+      },
+      {
+        "type": "regex",
+        "pattern": "søndag",
+        "flags": "i"
+      }
+    ],
+    "rubric": "Bruger samtalens oplysninger: lørdag 10-14, søndag lukket."
+  },
+  {
+    "id": "tool-search-needed",
+    "task": "chat",
+    "lang": "en",
+    "feature": "ADR-0010",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "What is the latest stable version of Node.js right now?"
+    },
+    "tools": true,
+    "checks": [
+      {
+        "type": "tool",
+        "called": true
+      }
+    ],
+    "rubric": "Uses web search for a current fact and cites the source."
+  },
+  {
+    "id": "tool-search-not-needed",
+    "task": "chat",
+    "lang": "da",
+    "feature": "ADR-0010",
+    "context": {
+      "host": "word",
+      "text": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Hvor mange medarbejdere har vi nu ifølge rapporten?"
+    },
+    "tools": true,
+    "checks": [
+      {
+        "type": "tool",
+        "called": false
+      },
+      {
+        "type": "contains",
+        "values": ["127"]
+      }
+    ],
+    "rubric": "Svarer 127 direkte fra dokumentet uden at søge."
+  },
+  {
+    "id": "tool-search-da-news",
+    "task": "chat",
+    "lang": "da",
+    "feature": "ADR-0010",
+    "context": {
+      "host": "word",
+      "text": ""
+    },
+    "params": {
+      "prompt": "Hvad er den aktuelle rente fra Nationalbanken?"
+    },
+    "tools": true,
+    "checks": [
+      {
+        "type": "tool",
+        "called": true
+      },
+      {
+        "type": "language",
+        "lang": "da"
+      }
+    ],
+    "rubric": "Søger efter en aktuel oplysning og svarer på dansk med kilde."
+  }
+]

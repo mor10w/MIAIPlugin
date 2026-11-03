@@ -130,7 +130,9 @@ MIAIPlugin/
 ├─ packages/
 │  ├─ shared/       # fælles motor: typer, opgaver/prompts, OpenAI-klient, politik
 │  ├─ addin/        # Office.js task pane, backends, host-adaptere, manifest-skabelon
-│  └─ bridge/       # valgfri lokal service
+│  ├─ bridge/       # valgfri lokal service
+│  ├─ app/          # MIAI App (Electron, Mac)
+│  └─ evals/        # eval-sæt og harness mod en OpenAI-endpoint (#2)
 ├─ scripts/         # manifester, ikoner, sideload (Mac/Windows)
 ├─ .github/workflows/  # CI og GitHub Pages
 └─ docs/            # plan, arkitektur, udvikling, ADR'er
