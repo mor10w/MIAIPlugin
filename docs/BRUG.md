@@ -115,8 +115,9 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 4. **Temperatur** (0–2) og **Maks. tokens i svar**.
 5. **Sprog** – Dansk eller English (følger som udgangspunkt Office-sproget).
 6. **Web-søgning** – gør det muligt for modellen at søge online efter aktuelle oplysninger og inspiration (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle; modellen citerer sine kilder. Kræver bridge- eller app-tilstand (direkte tilstand har ingen søgetjeneste). Slåes fra, hvis du vil have modellen til kun at svare ud fra sine egne data.
-7. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge.
+7. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
 8. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
+9. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
 
 Klik **Gem** – uden dette virker ændringerne ikke.
 
@@ -131,10 +132,12 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 | Oversæt | ✅ | ✅ | ✅ |
 | Opsummér | ✅ | | ✅ |
 | Skriv artikel ud fra idé | ✅ | | |
+| Salgstekst | ✅ | | ✅ |
 | Præsentationsdisposition | ✅ | | ✅ |
 | Tekst til slides | | | ✅ |
 | Lav diagram | ✅ | | ✅ |
 | Forklar formel · Lav formel ud fra beskrivelse | | ✅ | |
+| Analyser data (tabel) | | ✅ | |
 | Chat med dokumentet | ✅ | ✅ | ✅ |
 
 ### Word
@@ -144,6 +147,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Oversæt** – markering + målsprog (da/en/de/sv/no/fr/es).
 - **Opsummér** – markering, eller uden markering: hele dokumentet. Længde: punktform (3-5 punkter), ét afsnit eller én sætning. Indsættes **efter** markeringen eller **som kommentar**.
 - **Skriv artikel ud fra idé** – skriv en linje (fx "5 grunde til at køre AI lokalt"), vælg tone og længde (~300/700/1500 ord). Markér evt. et udkast, den bygges videre på. Indsættes som formateret tekst med overskrifter.
+- **Salgstekst** – beskriv produktet eller budskabet, vælg tone (overbevisende/professionel/venlig/drægtig) og længde (~100/250 ord). Markér evt. eksisterende tekst (specifikationer, notater), den bruges som udgangspunkt. Modellen skriver overbevisende tekst med konkret appel og slutter med en opfordring til handling.
 - **Præsentationsdisposition** – emne + antal slides (5/8/10/15).
 - **Lav diagram** – markér tekst (fx. en tabel eller disposition) → modellen omdanner den til et flydediagram/hierarki (3-10 knuder). Forhåndsvisningen vises i task pane; **Indsæt diagram** indsætter det som billede i et nyt afsnit efter markeringen.
 
@@ -152,6 +156,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Forklar formel** – klik en celle med formel. Forklaringen vises i task pane og kan indsættes **som kommentar** på cellen.
 - **Lav formel ud fra beskrivelse** – skriv fx "summen af kolonne B hvor kolonne A er 'Jylland'". Modellen foreslår en formel (engelske funktionsnavne, moderne funktioner som XLOOKUP/FILTER prioriteres), den skrives i cellen og **valideres** – fejl som `#NAME?` meldes. Klik **Fortryd** for at gendanne den tidligere formel (Ctrl+Z fortryder ikke altid add-in-ændringer).
 - **Oversæt** – markér et område; oversættelsen skrives tilbage i cellerne (antal rækker/kolonner bevares, tal og datoer roterer). Konteksten er max. 200 rækker × 30 kolonner.
+- **Analyser data** – markér en tabel (eller brug hele arket). Modellen beskriver, hvad data viser, angiver nøgletal ud fra kolonnens statistikker, og foreslår konkret: en pivot-tabellayout (rækker/kolonner/værdier), diagramtype med præcist område og evt. formler, der verificerer nøgletallene. Resultatet kan indsættes **som kommentar** på det markerede område.
 
 ### PowerPoint
 
@@ -167,6 +172,35 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 
 - **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8).
 - **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, til som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
+
+## Brugerdefinerede opgaver
+
+Fanen **Opgaver** viser dine egne opgaver, som du kan oprette, redigere, slette og importere/eksportere. En opgave er en JSON-fil:
+
+```json
+{
+  "id": "resume",
+  "label": { "da": "Opsummér til chefen", "en": "Summarize for the boss" },
+  "description": { "da": "Kort resumé i tre punkter." },
+  "hosts": ["word"],
+  "input": "selection",
+  "output": { "format": "markdown" },
+  "applyModes": ["insertAfter", "comment"],
+  "temperature": 0.4,
+  "prompt": {
+    "system": "Du er en erfaren sekretær. Skriv formelt og kort.",
+    "user": "{{selection}}\n\nSammenfat i 3 punkter på {{language}}."
+  }
+}
+```
+
+Skabelonen udfyldes med `{{selection}}` (markeringen), `{{prompt}}`, `{{language}}`, `{{address}}` (celleområde i Excel) og `{{table}}` samt opgavens egne parametre. Ukendte placeholderer efterlates som de er, så du opdager dem. Når skabelonen bruger `{{selection}}`, pakkes markeringen i `<document>`-tags, så den behandles som data.
+
+**Deling:**
+- **Med MIAI Bridge** ligger opgaverne i en mappe (indstillingen *Mappe med brugeropgaver*, standard `<konfig>/tasks`). Kopier mappen til en kollega – færdig. Opgaver, IT uddeler via `MIAI_TASKS_DIR`, vises med mærket *Organisation* og kan ikke ændres eller slettes. En bruger-opgave må have samme id som en indbygget opgave, hvormed prompten tilpasses lokalt.
+- **Direkte tilstand** (uden bridge) kan browsere ikke læse mapper: brug *Importér fil* og *Eksportér* i Opgaver-fanen. Opgaverne gemmes i add-in'et på maskinen.
+
+Filer kan kun udtrykke tekstoutput (fritekst/Markdown/TSV) – opgaver som grammatik, formler og diagrammer kræver stadig kode.
 
 ## Anvendelsesknapper pr. app
 

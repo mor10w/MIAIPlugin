@@ -116,9 +116,10 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af
 - Førstegangsguide i direkte tilstand: find kørende værktøjer på kendte porte og vis præcis CORS-opsætning.
 - Distribution: hostet manifest (direkte) som standard. Valgfri installer til bridgen (Windows MSI/winget, macOS pkg) med lokalt CA/cert og service.
 
-### Fase 2
-- F6, F12, F14: opgaver som brugerredigerbare filer, deling via mappe.
-- Politikfil og audit-log færdiggjort (forberedelse til enterprise).
+### Fase 2 (færdig 2026-11-03)
+- [x] F6, F12: Salgstekst (word+powerpoint) og dataanalyse (excel) som nye opgaver.
+- [x] F14: Opgaver som brugerredigerbare JSON-filer, deling via mappe (ADR-0011); "Opgaver"-fanen med redigering, import/eksport; maskin-opgaver via `MIAI_TASKS_DIR`.
+- [x] Politikfil og audit-log færdiggjort (forberedelse til enterprise): JSONL `audit.log` med rotation i bridgen, ringbuffer i direkte tilstand; log vises under Indstillinger.
 
 ### Fase 3
 - F13: agent-tilstand (tool calling, whitelisted Office-værktøjer, plan → bekræft → udfør).

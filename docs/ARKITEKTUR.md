@@ -28,6 +28,8 @@ Tilstanden vælges ved runtime (`backend/index.ts`). Hvis task pane serveres af 
 Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i Node.
 
 - **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
+- **`userTasks.ts`**: brugerdefinerede opgaver (F14, ADR-0011) – `UserTaskFile`-skema (JSON-filer med prompt-skabelon), `renderTemplate`, omsætning til `TaskDefinition` og det serialiserbare `TaskView`.
+- **`audit.ts`**: `AuditEntry`-skema (kun metadata) og grænser for loggen.
 - **`engine.ts`** (`executeTask`):
   - vælger model (forespørgsel → model pr. opgave → standard → første fra `/v1/models`)
   - tjekker politikken
@@ -37,9 +39,9 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 - **`policy.ts`**: `allowedHosts` med `*.domæne`-wildcards.
 
 ### 2. Office Add-in (`packages/addin`)
-- Task pane (React 19 + Fluent UI v9) med fanerne Handlinger, Chat og Indstillinger.
+- Task pane (React 19 + Fluent UI v9) med fanerne Handlinger, Opgaver, Chat og Indstillinger.
 - **Backends** (`src/backend`) med samme interface:
-  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin.
+  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin.
   - `BridgeBackend`: kalder `/api/*` på samme origin og læser SSE-strømmen.
 - **Host-adaptere**:
 
@@ -67,13 +69,17 @@ Node.js-service (Fastify) på `https://127.0.0.1:44321`. Serverer add-in'ets fil
 |----------|--------|
 | `GET  /api/health` | Status og om den aktive endpoint svarer |
 | `GET  /api/models` | Modeller fra endpointens `/v1/models` |
-| `GET  /api/tasks` | Opgavekatalog |
-| `POST /api/tasks/{id}` | Kør opgave; svar som SSE (`TaskEvent`) |
+| `GET  /api/tasks` | Opgavekatalog (indbygget + brugerdefineret) |
+| `POST /api/tasks/{id}` | Kør opgave (indbygget eller brugerdefineret); svar som SSE (`TaskEvent`) |
+| `GET  /api/user-tasks` | Bruger- og maskin-opgaver med oprindelse |
+| `PUT/DELETE /api/user-tasks/{id}` | Opret/ændre/slet bruger-opgave (maskin-opgaver afvises med 409) |
+| `GET  /api/audit` | Seneste audit-logposter (metadata) |
 | `GET/PUT /api/settings` | Indstillinger og politik (API-nøgler maskeres) |
 
 Bridgen bidrager med det, en browser ikke kan:
 - en **maskinpolitik**, som brugeren ikke kan ændre (ADR-0006)
-- **audit-log** med metadata (aldrig indhold)
+- **brugerdefinerede opgaver** som filer: brugers mappe (`settings.customTasksDir`, standard `<config>/tasks`) og organisationsmappe (`MIAI_TASKS_DIR`), hvor maskin-opgaver vinder ved id-kollision og er read-only (ADR-0011)
+- **audit-log** med metadata (aldrig indhold): JSONL i `audit.log` med rotation ved 1 MB (`audit.log.old`)
 - UI uden internet
 - filsystemadgang til senere RAG (fase 4)
 
