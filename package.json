@@ -24,7 +24,8 @@
     "sideload:windows": "powershell -ExecutionPolicy Bypass -File scripts/sideload-windows.ps1",
     "icons": "node scripts/make-icons.mjs",
     "dev:bridge": "npm run build -w @miai/shared && concurrently -n addin,bridge \"npm run watch -w @miai/addin\" \"npm run dev -w @miai/bridge\"",
-    "manifests": "node scripts/make-manifest.mjs"
+    "manifests": "node scripts/make-manifest.mjs",
+    "test:e2e": "npm run test:e2e -w @miai/addin"
   },
   "devDependencies": {
     "concurrently": "^10.0.0",

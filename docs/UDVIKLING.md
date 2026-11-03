@@ -61,9 +61,26 @@ Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 npm test
 ```
 - `shared`: opgaver, tekst-hjælpere og motoren i direkte tilstand mod en mock-server.
-- `bridge`: streaming, `<think>`-filter, JSON-validering med genforsøg, politik og sikkerhedstjek.
+- `bridge`: streaming, `<think>`-filter, JSON-validering med genforsøg, politik, sikkerhedstjek, brugeropgaver og audit-log.
+- `addin`: hjælpefunktioner (SVG, billedstørrelser, Excel-oversigt).
 
-Browsertest (manuel, Playwright/Chromium): add-in'et serveres over HTTPS med et simuleret Office.js og en mock-model, i både direkte og bridge-tilstand. Se ADR-0007 for resultater.
+### Browsertests (task pane)
+```bash
+npm run build
+```
+```bash
+npm run test:e2e
+```
+Kører add-in'ets build i Chromium med Playwright (`packages/addin/e2e/`). Testene kører også i CI (jobbet `e2e`), hvor skærmbilleder og traces gemmes som artefakter ved fejl.
+
+- **Simuleret Office.js** (`e2e/fixtures/office.ts`): Word, Excel og PowerPoint med de API'er, adapterne bruger. Kalder en adapter et API, simuleringen ikke kender, fejler det med "Simuleret Office.js mangler: …" – udvid så simuleringen. Alt, adapterne gør ved dokumentet, registreres og kan efterprøves (`tp.calls()`, `tp.find("picture")`).
+- **Mock-model** (`e2e/fixtures/servers.ts`): OpenAI-kompatibel server med streaming, ikke-streaming og værktøjskald, med eller uden CORS. Alle forespørgsler gemmes (`tp.model.lastRequest`).
+- **Tilstande:** direkte (add-in hostet statisk over HTTPS) og bridge (den rigtige, byggede bridge med midlertidig konfiguration). Alle porte er dynamiske, så en lokal Ollama ikke forstyrrer.
+- Testene fejler også, hvis task pane kaster en uventet JavaScript-fejl.
+
+Lokalt bruges den Chromium, Playwright har installeret (`npx -w @miai/addin playwright install chromium`).
+
+Browsertestene erstatter ikke den manuelle test i rigtig Office (testlisten nedenfor). De fanger regressioner i UI og adaptere, før den manuelle runde.
 
 ## Manifester
 ```bash

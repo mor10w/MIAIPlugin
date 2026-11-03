@@ -18,3 +18,28 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+
+  # Browsertests af task pane (#10): Chromium + simuleret Office.js + mock-model.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # Samme Playwright-version som @playwright/test i packages/addin.
+      - run: npx -w @miai/addin playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env:
+          CI: "true"
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-resultater
+          path: |
+            packages/addin/test-results/
+            packages/addin/playwright-report/
+          retention-days: 14
