@@ -257,10 +257,11 @@ export class WordAdapter implements HostAdapter {
         if (!hit) return { ok: false, error: "not-found" };
         const [anchor] = await this.find(ctx, scope, a.anchor);
         if (!anchor) return { ok: false, error: "anchor-missing" };
-        hit.load("text");
+        // Flyttes som OOXML, så typografi og tabeller bevares; originalen slettes først,
+        // når indsættelsen er lykket (ellers fejler handlingen uden at røre dokumentet).
+        const xml = hit.getOoxml();
         await ctx.sync();
-        // Flyttes som tekst (bevidst ingen formateringsværktøjer); originalen slettes bagefter.
-        anchor.insertText(a.position === "before" ? `${hit.text} ` : ` ${hit.text}`, a.position === "before" ? "Before" : "After");
+        anchor.insertOoxml(xml.value, a.position === "before" ? "Before" : "After");
         hit.delete();
         await ctx.sync();
         return { ok: true, count: 1 };

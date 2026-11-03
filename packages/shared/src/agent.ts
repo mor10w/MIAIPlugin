@@ -98,9 +98,10 @@ export function agentToolGuide(host: HostKind): string {
     "- replace {find, replace, all?}: replace text. `find` must be copied exactly from the document.",
     "- insert {text, position: start|end|after, anchor?, style?}: insert a new paragraph. style is one of normal, heading1, heading2, heading3, bullet.",
     "- delete {find}: delete text copied exactly from the document.",
-    "- move {find, anchor, position: before|after}: move text next to the anchor text.",
+    "- move {find, anchor, position: before|after}: move a paragraph next to the anchor text (formatting is preserved).",
     "- comment {find, text}: add a review comment on the text.",
     "`find` and `anchor` must be short (a few words up to one sentence) and copied verbatim, so they can be found with search.",
+    "Formatting rules: replace keeps the original formatting of the found text, so editing inside table cells or headings is safe. To change a paragraph's role (e.g. body text to heading, or vice versa), use delete + insert with the new style instead of replace. Never delete or move a table, figure or image: work around them with insert before/after.",
   ].join("\n");
 }
 

@@ -92,4 +92,14 @@ describe("agent-plan (#6)", () => {
     expect(excel[0].content).not.toContain("replace {find");
     expect(excel[1].content).toContain("Selected range: Ark1!A1:B1");
   });
+
+  it("Word-prompten indeholder regler for bevaring af formattering (tabeller, overskrifter)", () => {
+    const word = agent.buildMessages(
+      TaskRequest.parse({ context: { host: "word", text: doc, isWholeDocument: true }, params: { prompt: "Flyt afsnittet" } }),
+    );
+    const sys = word[0].content;
+    expect(sys).toContain("Formatting rules");
+    expect(sys).toContain("delete + insert with the new style");
+    expect(sys).toMatch(/Never delete or move a table, figure or image/);
+  });
 });
