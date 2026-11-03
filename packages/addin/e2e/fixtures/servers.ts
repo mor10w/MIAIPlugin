@@ -176,10 +176,12 @@ export async function startBridge(
   settings: Record<string, unknown> = {},
 ): Promise<{ origin: string; token: string; stop: () => Promise<void> }> {
   const { ConfigStore } = await import("@miai/bridge/dist/config.js");
+  // Testene må ikke skrive i udviklerens rigtige nøglering (#16).
+  const { MemorySecrets } = await import("@miai/bridge/dist/secrets.js");
   const { buildServer } = await import("@miai/bridge/dist/server.js");
   const { Settings } = await import("@miai/shared");
   const dir = mkdtempSync(join(tmpdir(), "miai-e2e-bridge-"));
-  const store = new ConfigStore(dir, join(dir, "ingen-politik.json"));
+  const store = new ConfigStore(dir, join(dir, "ingen-politik.json"), new MemorySecrets());
   store.update(Settings.parse({ endpoints: [{ id: "mock", name: "Mock", baseUrl: modelUrl }], activeEndpoint: "mock", ...settings }));
   // Porten skal kendes, før serveren bygges (Host-tjekket), så find en ledig først.
   const port = await freePort();

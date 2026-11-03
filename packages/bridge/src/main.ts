@@ -40,6 +40,7 @@ try {
   const ep = store.activeEndpoint();
   console.log(`[miai] MIAI Bridge ${VERSION} på https://localhost:${port}`);
   console.log(`[miai] Konfiguration: ${store.file}`);
+  console.log(`[miai] API-nøgler: ${store.keyStorage === "keyring" ? "OS'ets nøglering" : "config.json (ingen nøglering)"}`);
   console.log(`[miai] Aktiv endpoint: ${ep.name} (${ep.baseUrl}) · politik: ${store.policySource}`);
   if (manifest) console.log(`[miai] Dit manifest (med adgangstoken): ${manifest}`);
   else console.warn(`[miai] Fandt ikke ${baseManifest} – intet manifest skrevet. Sæt MIAI_MANIFEST.`);

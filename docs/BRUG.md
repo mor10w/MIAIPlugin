@@ -243,6 +243,7 @@ Knapper, som din Office-version ikke understøtter, skjules.
 - **Struktureret output**: opgaver som grammatik, slides, formler og diagrammer kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
 - **Dokumenttekst behandles som data**, aldrig som instruktioner, så markeringer med fx "ignorer ovenstående" ikke styrer modellen.
 - **Indstillinger i direkte tilstand** ligger i add-in'ets `localStorage` på maskinen. Nogle webview-bygninger rydder den; i så fald gendannes standardindstillingerne.
+- **API-nøgler**: bridgen og MIAI App gemmer nøgler i OS'ets nøglering (Windows Credential Manager, macOS Keychain, Linux Secret Service), og `config.json` indeholder kun en reference (`keyring:<endpoint-id>`). Nøgler fra en tidligere version flyttes automatisk ved første start. Findes der ingen nøglering (fx Linux uden skrivebord), bliver nøglerne i `config.json`, som kun du kan læse, og bridgen skriver en advarsel i loggen. I **direkte tilstand** har browseren ingen nøglering, så nøgler ligger i klartekst i `localStorage`. Brug bridgen eller MIAI App, når din endpoint kræver en nøgle.
 
 ## Udrulning til kunder (salgs løsninger)
 

@@ -2,6 +2,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { activeEndpoint, checkSettings, defaultSettings, isUrlAllowed, Policy, Settings } from "@miai/shared";
+import { defaultSecretStore, type SecretStore } from "./secrets.js";
+
+/** Reference i config.json til en nøgle i OS'ets nøglering (#16). */
+export const KEYRING_REF = "keyring:";
+const account = (endpointId: string) => `endpoint:${endpointId}`;
 
 export function configDir(): string {
   if (process.env.MIAI_CONFIG_DIR) return process.env.MIAI_CONFIG_DIR;
@@ -40,8 +45,14 @@ export class ConfigStore {
   private settings: Settings;
   private userPolicy: Policy | undefined;
   private machinePolicy: Policy | undefined;
+  /** Endpoints, hvis nøgle ligger i nøgleringen – så fjernede nøgler også slettes dér. */
+  private inKeyring = new Set<string>();
 
-  constructor(dir = configDir(), policyFile = machinePolicyFile()) {
+  constructor(
+    dir = configDir(),
+    policyFile = machinePolicyFile(),
+    readonly secrets: SecretStore = defaultSecretStore(),
+  ) {
     this.file = join(dir, "config.json");
     this.dir = dir;
     this.machinePolicy = readJson(policyFile, (raw) => Policy.parse(raw));
@@ -55,6 +66,36 @@ export class ConfigStore {
     });
     this.settings = stored?.settings ?? defaultSettings();
     this.userPolicy = stored?.policy;
+    // Migrering: nøgler i klartekst fra en tidligere version flyttes til nøgleringen.
+    if (this.resolveKeys() && this.secrets.kind === "keyring") this.save();
+  }
+
+  /** "keyring" eller "file" – hvor API-nøglerne faktisk gemmes. */
+  get keyStorage(): "keyring" | "file" {
+    return this.secrets.kind;
+  }
+
+  /** Slår referencer op i nøgleringen. Returnerer true, hvis filen indeholder nøgler i klartekst. */
+  private resolveKeys(): boolean {
+    let plain = false;
+    for (const e of this.settings.endpoints) {
+      if (!e.apiKey) continue;
+      if (!e.apiKey.startsWith(KEYRING_REF)) {
+        plain = true;
+        continue;
+      }
+      const id = e.apiKey.slice(KEYRING_REF.length);
+      let key: string | null = null;
+      try {
+        key = this.secrets.get(account(id));
+      } catch (err) {
+        console.warn(`[miai] Kunne ikke læse nøglen til '${e.name}' fra nøgleringen: ${(err as Error).message}`);
+      }
+      if (key === null) console.warn(`[miai] Nøglen til '${e.name}' findes ikke i nøgleringen – angiv den igen under Indstillinger.`);
+      else this.inKeyring.add(id);
+      e.apiKey = key ?? "";
+    }
+    return plain;
   }
 
   get policySource(): "default" | "user" | "machine" {
@@ -90,9 +131,38 @@ export class ConfigStore {
   private save(): void {
     mkdirSync(dirname(this.file), { recursive: true });
     const tmp = `${this.file}.tmp`;
-    const data: StoredConfig = { settings: this.settings, policy: this.userPolicy };
+    const data: StoredConfig = { settings: this.storedSettings(), policy: this.userPolicy };
     writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
     renameSync(tmp, this.file);
+  }
+
+  /**
+   * Kopi af indstillingerne til disken: nøgler skrives til nøgleringen og erstattes af en
+   * reference. Lykkes det ikke, bliver nøglen i filen (0600) med en advarsel.
+   */
+  private storedSettings(): Settings {
+    const out = structuredClone(this.settings);
+    const keep = new Set<string>();
+    for (const e of out.endpoints) {
+      if (!e.apiKey || this.secrets.kind === "file") continue;
+      try {
+        this.secrets.set(account(e.id), e.apiKey);
+        e.apiKey = KEYRING_REF + e.id;
+        keep.add(e.id);
+      } catch (err) {
+        console.warn(`[miai] Kunne ikke gemme nøglen til '${e.name}' i nøgleringen (${(err as Error).message}); den gemmes i config.json.`);
+      }
+    }
+    for (const id of this.inKeyring) {
+      if (keep.has(id)) continue;
+      try {
+        this.secrets.delete(account(id));
+      } catch {
+        // Allerede væk eller utilgængelig – intet at rydde op.
+      }
+    }
+    this.inKeyring = keep;
+    return out;
   }
 }
 

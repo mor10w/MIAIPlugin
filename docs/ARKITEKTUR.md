@@ -94,6 +94,7 @@ Sikkerhed:
 - `Host`-tjek mod DNS rebinding
 - kræver `X-MIAI`-header og eget `Origin` (holder fremmede websider ude)
 - kræver adgangstoken pr. bruger i `X-MIAI-Token` (#11, holder andre lokale processer og brugere ude). Tokenet ligger i `bridge.json` (0600) og i brugerens personlige manifest (`…/taskpane.html?token=…`), ikke i den serverede side. Porten vælges pr. bruger og huskes.
+- API-nøgler ligger i OS'ets nøglering (#16, `@napi-rs/keyring`, tjeneste `MIAI`, konto `endpoint:<id>`); `config.json` har kun referencen `keyring:<id>`. Uden nøglering (eller med `MIAI_KEYRING=off`) bliver nøglerne i `config.json` (0600) med en advarsel. `GET /api/settings` maskerer altid nøglerne.
 
 ### 4. Inference-værktøj (eksternt)
 Et hvilket som helst OpenAI-kompatibelt værktøj. Ved direkte forbindelse skal værktøjet tillade CORS fra add-in'ets origin:
