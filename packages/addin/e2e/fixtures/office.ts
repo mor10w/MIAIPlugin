@@ -21,6 +21,18 @@ export interface FakeOfficeOptions {
   selection?: string;
   /** Word: hele dokumentets tekst (bruges, når intet er markeret). Standard: markeringen. */
   document?: string;
+  /**
+   * Word med dokumentmodel: afsnit med typografi og formatering (agent-tilstand). Når den er
+   * sat, kan dokumentets tilstand efter handlinger læses med window.__miai.doc().
+   */
+  paragraphs?: {
+    text: string;
+    style?: string;
+    list?: boolean;
+    table?: boolean;
+    bold?: boolean;
+    marks?: { start: number; end: number; bold?: boolean; italic?: boolean; link?: string }[];
+  }[];
   /** Excel: arkets værdier (række 1 = A1). Markeringen er hele området. */
   excel?: { sheet: string; values: (string | number)[][] };
   displayLanguage?: string;
@@ -118,8 +130,274 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     },
   });
 
+  // --- Word med dokumentmodel (agent-tilstand, #6) ---------------------------------
+  if (o.host === "Word" && o.paragraphs) {
+    installWordModel();
+  }
+
+  /**
+   * Word med afsnit, typografi, inline-formatering, kommentarer og sporede ændringer.
+   * Efterligner Words egne regler, også dem agenten skal arbejde uden om:
+   *  - et nyt afsnit arver naboafsnittets typografi, liste, tabel og direkte formatering;
+   *  - erstattet tekst får formateringen fra første tegn i det erstattede.
+   * Dokumentets tilstand kan læses med window.__miai.doc().
+   */
+  function installWordModel() {
+    interface Mark {
+      start: number;
+      end: number;
+      bold?: boolean;
+      italic?: boolean;
+      link?: string;
+    }
+    interface P {
+      text: string;
+      style: string;
+      list: boolean;
+      table: boolean;
+      /** Direkte formatering på hele afsnittet (arves ved indsættelse). */
+      bold: boolean;
+      marks: Mark[];
+    }
+    const listStyles = new Set(["ListBullet", "ListNumber"]);
+    let paras: P[] = o.paragraphs!.map((p) => ({
+      text: p.text,
+      style: p.style ?? "Normal",
+      list: !!p.list || listStyles.has(p.style ?? ""),
+      table: !!p.table,
+      bold: !!p.bold,
+      marks: (p.marks ?? []).map((m) => ({ ...m })),
+    }));
+    const clone = (ps: P[]) => ps.map((p) => ({ ...p, marks: p.marks.map((m) => ({ ...m })) }));
+    const state = { tracking: "Off" };
+    const tracked: { date: string; before: P[] }[] = [];
+    /** Den tidligste afviste ændring – tilstanden før den gendannes ved næste sync. */
+    let restoreIdx: number | undefined;
+    const comments: { id: string; on: string; text: string }[] = [];
+    /** Kaldes før hver ændring: med sporede ændringer registreres en ændring, der kan afvises. */
+    const change = (kind: string, detail: Record<string, unknown>) => {
+      record({ kind, ...detail });
+      if (state.tracking !== "Off") tracked.push({ date: new Date().toISOString(), before: clone(paras) });
+    };
+    (w.__miai as Record<string, unknown>).doc = () => clone(paras).map((p) => ({ ...p, marks: p.marks }));
+    (w.__miai as Record<string, unknown>).comments = () => comments;
+    /** Brugeren redigerer et afsnit (fx mellem plan og udførelse). */
+    (w.__miai as Record<string, unknown>).editParagraph = (i: number, text: string) => {
+      paras[i].text = text;
+    };
+
+    /** Erstat [start,end) i et afsnit; markeringer følger Words regel om første tegn. */
+    function replaceIn(p: P, start: number, end: number, rep: string) {
+      const delta = rep.length - (end - start);
+      const first = p.marks.find((m) => m.start <= start && m.end > start);
+      p.marks = p.marks
+        .filter((m) => m.end <= start || m.start >= end || m === first)
+        .map((m) => {
+          if (m === first) return { ...m, end: m.end >= end ? m.end + delta : start + rep.length };
+          return m.start >= end ? { ...m, start: m.start + delta, end: m.end + delta } : m;
+        })
+        .filter((m) => m.end > m.start);
+      p.text = p.text.slice(0, start) + rep + p.text.slice(end);
+    }
+
+    function paragraphObj(p: P): Record<string, unknown> {
+      const obj: Record<string, unknown> = {
+        load() {},
+        get text() {
+          return p.text;
+        },
+        get style() {
+          return p.style;
+        },
+        get styleBuiltIn() {
+          return p.style;
+        },
+        set styleBuiltIn(v: string) {
+          change("style", { text: p.text, style: v });
+          p.style = v;
+          if (listStyles.has(v)) p.list = true;
+        },
+        get isListItem() {
+          return p.list;
+        },
+        get tableNestingLevel() {
+          return p.table ? 1 : 0;
+        },
+        detachFromList() {
+          change("detachFromList", { text: p.text });
+          p.list = false;
+        },
+        insertParagraph(text: string, loc: string) {
+          // Som Word: det nye afsnit arver naboens typografi, liste, tabel og direkte formatering.
+          const np: P = { text, style: p.style, list: p.list, table: p.table, bold: p.bold, marks: [] };
+          change("insertParagraph", { text, loc, anchor: p.text, inheritedStyle: p.style });
+          const i = paras.indexOf(p);
+          paras.splice(loc === "Before" ? i : i + 1, 0, np);
+          return strict("Word.Paragraph", paragraphObj(np));
+        },
+        delete() {
+          change("deleteParagraph", { text: p.text });
+          paras = paras.filter((x) => x !== p);
+        },
+        getRange: () => wholeParagraph(p),
+        search: (t: string) => search([p], t),
+      };
+      return obj;
+    }
+
+    function wholeParagraph(p: P): unknown {
+      return strict("Word.Range(paragraph)", {
+        font: strict("Word.Font", {
+          set(f: { bold?: boolean; italic?: boolean }) {
+            change("font", { text: p.text, ...f });
+            if (f.bold === false) {
+              p.bold = false;
+              p.marks = p.marks.filter((m) => !m.bold);
+            }
+            if (f.italic === false) p.marks = p.marks.filter((m) => !m.italic);
+          },
+        }),
+        getOoxml: () => ({ value: JSON.stringify(p) }),
+        insertOoxml(xml: string, loc: string) {
+          const np = JSON.parse(xml) as P;
+          change("insertOoxml", { text: np.text, loc, anchor: p.text });
+          const i = paras.indexOf(p);
+          paras.splice(loc === "Before" ? i : i + 1, 0, np);
+        },
+      });
+    }
+
+    /** Et søgeresultat: tekst i ét afsnit fra `start`. */
+    function hit(p: P, start: number, len: number): unknown {
+      const get = () => p.text.slice(start, start + len);
+      return strict("Word.Range(search)", {
+        load() {},
+        get text() {
+          return get();
+        },
+        insertText(rep: string, loc: string) {
+          change("replace", { from: get(), to: rep, loc });
+          replaceIn(p, start, start + len, rep);
+          len = rep.length;
+        },
+        delete() {
+          change("delete", { text: get() });
+          replaceIn(p, start, start + len, "");
+          len = 0;
+        },
+        insertComment(text: string) {
+          const c = { id: `c${comments.length + 1}`, on: get(), text };
+          record({ kind: "comment", on: c.on, text });
+          comments.push(c);
+          return strict("Word.Comment", { id: c.id, load() {} });
+        },
+        search: (t: string) => {
+          const items: unknown[] = [];
+          for (let i = get().indexOf(t); i >= 0; i = get().indexOf(t, i + t.length)) items.push(hit(p, start + i, t.length));
+          return { items, load() {} };
+        },
+        paragraphs: { getFirst: () => strict("Word.Paragraph", paragraphObj(p)) },
+        font: {
+          set bold(v: boolean) {
+            change("bold", { text: get() });
+            if (v) p.marks.push({ start, end: start + len, bold: true });
+          },
+          set italic(v: boolean) {
+            change("italic", { text: get() });
+            if (v) p.marks.push({ start, end: start + len, italic: true });
+          },
+        },
+        set hyperlink(url: string) {
+          change("hyperlink", { text: get(), url });
+          p.marks.push({ start, end: start + len, link: url });
+        },
+      });
+    }
+
+    function search(ps: P[], t: string) {
+      const items: unknown[] = [];
+      for (const p of ps) for (let i = p.text.indexOf(t); i >= 0; i = p.text.indexOf(t, i + t.length)) items.push(hit(p, i, t.length));
+      return { items, load() {} };
+    }
+
+    const whole = strict("Word.Range(body)", {
+      load() {},
+      get text() {
+        return paras.map((p) => p.text).join("\n");
+      },
+      get paragraphs() {
+        const items = paras.map((p) => strict("Word.Paragraph", paragraphObj(p)));
+        return { items, load() {}, getFirst: () => items[0], getLast: () => items[items.length - 1] };
+      },
+      search: (t: string) => search(paras, t),
+    });
+    const empty = strict("Word.Range(selection)", { text: "", load() {} });
+    const body = strict("Word.Body", {
+      getRange: () => whole,
+      insertParagraph(text: string, loc: string) {
+        const ref = loc === "Start" ? paras[0] : paras[paras.length - 1];
+        return (paragraphObj(ref).insertParagraph as (t: string, l: string) => unknown)(text, loc === "Start" ? "Before" : "After");
+      },
+      getOoxml: () => ({ value: JSON.stringify(paras) }),
+      insertOoxml(xml: string, loc: string) {
+        record({ kind: "insertOoxml", loc });
+        paras = JSON.parse(xml);
+      },
+      getTrackedChanges: () => ({
+        items: tracked.map((t) =>
+          strict("Word.TrackedChange", {
+            date: t.date,
+            reject() {
+              record({ kind: "rejectTrackedChange" });
+              restoreIdx = Math.min(restoreIdx ?? Infinity, tracked.indexOf(t));
+            },
+          }),
+        ),
+        load() {},
+      }),
+      getComments: () => ({
+        items: comments.map((c) =>
+          strict("Word.Comment", {
+            id: c.id,
+            delete() {
+              record({ kind: "deleteComment", id: c.id });
+              comments.splice(comments.indexOf(c), 1);
+            },
+          }),
+        ),
+        load() {},
+      }),
+    });
+    const document = strict("Word.Document", {
+      getSelection: () => empty,
+      body,
+      load() {},
+      get changeTrackingMode() {
+        return state.tracking;
+      },
+      set changeTrackingMode(v: string) {
+        state.tracking = v;
+      },
+    });
+    const ctx = strict("Word.RequestContext", {
+      document,
+      trackedObjects: { add() {}, remove() {} },
+      async sync() {
+        if (restoreIdx !== undefined) {
+          paras = clone(tracked[restoreIdx].before);
+          tracked.splice(restoreIdx);
+          restoreIdx = undefined;
+        }
+      },
+    });
+    w.Word = strict("Word", {
+      ChangeTrackingMode: { trackAll: "TrackAll", off: "Off" },
+      run: (a: unknown, b?: unknown) => (typeof a === "function" ? a(ctx) : (b as (c: unknown, r: unknown) => unknown)(ctx, a)),
+    });
+  }
+
   // --- Word -------------------------------------------------------------------
-  if (o.host === "Word") {
+  if (o.host === "Word" && !o.paragraphs) {
     const picture = (base64: string, loc: string) => record({ kind: "picture", bytes: base64.length, loc });
     // Afsnit: typografi registreres, når agenten sætter den (#6).
     const paragraph = (text = "") => {
@@ -159,6 +437,15 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc }), paragraph(t)),
         insertInlinePictureFromBase64: picture,
         getRange: () => r,
+        // Afsnit (én pr. linje) til agentens struktur; dokumentmodellen ovenfor bruges til agent-tests.
+        get paragraphs() {
+          const items = getText()
+            .split("\n")
+            .map((t) =>
+              strict("Word.Paragraph(simple)", { text: t, style: "Normal", styleBuiltIn: "Normal", isListItem: false, tableNestingLevel: 0, load() {} }),
+            );
+          return { items, load() {} };
+        },
         search(text: string) {
           // Én forekomst pr. gang teksten findes.
           const items: unknown[] = [];

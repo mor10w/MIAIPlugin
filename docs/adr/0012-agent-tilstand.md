@@ -38,4 +38,24 @@ Office.js findes kun i add-in'ets webview, ikke i bridgen. Klassisk tool calling
 - Samme flow i direkte tilstand og bridge-tilstand. Der er ingen ny protokol mellem bridge og add-in.
 - Agenten kan ikke "kigge" i dokumentet undervejs (fx søge, læse resultatet og planlægge videre). Den arbejder på markeringen eller hele dokumentet, som add-in'et sender med (højst ca. 24.000 tegn). Flertrinsplaner med læseværktøjer kan tilføjes senere som en udvidelse, når der er behov.
 - `find`-tekst skal være ordret. Små modeller rammer ikke altid præcist. Den slags handlinger fanges af `checkPlan` og vises som "Teksten findes ikke i dokumentet" i stedet for at fejle stille. Eval-sættet (`cases/agent.json`) måler, hvor ofte planerne er gyldige.
-- Flyt sker som tekst. Formatering af det flyttede bevares ikke, hvilket er i tråd med "ingen fri formatering".
+- ~~Flyt sker som tekst.~~ Erstattet af tillægget nedenfor: hele afsnit flyttes med deres formatering.
+
+## Tillæg (2026-11-04): Formateringen bevares
+
+Kravet er, at agenten kan redigere uden at ødelægge formateringen, og at den selv kan skabe formatering, hvor den laver nyt indhold. Den første udgave arbejdede på ren tekst og fandt alt med tekstsøgning. Det ødelagde formatering i flere tilfælde: indsat tekst arvede naboens overskrift eller liste, erstat gjorde blandet formatering ensartet, sletning efterlod tomme afsnit, og fortryd erstattede hele dokumentet.
+
+1. **Modellen ser strukturen.** For agenten henter Word-adapteren afsnittene med typografi, liste og tabel (WordApi 1.3), og prompten viser dem som `¶3 [Heading2] Priser`, `(list)` og `(table)`.
+2. **Strukturhandlinger peger på afsnit.** `insert`, `delete {paragraph}`, `move` og den nye `setStyle` bruger ¶-numre i stedet for tekstsøgning.
+   - Numrene er dem, modellen så. Afsnittene hentes som objekter, før første handling udføres, så numrene gælder, selv om tidligere handlinger har indsat eller slettet afsnit.
+   - Er et afsnit ændret mellem plan og udførelse, afvises handlingen ("dokumentet er ændret").
+3. **Erstat ændrer kun det, der er forskelligt** (`minimalEdit`): fælles ord før og efter bevares, og kun midten skiftes ud. Words regel om, at erstattet tekst får første tegns formatering, rammer dermed kun de ændrede ord.
+4. **Ny tekst arver ikke naboens formatering.**
+   - Hver linje får en eksplicit indbygget typografi.
+   - Arvet direkte fed, kursiv og understregning nulstilles for brødtekst og lister.
+   - Arvet listemedlemskab fjernes (`detachFromList`), når typografien ikke er en liste.
+   - Begrænset Markdown giver overskrifter, punkter, nummererede lister, citater, fed, kursiv og links. Kun http(s) og mailto er tilladt. Skrifttype, farve og størrelse kommer altid fra dokumentets typografier, så der stadig ikke er fri formatering.
+5. **Hele afsnit slettes og flyttes som afsnit.** Flyt bruger afsnittets OOXML inklusive afsnitsmærket. Sletning af al teksten i et afsnit sletter afsnittet. Tabelafsnit må kun få deres tekst rettet (`checkPlan` → `in-table`).
+6. **Fortryd afviser sessionens sporede ændringer** (WordApi 1.6, tidsvindue for sessionen) og fjerner agentens kommentarer via deres id. Resten af dokumentet, også brugerens egne sporede ændringer, røres ikke. Øjebliksbilledet af hele dokumentet bruges kun uden sporede ændringer eller i Word før 1.6, og UI'et siger det.
+7. **Chat → agent:** chatsvaret følger med som `<material>`, så agenten indsætter den tekst, brugeren har set.
+
+**Test:** den simulerede Word i e2e har en dokumentmodel, der efterligner Words regler: arv ved indsættelse, første tegns formatering ved erstatning og sporede ændringer. Testene tjekker dokumentets typografier og formatering efter hver handling og efter fortryd. Reglerne skal stadig bekræftes i rigtig Word; tjeklisten står i UDVIKLING.md.

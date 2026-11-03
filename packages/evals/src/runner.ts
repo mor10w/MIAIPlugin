@@ -119,7 +119,7 @@ export async function runCase(c: EvalCase, model: string, ep: EndpointConfig, ju
   const durationMs = Date.now() - started;
 
   const input = [c.context.text, c.context.table, c.params.prompt].filter(Boolean).join("\n");
-  const checks = error ? [] : c.checks.map((ch) => runCheck(ch, { output, result, input, toolCalls, host: c.context.host }));
+  const checks = error ? [] : c.checks.map((ch) => runCheck(ch, { output, result, input, toolCalls, host: c.context.host, paragraphs: c.context.paragraphs }));
   const res: CaseResult = {
     caseId: c.id,
     task: c.task,

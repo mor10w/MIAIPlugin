@@ -1,8 +1,20 @@
-import type { AgentAction, ApplyMode, DiagramResult, DocContext, GrammarResult, WordStyle } from "@miai/shared";
+import {
+  minimalEdit,
+  occurrences,
+  parseBlocks,
+  type AgentAction,
+  type ApplyMode,
+  type DiagramResult,
+  type DocContext,
+  type GrammarResult,
+  type InlineText,
+  type WordStyle,
+} from "@miai/shared";
 import { diagramToPng, graphicToPng, pointSize, type PngImage } from "../image";
 import { mdToSafeHtml } from "../markdown";
 import { extractGraphic } from "../svg";
 import {
+  MAX_CONTEXT_CHARS,
   truncate,
   type AgentOptions,
   type AgentOutcome,
@@ -25,7 +37,16 @@ const STYLE: Record<WordStyle, string> = {
   heading2: "Heading2",
   heading3: "Heading3",
   bullet: "ListBullet",
+  numbered: "ListNumber",
+  quote: "Quote",
 };
+
+/** Agent-sessionens afsnit: som modellen så dem, ændret før start (stale) og slettet undervejs (gone). */
+interface Session {
+  paras: Word.Paragraph[];
+  stale: Set<number>;
+  gone: Set<number>;
+}
 
 export class WordAdapter implements HostAdapter {
   readonly host = "word" as const;
@@ -64,8 +85,33 @@ export class WordAdapter implements HostAdapter {
       ctx.trackedObjects.add(target);
       await ctx.sync();
       this.range = target;
-      return { host: "word", ...truncate(text, opts.maxChars), isWholeDocument };
+      const paragraphs = opts.structure && has("1.3") ? await this.structure(ctx, target, opts.maxChars) : undefined;
+      return { host: "word", ...truncate(text, opts.maxChars), isWholeDocument, ...(paragraphs ? { paragraphs } : {}) };
     });
+  }
+
+  /**
+   * Afsnittene i området med typografi, liste og tabel – så agenten kan se (og bevare)
+   * dokumentets struktur. Afkortes ved samme tegngrænse som teksten.
+   */
+  private async structure(ctx: Word.RequestContext, target: Word.Range, maxChars = MAX_CONTEXT_CHARS): Promise<NonNullable<DocContext["paragraphs"]>> {
+    const paras = target.paragraphs;
+    paras.load("items/text,items/style,items/styleBuiltIn,items/isListItem,items/tableNestingLevel");
+    await ctx.sync();
+    const out: NonNullable<DocContext["paragraphs"]> = [];
+    let chars = 0;
+    for (const p of paras.items) {
+      chars += p.text.length + 1;
+      if (chars > maxChars) break;
+      out.push({
+        text: p.text,
+        // Indbygget navn (fx "Heading2") er det samme på alle sprog; ellers dokumentets eget typografinavn.
+        style: p.styleBuiltIn && p.styleBuiltIn !== "Other" ? p.styleBuiltIn : p.style || "Normal",
+        ...(p.isListItem ? { list: true } : {}),
+        ...(p.tableNestingLevel > 0 ? { table: true } : {}),
+      });
+    }
+    return out;
   }
 
   private run<T>(fn: (ctx: Word.RequestContext, range: Word.Range) => Promise<T>): Promise<T> {
@@ -176,33 +222,75 @@ export class WordAdapter implements HostAdapter {
   }
 
   /**
-   * Agent-tilstand (#6): udfører de bekræftede handlinger én ad gangen inden for markeringen
-   * (eller hele dokumentet). Fortryd gendanner dokumentets indhold fra et OOXML-øjebliksbillede
-   * taget lige før – også når ændringerne er lavet som sporede ændringer.
+   * Agent-tilstand (#6, ADR-0012): udfører de bekræftede handlinger én ad gangen og bevarer
+   * dokumentets formatering:
+   *  - afsnit adresseres med de numre, modellen så (¶), via afsnitsobjekter hentet før første
+   *    ændring – så numrene gælder, selv om tidligere handlinger har indsat eller slettet afsnit;
+   *  - erstat ændrer kun de ord, der faktisk er forskellige;
+   *  - ny tekst får en eksplicit typografi og arver ikke naboens formatering;
+   *  - hele afsnit slettes og flyttes som afsnit (ingen tomme afsnitsmærker).
+   *
+   * Fortryd afviser sessionens sporede ændringer (WordApi 1.6), så resten af dokumentet ikke
+   * røres; uden sporede ændringer gendannes indholdet fra et øjebliksbillede.
    */
   async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
     return this.run(async (ctx, range) => {
       const body = ctx.document.body;
-      const snapshot = body.getOoxml();
-      await ctx.sync();
-      const ooxml = snapshot.value;
+      const tracking = !!opts.trackChanges && has("1.4");
+      const undoKind = tracking && has("1.6") ? "tracked" : "snapshot";
+      const snapshot = undoKind === "snapshot" ? body.getOoxml() : undefined;
       const scope = dc.isWholeDocument ? body.getRange("Whole") : range;
+      // Afsnittene, som modellen så dem (samme rækkefølge som DocContext.paragraphs).
+      const paraList = has("1.3") ? scope.paragraphs : undefined;
+      paraList?.load("items/text");
+      await ctx.sync();
+      const ooxml = snapshot?.value;
+      const paras = paraList?.items ?? [];
+      // Er dokumentet ændret siden planen? Tjekkes én gang før første handling – bagefter ændrer
+      // planens egne handlinger afsnittene, og det er forventet.
+      const stale = new Set<number>();
+      dc.paragraphs?.forEach((seen, i) => {
+        if (paras[i]?.text.trim() !== seen.text.trim()) stale.add(i + 1);
+      });
+      const gone = new Set<number>();
       const results: AgentStepResult[] = [];
-      await this.withTracking(ctx, !!opts.trackChanges && has("1.4"), async () => {
+      const commentIds: string[] = [];
+      const started = Date.now();
+      await this.withTracking(ctx, tracking, async () => {
         for (const a of actions) {
           try {
-            results.push(await this.agentStep(ctx, scope, dc, a));
+            results.push(await this.agentStep(ctx, scope, dc, { paras, stale, gone }, a, commentIds));
           } catch (err) {
             results.push({ ok: false, error: "failed", detail: (err as Error).message });
           }
         }
       });
+      const ended = Date.now();
+
       const undo = () =>
         Word.run(async (c) => {
-          c.document.body.insertOoxml(ooxml, "Replace");
+          // Agentens kommentarer fjernes i begge tilfælde (de er ikke sporede ændringer).
+          if (commentIds.length && has("1.4")) {
+            const comments = c.document.body.getComments();
+            comments.load("items/id");
+            await c.sync();
+            for (const cm of comments.items) if (commentIds.includes(cm.id)) cm.delete();
+          }
+          if (undoKind === "tracked") {
+            // Kun ændringer lavet under sessionen (±2 s) – brugerens egne sporede ændringer røres ikke.
+            const changes = c.document.body.getTrackedChanges();
+            changes.load("items/date");
+            await c.sync();
+            for (const ch of changes.items) {
+              const t = new Date(ch.date).getTime();
+              if (t >= started - 2_000 && t <= ended + 2_000) ch.reject();
+            }
+          } else if (ooxml) {
+            c.document.body.insertOoxml(ooxml, "Replace");
+          }
           await c.sync();
         });
-      return { results, undo };
+      return { results, undo, undoKind };
     });
   }
 
@@ -213,19 +301,100 @@ export class WordAdapter implements HostAdapter {
     return res.items;
   }
 
-  private async agentStep(ctx: Word.RequestContext, scope: Word.Range, dc: DocContext, a: AgentAction): Promise<AgentStepResult> {
+  /**
+   * Afsnit ¶n, som modellen så det – eller en fejl, hvis dokumentet var ændret, før agenten gik i
+   * gang, eller afsnittet er slettet af en tidligere handling i planen.
+   */
+  private paragraph(dc: DocContext, s: Session, n: number | undefined): Word.Paragraph | AgentStepResult {
+    if (!has("1.3") || !dc.paragraphs) return { ok: false, error: "no-structure" };
+    const p = n !== undefined ? s.paras[n - 1] : undefined;
+    if (!p || n === undefined || s.stale.has(n)) return { ok: false, error: "changed" };
+    if (s.gone.has(n)) return { ok: false, error: "failed", detail: `¶${n} er slettet af en tidligere handling` };
+    return p;
+  }
+
+  /**
+   * Giver et nyt afsnit en eksplicit typografi og fjerner formatering, det har arvet fra naboen
+   * (Word kopierer naboafsnittets egenskaber ved indsættelse), og sætter derefter fed, kursiv og links.
+   */
+  private async formatNew(ctx: Word.RequestContext, p: Word.Paragraph, block: { style: WordStyle; inline: InlineText }): Promise<void> {
+    if (!has("1.3")) return;
+    p.styleBuiltIn = STYLE[block.style] as Word.BuiltInStyleName;
+    // Brødtekst og lister: nulstil arvet fed/kursiv/understregning (overskrifter og citater får deres fra typografien).
+    if (block.style === "normal" || block.style === "bullet" || block.style === "numbered")
+      p.getRange("Whole").font.set({ bold: false, italic: false, underline: "None", strikeThrough: false });
+    p.load("isListItem");
+    await ctx.sync();
+    if (p.isListItem && block.style !== "bullet" && block.style !== "numbered") p.detachFromList();
+    const { text, spans } = block.inline;
+    for (const span of spans) {
+      const seg = text.slice(span.start, span.end);
+      if (!seg.trim() || seg.length > 255) continue;
+      const hits = p.search(escapeSearch(seg), { matchCase: true });
+      hits.load("items");
+      await ctx.sync();
+      const r = hits.items[occurrences(text.slice(0, span.start), seg)] ?? hits.items[0];
+      if (!r) continue;
+      if (span.bold) r.font.bold = true;
+      if (span.italic) r.font.italic = true;
+      if (span.link) r.hyperlink = span.link;
+    }
+    await ctx.sync();
+  }
+
+  private async agentStep(
+    ctx: Word.RequestContext,
+    scope: Word.Range,
+    dc: DocContext,
+    session: Session,
+    a: AgentAction,
+    commentIds: string[],
+  ): Promise<AgentStepResult> {
     switch (a.action) {
       case "replace": {
         const hits = await this.find(ctx, scope, a.find);
         if (!hits.length) return { ok: false, error: "not-found" };
         const targets = a.all ? hits : hits.slice(0, 1);
-        for (const h of targets) h.insertText(a.replace, "Replace");
+        // Kun den del, der faktisk ændres, erstattes – formatering før og efter bevares.
+        const { before, oldCore, newCore } = minimalEdit(a.find, a.replace);
+        if (!oldCore) return { ok: true, count: 0 };
+        for (const h of targets) {
+          let target: Word.Range = h;
+          if (oldCore !== a.find && oldCore.length <= 255) {
+            const sub = h.search(escapeSearch(oldCore), { matchCase: true });
+            sub.load("items");
+            await ctx.sync();
+            target = sub.items[occurrences(before, oldCore)] ?? sub.items[0] ?? h;
+          }
+          const replacement = target === h ? a.replace : newCore;
+          if (replacement) target.insertText(replacement, "Replace");
+          else target.delete();
+        }
         await ctx.sync();
         return { ok: true, count: targets.length };
       }
       case "delete": {
-        const [hit] = await this.find(ctx, scope, a.find);
+        if (a.paragraph !== undefined) {
+          const p = this.paragraph(dc, session, a.paragraph);
+          if (!("delete" in p)) return p;
+          p.delete();
+          session.gone.add(a.paragraph);
+          await ctx.sync();
+          return { ok: true, count: 1 };
+        }
+        const [hit] = await this.find(ctx, scope, a.find ?? "");
         if (!hit) return { ok: false, error: "not-found" };
+        // Er det hele afsnittets tekst, slettes afsnittet – ellers bliver et tomt afsnit (eller punkt) stående.
+        if (has("1.3")) {
+          const para = hit.paragraphs.getFirst();
+          para.load("text");
+          await ctx.sync();
+          if (para.text.trim() === (a.find ?? "").trim()) {
+            para.delete();
+            await ctx.sync();
+            return { ok: true, count: 1 };
+          }
+        }
         hit.delete();
         await ctx.sync();
         return { ok: true, count: 1 };
@@ -233,37 +402,63 @@ export class WordAdapter implements HostAdapter {
       case "comment": {
         const [hit] = await this.find(ctx, scope, a.find);
         if (!hit) return { ok: false, error: "not-found" };
-        hit.insertComment(a.text);
+        const c = hit.insertComment(a.text);
+        c.load("id");
         await ctx.sync();
+        commentIds.push(c.id);
+        return { ok: true, count: 1 };
+      }
+      case "setStyle": {
+        const p = this.paragraph(dc, session, a.paragraph);
+        if (!("delete" in p)) return p;
+        p.styleBuiltIn = STYLE[a.style] as Word.BuiltInStyleName;
+        p.load("isListItem");
+        await ctx.sync();
+        if (p.isListItem && a.style !== "bullet" && a.style !== "numbered") {
+          p.detachFromList();
+          await ctx.sync();
+        }
         return { ok: true, count: 1 };
       }
       case "insert": {
-        let para: Word.Paragraph;
-        if (a.position === "after") {
-          const [anchor] = await this.find(ctx, scope, a.anchor ?? "");
-          if (!anchor) return { ok: false, error: "anchor-missing" };
-          para = has("1.3") ? anchor.paragraphs.getLast().insertParagraph(a.text, "After") : anchor.insertParagraph(a.text, "After");
-        } else if (dc.isWholeDocument) {
-          para = ctx.document.body.insertParagraph(a.text, a.position === "start" ? "Start" : "End");
-        } else {
-          para = scope.insertParagraph(a.text, a.position === "start" ? "Before" : "After");
+        const blocks = parseBlocks(a.text, a.style ?? "normal");
+        if (!blocks.length) return { ok: false, error: "failed", detail: "Ingen tekst" };
+        let anchor: Word.Paragraph | undefined;
+        if (a.position === "before" || a.position === "after") {
+          const p = this.paragraph(dc, session, a.paragraph);
+          if (!("delete" in p)) return p;
+          anchor = p;
         }
-        if (a.style && has("1.3")) para.styleBuiltIn = STYLE[a.style] as Word.BuiltInStyleName;
-        await ctx.sync();
-        return { ok: true, count: 1 };
+        let prev: Word.Paragraph | undefined;
+        for (const b of blocks) {
+          let p: Word.Paragraph;
+          if (prev) p = prev.insertParagraph(b.inline.text, "After");
+          else if (anchor) p = anchor.insertParagraph(b.inline.text, a.position === "before" ? "Before" : "After");
+          else if (dc.isWholeDocument || !session.paras.length) p = ctx.document.body.insertParagraph(b.inline.text, a.position === "start" ? "Start" : "End");
+          else
+            p =
+              a.position === "start"
+                ? session.paras[0].insertParagraph(b.inline.text, "Before")
+                : session.paras[session.paras.length - 1].insertParagraph(b.inline.text, "After");
+          await this.formatNew(ctx, p, b);
+          prev = p;
+        }
+        return { ok: true, count: blocks.length };
       }
       case "move": {
-        const [hit] = await this.find(ctx, scope, a.find);
-        if (!hit) return { ok: false, error: "not-found" };
-        const [anchor] = await this.find(ctx, scope, a.anchor);
-        if (!anchor) return { ok: false, error: "anchor-missing" };
-        // Flyttes som OOXML, så typografi og tabeller bevares; originalen slettes først,
-        // når indsættelsen er lykket (ellers fejler handlingen uden at røre dokumentet).
-        const xml = hit.getOoxml();
+        const src = this.paragraph(dc, session, a.paragraph);
+        if (!("delete" in src)) return src;
+        const dst = this.paragraph(dc, session, a.to);
+        if (!("delete" in dst)) return dst;
+        // Hele afsnittet (inkl. afsnitsmærket) flyttes som OOXML, så typografi, lister og
+        // inline-formatering følger med. Originalen slettes først, når indsættelsen er gået igennem.
+        const xml = src.getRange("Whole").getOoxml();
         await ctx.sync();
-        anchor.insertOoxml(xml.value, a.position === "before" ? "Before" : "After");
-        hit.delete();
+        dst.getRange("Whole").insertOoxml(xml.value, a.position === "before" ? "Before" : "After");
         await ctx.sync();
+        src.delete();
+        await ctx.sync();
+        session.gone.add(a.paragraph);
         return { ok: true, count: 1 };
       }
       default:

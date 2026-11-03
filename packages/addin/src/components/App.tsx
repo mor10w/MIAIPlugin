@@ -21,7 +21,7 @@ import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
 import { statusColors, ui, useOfficeTheme } from "../theme";
 import { ActionsTab } from "./ActionsTab";
-import { ChatTab } from "./ChatTab";
+import { ChatTab, type AgentRequest } from "./ChatTab";
 import { useKitStyles } from "./kit";
 import { SettingsTab } from "./SettingsTab";
 import { TasksTab } from "./TasksTab";
@@ -84,7 +84,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
   const [tab, setTab] = useState<TabId>("actions");
   /** Prompt fra chatten → udfyldes i agent-opgaven, når brugeren vælger "Gør det med agenten". */
-  const [agentRequest, setAgentRequest] = useState<string | null>(null);
+  const [agentRequest, setAgentRequest] = useState<AgentRequest | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "warn" });
   /** Først når første statustjek er færdigt, vises "Kom i gang" (ellers blinker banneret ved start). */
   const [checked, setChecked] = useState(false);

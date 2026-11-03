@@ -22,6 +22,22 @@ export const DocContext = z.object({
   truncated: z.boolean().optional(),
   /** Tekstens oprindelige længde i tegn, når den er afkortet. */
   originalChars: z.number().int().nonnegative().optional(),
+  /**
+   * Word, agent-tilstand: dokumentets afsnit med typografi, så modellen kan se (og bevare)
+   * overskrifter, lister og tabeller. Nummereres fra 1 i prompten. Udeladt i ældre Word.
+   */
+  paragraphs: z
+    .array(
+      z.object({
+        text: z.string().max(20_000),
+        /** Indbygget typografi (fx "Heading1", "ListBullet", "Normal") eller dokumentets eget navn. */
+        style: z.string().max(80),
+        list: z.boolean().optional(),
+        table: z.boolean().optional(),
+      }),
+    )
+    .max(5_000)
+    .optional(),
 });
 export type DocContext = z.infer<typeof DocContext>;
 

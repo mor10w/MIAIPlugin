@@ -1,4 +1,4 @@
-import { AgentPlan, checkPlan, type HostKind } from "@miai/shared";
+import { AgentPlan, checkPlan, type DocContext, type HostKind } from "@miai/shared";
 import type { Check, CheckResult } from "./types.js";
 
 /** Automatiske tjek af et svar (#2). Rene funktioner, så de kan unit-testes uden model. */
@@ -13,6 +13,8 @@ export interface Answer {
   toolCalls: string[];
   /** Værten – til agent-planer. */
   host?: HostKind;
+  /** Word: dokumentets afsnit, som modellen så dem – til tjek af afsnitsnumre i agent-planer. */
+  paragraphs?: DocContext["paragraphs"];
 }
 
 const STOPWORDS: Record<"da" | "en" | "de", string[]> = {
@@ -117,7 +119,7 @@ export function runCheck(check: Check, a: Answer): CheckResult {
         ...(check.exclude ?? []).filter((k) => kinds.includes(k)).map((k) => `indeholder ${k}`),
       ];
       if (check.valid) {
-        const bad = checkPlan(parsed.data, { host: a.host ?? "word", text: a.input }).filter((c) => c.problem);
+        const bad = checkPlan(parsed.data, { host: a.host ?? "word", text: a.input, paragraphs: a.paragraphs }).filter((c) => c.problem);
         if (bad.length) problems.push(`${bad.length} handlinger kan ikke udføres (${bad.map((b) => b.problem).join(", ")})`);
       }
       const list = problems.filter(Boolean);

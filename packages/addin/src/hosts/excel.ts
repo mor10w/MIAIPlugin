@@ -307,7 +307,7 @@ export class ExcelAdapter implements HostAdapter {
           for (const snap of [...snapshots].reverse()) ws.getRange(splitAddress(snap.address).range).formulas = snap.formulas as string[][];
           await c.sync();
         });
-      return { results, undo };
+      return { results, undo, undoKind: "cells" };
     });
   }
 }

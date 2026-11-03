@@ -136,3 +136,16 @@ Skal afprøves i Office desktop.
 - [ ] Endpoint uden for politik afvises; låst maskinpolitik (bridge) kan ikke ændres
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
+
+**Agent i Word – formatering** (simuleringen efterligner Words regler, men kun rigtig Word kan bekræfte dem). Brug et dokument med titel, overskrifter, fed tekst, et link, en punktliste, en nummereret liste og en tabel:
+- [ ] Erstat et ord midt i en sætning med fed tekst: kun ordet skifter, og fed tekst omkring det bevares
+- [ ] Indsæt efter en overskrift: det nye afsnit er brødtekst (ikke overskrift), uden arvet fed eller farve; fed, kursiv og link i teksten virker
+- [ ] Indsæt "- punkt" efter et almindeligt afsnit: bliver et punkt i dokumentets punktstil; "1. …" bliver nummereret
+- [ ] Indsæt efter det sidste punkt i en liste med typografien brødtekst: afsnittet er ikke med i listen
+- [ ] Skift typografi (brødtekst → overskrift 2 og punkt → brødtekst): teksten og dens fed/kursiv er urørt
+- [ ] Slet et helt afsnit: intet tomt afsnit bliver tilbage; slet et punkt: intet tomt punkt
+- [ ] Flyt et afsnit med fed tekst og et link: formateringen følger med, og der opstår intet ekstra tomt afsnit
+- [ ] Tabeller: tekst i en celle kan rettes; sletning/flytning af celleafsnit er fravalgt i planen
+- [ ] Fortryd med sporede ændringer (Microsoft 365): kun agentens ændringer og kommentarer forsvinder; egne sporede ændringer før sessionen er urørte
+- [ ] Fortryd i Word 2016/2019 (uden WordApi 1.6): dokumentet er som før; nummerering i lister og sidehoveder er intakte
+- [ ] Ændr et afsnit mellem plan og "Udfør": handlinger på det afsnit afvises med "Dokumentet er ændret siden planen"

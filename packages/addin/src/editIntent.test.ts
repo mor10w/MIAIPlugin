@@ -16,20 +16,42 @@ describe("looksLikeEditRequest", () => {
   });
 
   it("genkender engelske ændringsord med fleksion", () => {
-    for (const p of [
-      "Add a conclusion to the document",
-      "Please edit the pricing section",
-      "Remove the outdated appendix",
-    ]) {
+    for (const p of ["Add a conclusion to the document", "Please edit the pricing section", "Remove the outdated appendix"]) {
       expect(looksLikeEditRequest(p), p).toBe(true);
     }
   });
 
   it("returnerer false på ren research og almindelig tale", () => {
+    for (const p of ["Laver du research om konkurrenterne?", "Fortæl mig mere om markedet", "Hvad er den bedste model til danske tekster?"]) {
+      expect(looksLikeEditRequest(p), p).toBe(false);
+    }
+  });
+
+  it("æ, ø og å i starten af ordet og danske vendinger (regression: \\b kender kun a–z)", () => {
     for (const p of [
-      "Laver du research om konkurrenterne?",
-      "Fortæl mig mere om markedet",
-      "Hvad er den bedste model til danske tekster?",
+      "Ændr overskriften til Resumé",
+      "Ændre tonen i afsnittet",
+      "Opdatér prislisten",
+      "Gør teksten kortere",
+      "Gør afsnittet til en overskrift",
+      "Skriv en konklusion til dokumentet",
+      "Lav afsnit 2 om til punktform",
+      "Ret 'kunde' til 'klient' overalt",
+      "Make the intro shorter",
+      "Change the title to Q3",
+    ]) {
+      expect(looksLikeEditRequest(p), p).toBe(true);
+    }
+  });
+
+  it("tvetydige ord udløser ikke forslaget", () => {
+    for (const p of [
+      "Hvad mangler vi for at vinde markedet?",
+      "Det er ret godt skrevet, ikke?",
+      "Hvad er din email address?",
+      "Hvad betyder climate change for os?",
+      "What is the latest update on the project?",
+      "Hvad er en tilføjelse til en kontrakt?",
     ]) {
       expect(looksLikeEditRequest(p), p).toBe(false);
     }

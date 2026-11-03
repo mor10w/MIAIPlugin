@@ -6,56 +6,118 @@ const DOC = "Vi har mange kunder i Jylland. Alle kunder får besked.\nKontakt os
 const EDITS = (kinds: string[]) => (c: { kind: string }) => kinds.includes(c.kind);
 const DOC_EDITS = EDITS(["replace", "insertText", "insertParagraph", "delete", "comment", "style", "insertOoxml"]);
 
-test("Word: planen vises først, intet ændres før Udfør; valgte handlinger udføres som sporede ændringer og kan fortrydes", async ({ open }) => {
-  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, document: DOC });
-  tp.model.reply = () => ({
-    json: JSON.stringify({
-      summary: "Retter kunder til klienter, tilføjer en overskrift og fjerner den gamle note.",
-      actions: [
-        { action: "replace", find: "kunder", replace: "klienter", all: true, reason: "Ønsket ordvalg" },
-        { action: "insert", text: "Kundeinformation", position: "start", style: "heading1", reason: "Overskrift" },
-        { action: "delete", find: "Gammel note, der skal væk.", reason: "Forældet" },
-        { action: "comment", find: "info@firma.dk", text: "Er adressen stadig gyldig?", reason: "Tjek" },
-        { action: "replace", find: "findes ikke i teksten", replace: "x", reason: "Opdigtet" },
-      ],
-    }),
-  });
+/** Et lille dokument med overskrift, fed tekst, punkt, tabel og direkte formatering. */
+const PARAS = [
+  { text: "Kundeinformation", style: "Heading1" },
+  { text: "Pris: 499 kr pr. md. for alle kunder.", style: "Normal", marks: [{ start: 0, end: 5, bold: true }] },
+  { text: "Levering 3-5 dage", style: "ListBullet", list: true },
+  { text: "Pris", style: "Normal", table: true },
+  { text: "Gammel note, der skal væk.", style: "Normal", bold: true },
+  { text: "Kontakt os på info@firma.dk.", style: "Normal" },
+];
+type DocP = {
+  text: string;
+  style: string;
+  list: boolean;
+  table: boolean;
+  bold: boolean;
+  marks: { start: number; end: number; bold?: boolean; italic?: boolean; link?: string }[];
+};
+const doc = (tp: { page: import("@playwright/test").Page }) => tp.page.evaluate(() => (window as unknown as { __miai: { doc: () => DocP[] } }).__miai.doc());
+const ORIGINAL: DocP[] = PARAS.map((p) => ({ list: false, table: false, bold: false, marks: [], ...p }) as DocP);
+
+const PLAN = {
+  summary: "Opdaterer prisen, tilføjer leveringstekst og et punkt, rydder op og flytter kontaktlinjen.",
+  actions: [
+    { action: "replace", find: "Pris: 499 kr pr. md.", replace: "Pris: 599 kr pr. md.", reason: "Ny pris" },
+    { action: "insert", text: "Vi leverer **hurtigt** – se [vilkår](https://firma.dk/vilkaar).", position: "after", paragraph: 1, reason: "Intro" },
+    { action: "insert", text: "- Returnering inden 30 dage", position: "after", paragraph: 3, reason: "Nyt punkt" },
+    { action: "setStyle", paragraph: 6, style: "heading2", reason: "Fremhæv kontakt" },
+    { action: "delete", paragraph: 5, reason: "Forældet" },
+    { action: "move", paragraph: 6, to: 2, position: "before", reason: "Kontakt først" },
+    { action: "delete", paragraph: 4, reason: "Tabellen er overflødig" },
+    { action: "comment", find: "info@firma.dk", text: "Stadig gyldig?", reason: "Tjek" },
+  ],
+};
+
+test("Word: formateringen bevares – kun det ændrede ændres, ny tekst arver ikke naboens formatering, og fortryd afviser sessionens ændringer", async ({
+  open,
+}) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  tp.model.reply = () => ({ json: JSON.stringify(PLAN) });
   await tp.run("Agent: redigér dokumentet");
   await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
 
-  // Hele dokumentet sendes (ingen markering), indpakket som data.
+  // Modellen ser afsnittene med typografi, liste og tabel.
   const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
-  expect(prompt).toContain(`<document>\n${DOC}\n</document>`);
+  expect(prompt).toContain(
+    "¶1 [Heading1] Kundeinformation\n¶2 [Normal] Pris: 499 kr pr. md. for alle kunder.\n¶3 [ListBullet] (list) Levering 3-5 dage\n¶4 [Normal] (table) Pris",
+  );
 
-  // Planen: læsbare handlinger, destruktive fremhævet, tekst der ikke findes, er fravalgt.
-  await expect(tp.page.getByRole("checkbox", { name: "Erstat alle “kunder” med “klienter”" })).toBeChecked();
-  await expect(tp.page.getByText("Fjerner indhold")).toBeVisible();
-  const missing = tp.page.getByRole("checkbox", { name: "Erstat “findes ikke i teksten” med “x”" });
-  await expect(missing).toBeDisabled();
-  await expect(tp.page.getByText("Teksten findes ikke i dokumentet")).toBeVisible();
-  expect((await tp.calls()).filter(DOC_EDITS)).toEqual([]);
+  // Planen: læsbar, strukturændring i tabellen fravalgt, intet ændret endnu.
+  await expect(tp.page.getByRole("checkbox", { name: "Gør ¶6 “Kontakt os på info@firma.dk.” til overskrift 2" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Slet afsnittet ¶4 “Pris”" })).toBeDisabled();
+  await expect(tp.page.getByText("Ville ændre en tabels opbygning")).toBeVisible();
+  expect(await doc(tp)).toEqual(ORIGINAL);
 
-  // Fravælg kommentaren og udfør resten.
-  await tp.page.getByRole("checkbox", { name: /Kommentar på “info@firma.dk”/ }).uncheck();
-  await expect(tp.page.getByRole("switch", { name: "Som sporede ændringer" })).toBeChecked();
-  await tp.page.getByRole("button", { name: "Udfør 3 handlinger" }).click();
-  await expect(tp.page.getByText("3 af 3 handlinger udført.")).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 7 handlinger" }).click();
+  await expect(tp.page.getByText("7 af 7 handlinger udført.")).toBeVisible();
 
-  const calls = await tp.calls();
-  expect(calls.filter((c) => c.kind === "replace")).toEqual([
-    expect.objectContaining({ from: "kunder", to: "klienter" }),
-    expect.objectContaining({ from: "kunder", to: "klienter" }),
+  const after = await doc(tp);
+  expect(after.map((p) => [p.style, p.text])).toEqual([
+    ["Heading1", "Kundeinformation"],
+    ["Normal", "Vi leverer hurtigt – se vilkår."],
+    ["Heading2", "Kontakt os på info@firma.dk."],
+    ["Normal", "Pris: 599 kr pr. md. for alle kunder."],
+    ["ListBullet", "Levering 3-5 dage"],
+    ["ListBullet", "Returnering inden 30 dage"],
+    ["Normal", "Pris"],
   ]);
-  expect(calls).toContainEqual(expect.objectContaining({ kind: "insertParagraph", text: "Kundeinformation", loc: "Start" }));
-  expect(calls).toContainEqual(expect.objectContaining({ kind: "style", style: "Heading1" }));
-  expect(calls).toContainEqual(expect.objectContaining({ kind: "delete", text: "Gammel note, der skal væk." }));
-  expect(calls.some((c) => c.kind === "comment")).toBe(false);
-  await expect(tp.page.getByText("2 steder")).toBeVisible();
+  // Erstat: kun "499" er skiftet ud – "Pris:" er stadig fed, og fed har ikke bredt sig.
+  expect(after[3].marks).toEqual([{ start: 0, end: 5, bold: true }]);
+  // Ny tekst efter en overskrift er brødtekst uden arvet fed – med egen fed og link.
+  expect(after[1]).toMatchObject({ bold: false, list: false });
+  expect(after[1].marks).toEqual([
+    { start: 11, end: 18, bold: true },
+    { start: 24, end: 30, link: "https://firma.dk/vilkaar" },
+  ]);
+  // Punktet er et punkt; tabellen er urørt; den slettede note efterlader intet tomt afsnit.
+  expect(after[5]).toMatchObject({ list: true });
+  expect(after[6]).toMatchObject({ table: true });
+  expect(after.some((p) => p.text === "" || p.text.includes("Gammel note"))).toBe(false);
 
-  // Fortryd gendanner øjebliksbilledet fra før sessionen.
+  // Fortryd: sessionens sporede ændringer afvises, og agentens kommentar fjernes.
+  await expect(tp.page.getByText(/afviser agentens sporede ændringer/)).toBeVisible();
   await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
   await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
-  expect(await tp.find("insertOoxml")).toMatchObject({ ooxml: "<pkg:package>øjebliksbillede</pkg:package>", loc: "Replace" });
+  expect(await doc(tp)).toEqual(ORIGINAL);
+  expect(await tp.page.evaluate(() => (window as unknown as { __miai: { comments: () => unknown[] } }).__miai.comments())).toEqual([]);
+  // Øjebliksbilledet (hele dokumentet erstattet) er ikke brugt.
+  expect((await tp.calls()).some((c) => c.kind === "insertOoxml" && c.loc === "Replace")).toBe(false);
+});
+
+test("Word uden WordApi 1.6: fortryd gendanner fra øjebliksbillede", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, paragraphs: PARAS });
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "", actions: [PLAN.actions[0], PLAN.actions[4]] }) });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  await expect(tp.page.getByText(/også ændringer, du selv har lavet siden/)).toBeVisible();
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await doc(tp)).toEqual(ORIGINAL);
+});
+
+test("Word: ændres dokumentet mellem plan og udførelse, røres de berørte afsnit ikke", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "", actions: [{ action: "setStyle", paragraph: 6, style: "heading2", reason: "" }] }) });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.evaluate(() =>
+    (window as unknown as { __miai: { editParagraph: (i: number, t: string) => void } }).__miai.editParagraph(5, "Ring på 12 34 56 78."),
+  );
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("Dokumentet er ændret siden planen – kør agenten igen")).toBeVisible();
+  expect((await doc(tp))[5].style).toBe("Normal");
 });
 
 test("Excel (bridge): værdier og formel skrives på arket og fortrydes celle for celle", async ({ open }) => {
@@ -131,4 +193,31 @@ test("English UI: the plan and confirmation are localized", async ({ open }) => 
   await expect(tp.page.getByRole("button", { name: "Undo agent session" })).toBeVisible();
   // The request asked for English reasons.
   expect(tp.model.lastRequest!.messages[0].content).toContain("Write summary and reasons in English");
+});
+
+test("chat → agent: forslaget vises ved ændringsønsker, og chatsvaret følger med som indhold", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  await tp.tab("Chat");
+  // Et spørgsmål giver intet forslag.
+  tp.model.reply = () => ({ stream: ["Vi mangler et afsnit om levering."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad mangler vi i dokumentet?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Vi mangler et afsnit om levering.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Gør det med agenten" })).toHaveCount(0);
+
+  // Et ændringsønske (med æ i starten – regression) giver forslaget.
+  tp.model.reply = () => ({ stream: ["## Levering\nVi leverer på **3 dage**."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Ændr dokumentet, så det har et afsnit om levering");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Indsæt i dokumentet")).toBeVisible();
+  await tp.page.getByRole("button", { name: "Gør det med agenten" }).click();
+
+  // Agent-opgaven er udfyldt med ønsket og har chatsvaret med som indhold.
+  await expect(tp.page.getByRole("heading", { name: "Agent: redigér dokumentet" })).toBeVisible();
+  await expect(tp.page.getByRole("textbox")).toHaveValue("Ændr dokumentet, så det har et afsnit om levering");
+  await expect(tp.page.getByText("Bruger chatsvaret som indhold.")).toBeVisible();
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Tilføjer afsnittet.", actions: [] }) });
+  await tp.page.getByRole("button", { name: "Kør" }).click();
+  await expect(tp.page.getByText("Tilføjer afsnittet.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[1].content).toContain("<material>\n## Levering\nVi leverer på **3 dage**.\n</material>");
 });

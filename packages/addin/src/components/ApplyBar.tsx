@@ -16,6 +16,8 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
     border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke1}`,
   },
+  /** Uden etiket (fx i Handlinger, hvor resultatkortet allerede har en skillelinje): ingen ekstra ramme. */
+  plain: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS },
   label: { fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground2 },
   bar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
   msg: { marginTop: tokens.spacingVerticalXS },
@@ -63,7 +65,7 @@ export function ApplyBar({ modes, apply, copyText, label }: Props) {
   };
 
   return (
-    <div className={s.zone}>
+    <div className={label ? s.zone : s.plain}>
       {label && <Caption1 className={s.label}>{label}</Caption1>}
       <div className={s.bar}>
         {modes.map((m, i) => (

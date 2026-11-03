@@ -14,8 +14,11 @@ import { Markdown } from "./Markdown";
 import { SourceList } from "./SourceList";
 import { looksLikeEditRequest } from "../editIntent";
 
-/** Nøgle for førstegangs-hintet om apply-knapperne (gemmes, når brugeren har trykket en). */
-const HINT_KEY = "miai.chatApplyHint.v1";
+/** Chat → agent: brugerens ønske og chatsvaret, som agenten skal bruge som indhold. */
+export interface AgentRequest {
+  prompt: string;
+  material: string;
+}
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS, minHeight: 0 },
@@ -81,7 +84,7 @@ const useStyles = makeStyles({
   },
 });
 
-export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAgent?: (prompt: string) => void }) {
+export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAgent?: (req: AgentRequest) => void }) {
   const { t } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
@@ -107,14 +110,6 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   /** Seneste brugermelding – afgør, om chatten foreslår agent-tilstanden. */
   const [lastUserPrompt, setLastUserPrompt] = useState("");
   /** Førstegangs-hint om apply-knapperne: vises, indtil brugeren har trykket en. */
-  const [hintSeen, setHintSeen] = useState(() => {
-    try { return localStorage.getItem(HINT_KEY) === "1"; } catch { return true; }
-  });
-  const markHintSeen = () => {
-    if (hintSeen) return;
-    try { localStorage.setItem(HINT_KEY, "1"); } catch { /* hint må gerne vise igen */ }
-    setHintSeen(true);
-  };
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -183,12 +178,10 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
               {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
               {i === lastAssistant && !running && (
                 <div className={s.applyZone}>
-                  {!hintSeen && <Caption1 className={s.muted}>{t("chatApplyHint")}</Caption1>}
                   <ApplyBar
                     label={t("applyLabel")}
                     modes={modesFor(m.content)}
                     apply={(mode) => {
-                      markHintSeen();
                       return mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current);
                     }}
                     copyText={m.content}
@@ -200,7 +193,12 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                         <br />
                         <Caption1 className={s.muted}>{t("agentSuggestText")}</Caption1>
                       </span>
-                      <Button size="small" appearance="primary" icon={<Flash20Regular />} onClick={() => onUseAgent(lastUserPrompt)}>
+                      <Button
+                        size="small"
+                        appearance="primary"
+                        icon={<Flash20Regular />}
+                        onClick={() => onUseAgent({ prompt: lastUserPrompt, material: m.content })}
+                      >
                         {t("agentSuggestCta")}
                       </Button>
                     </div>

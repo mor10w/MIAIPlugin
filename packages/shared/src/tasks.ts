@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { ChatMessage, DocContext, HostKind, ParsedTaskRequest, Source } from "./types.js";
 import { DiagramResult } from "./diagram.js";
-import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS } from "./agent.js";
+import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, renderParagraphs } from "./agent.js";
 
 export type ApplyMode =
   | "replace" // erstat markeringen
@@ -635,6 +635,9 @@ export const TASKS: TaskDefinition[] = [
         ),
         user(
           `Request: ${req.params.prompt ?? ""}`,
+          // Chat → agent: teksten, brugeren har set og godkendt i chatten, er indholdet, der skal bruges.
+          req.params.material &&
+            `Content from the chat that the user wants in the document (use this wording; adapt only Markdown structure and placement):\n<material>\n${req.params.material}\n</material>`,
           excel
             ? [
                 `Selected range: ${c.address ?? "?"}`,
@@ -643,7 +646,9 @@ export const TASKS: TaskDefinition[] = [
               ]
                 .filter(Boolean)
                 .join("\n\n")
-            : `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"}:\n${doc(c.text)}`,
+            : c.paragraphs?.length
+              ? `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"} as numbered paragraphs:\n${doc(renderParagraphs(c.paragraphs))}`
+              : `The user's ${c.isWholeDocument ? "document" : "selection (actions only apply inside it)"}:\n${doc(c.text)}`,
         ),
       ];
     },

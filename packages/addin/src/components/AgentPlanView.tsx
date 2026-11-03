@@ -15,7 +15,7 @@ import {
   tokens,
 } from "@fluentui/react-components";
 import { ArrowUndo16Regular, CheckmarkCircle16Regular, ErrorCircle16Regular, Play16Filled } from "@fluentui/react-icons";
-import { checkPlan, isDestructive, type AgentAction, type AgentPlan, type DocContext } from "@miai/shared";
+import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext } from "@miai/shared";
 import type { AgentOutcome, HostAdapter } from "../hosts/types";
 import { useI18n, type T } from "../i18n";
 
@@ -43,20 +43,42 @@ const useStyles = makeStyles({
 
 const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+/** Afsnit ¶n som "¶3 “Priser…”", så brugeren kan se, hvilket afsnit der menes. */
+const paraLabel = (n: number | undefined, ctx?: DocContext) => {
+  const p = n !== undefined ? ctx?.paragraphs?.[n - 1] : undefined;
+  return p ? `¶${n} “${clip(p.text, 40)}”` : `¶${n ?? "?"}`;
+};
+
 /** Menneskelig beskrivelse af én handling (da/en). */
-export function describeAction(a: AgentAction, t: T): string {
+export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
   switch (a.action) {
     case "replace":
       return t(a.all ? "agentAct_replaceAll" : "agentAct_replace", { find: clip(a.find, 50), replace: clip(a.replace, 50) });
     case "insert": {
       const where =
-        a.position === "start" ? t("agentPosStart") : a.position === "end" ? t("agentPosEnd") : t("agentPosAfter", { anchor: clip(a.anchor ?? "", 40) });
-      return `${t("agentAct_insert", { text: clip(a.text) })} – ${where}`;
+        a.position === "start"
+          ? t("agentPosStart")
+          : a.position === "end"
+            ? t("agentPosEnd")
+            : t(a.position === "before" ? "agentPosBefore" : "agentPosAfter", { anchor: paraLabel(a.paragraph, ctx) });
+      // Vis teksten uden Markdown-tegn (som den vil se ud i dokumentet).
+      const plain = parseBlocks(a.text)
+        .map((b) => b.inline.text)
+        .join(" · ");
+      return `${t("agentAct_insert", { text: clip(plain) })} – ${where}`;
     }
     case "delete":
-      return t("agentAct_delete", { find: clip(a.find) });
+      return a.paragraph !== undefined
+        ? t("agentAct_deleteParagraph", { paragraph: paraLabel(a.paragraph, ctx) })
+        : t("agentAct_delete", { find: clip(a.find ?? "") });
     case "move":
-      return t("agentAct_move", { find: clip(a.find, 40), where: t(a.position === "before" ? "agentBefore" : "agentAfter"), anchor: clip(a.anchor, 40) });
+      return t("agentAct_move", {
+        find: paraLabel(a.paragraph, ctx),
+        where: t(a.position === "before" ? "agentBefore" : "agentAfter"),
+        anchor: paraLabel(a.to, ctx),
+      });
+    case "setStyle":
+      return t("agentAct_setStyle", { paragraph: paraLabel(a.paragraph, ctx), style: t(`agentStyle_${a.style}` as const) });
     case "comment":
       return t("agentAct_comment", { find: clip(a.find, 40), text: clip(a.text) });
     case "setValues":
@@ -129,7 +151,7 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
           <ul className={s.list} aria-label={t("agentPlanTitle")}>
             {checked.map((c, i) => {
               const r = resultFor(i);
-              const label = describeAction(c.action, t);
+              const label = describeAction(c.action, t, ctx);
               return (
                 <li key={i} className={s.item}>
                   <Checkbox
@@ -191,7 +213,9 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
               {t("agentUndo")}
             </Button>
           </div>
-          {ctx.host === "word" && <Caption1 className={s.muted}>{t("agentUndoNote")}</Caption1>}
+          <Caption1 className={s.muted}>
+            {t(phase.outcome.undoKind === "snapshot" ? "agentUndoNote" : phase.outcome.undoKind === "tracked" ? "agentUndoTracked" : "agentUndoCells")}
+          </Caption1>
         </>
       ) : (
         <MessageBar intent="success">

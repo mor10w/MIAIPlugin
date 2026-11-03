@@ -16,7 +16,7 @@ export interface AgentStepResult {
   /** Antal steder, handlingen ramte (fx forekomster erstattet eller celler skrevet). */
   count?: number;
   /** Hvorfor handlingen ikke blev udført – oversættes i UI'et. */
-  error?: "not-found" | "anchor-missing" | "other-sheet" | "formula-error" | "failed";
+  error?: "not-found" | "anchor-missing" | "other-sheet" | "formula-error" | "changed" | "no-structure" | "failed";
   /** Teknisk detalje, fx Office' fejlbesked eller Excels fejlværdi (#VALUE!). */
   detail?: string;
 }
@@ -26,6 +26,11 @@ export interface AgentOutcome extends ApplyOutcome {
   results: AgentStepResult[];
   /** Fortryder hele agent-sessionen. */
   undo: () => Promise<void>;
+  /**
+   * Hvordan fortryd virker: tracked = afviser sessionens sporede ændringer (resten af dokumentet
+   * røres ikke); snapshot = gendanner dokumentets indhold fra før sessionen; cells = Excel-celler.
+   */
+  undoKind: "tracked" | "snapshot" | "cells";
 }
 
 export interface AgentOptions {
@@ -42,6 +47,8 @@ export interface ContextOptions {
    * "stats" = kolonnestatistik over hele used range (op til 5.000 rækker) – kun når opgaven bruger den.
    */
   overview?: "headers" | "stats";
+  /** Word: medtag afsnittene med typografi, liste og tabel (agent-tilstand, kræver WordApi 1.3). */
+  structure?: boolean;
   /** Maks. antal tegn tekst (standard MAX_CONTEXT_CHARS; opgaver med map-reduce får mere). */
   maxChars?: number;
 }

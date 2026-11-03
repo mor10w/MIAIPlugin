@@ -187,7 +187,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 **Agent: redigér dokumentet** udfører ændringer for dig. Beskriv, hvad der skal ændres, fx *"ret alle 'kunde' til 'klient' og tilføj overskriften 'Vilkår' øverst"* eller i Excel *"tilføj en total-række under tabellen"*.
 
 1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
-   - Word: erstat, indsæt afsnit med indbygget typografi (overskrift, punktopstilling), slet, flyt og kommentér.
+   - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit og kommentér.
    - Excel: skriv værdier, skriv en formel og ryd et område.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
@@ -195,9 +195,22 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
    - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.
 3. **Udfør.** Hver handling får ✓ eller en forklaring.
 
-Hele sessionen kan fortrydes med **Fortryd agent-session**. I Word gendannes dokumentets indhold fra lige før, også ændringer du selv har lavet siden. I Excel gendannes de berørte celler.
+**Formateringen bevares.** Agenten ser dokumentet afsnit for afsnit med typografi (overskrift, brødtekst, punkt, tabel), så den kan arbejde med strukturen frem for imod den:
+- **Erstat** ændrer kun de ord, der faktisk er forskellige. Fed, kursiv og links omkring dem bliver stående.
+- **Ny tekst** får sin egen typografi og arver ikke naboens formatering. En linje efter en overskrift bliver altså brødtekst, ikke endnu en overskrift. Agenten kan selv skabe formatering: overskrifter, punkter, nummererede lister, citater, **fed**, *kursiv* og links. Skrifttype, farve og størrelse følger dokumentets egne typografier.
+- **Skift af typografi** sker uden at røre teksten.
+- **Slet og flyt** virker på hele afsnit. Flyttede afsnit beholder deres formatering, og slettede efterlader ingen tomme linjer.
+- **Tabeller** kan få deres tekst rettet, men agenten må ikke slette, flytte eller indsætte i dem.
+- Har du ændret dokumentet, efter planen blev lavet, rører agenten ikke de berørte afsnit. Kør den igen.
 
-Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark. Den har ingen adgang til netværk, filer eller formatering, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
+Hele sessionen kan fortrydes med **Fortryd agent-session**:
+- I Word med sporede ændringer (standard, Word 2021/Microsoft 365) afvises agentens ændringer og kommentarer, og resten af dokumentet røres ikke.
+- I ældre Word eller uden sporede ændringer gendannes indholdet fra lige før. Det fjerner også ændringer, du selv har lavet siden.
+- I Excel gendannes de berørte celler.
+
+Fra **chatten** kan du sende et ændringsønske videre med **Gør det med agenten**. Agenten bruger chatsvaret, du lige har set, som indhold i stedet for at skrive en ny tekst.
+
+Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark. Den har ingen adgang til netværk eller filer, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
 
 ### Viden fra mine mapper (bridge og MIAI App)
 

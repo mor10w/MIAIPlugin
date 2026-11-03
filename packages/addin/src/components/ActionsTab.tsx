@@ -43,6 +43,7 @@ import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
 import { AgentPlanView } from "./AgentPlanView";
+import type { AgentRequest } from "./ChatTab";
 import { ApplyBar } from "./ApplyBar";
 import { EmptyState, IconTile, SectionLabel, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
@@ -127,7 +128,16 @@ const useStyles = makeStyles({
   mono: { fontFamily: tokens.fontFamilyMonospace, wordBreak: "break-all" },
 });
 
-export function ActionsTab({ adapter, agentRequest, onAgentRequestConsumed }: { adapter: HostAdapter; agentRequest?: string | null; onAgentRequestConsumed?: () => void }) {
+export function ActionsTab({
+  adapter,
+  agentRequest,
+  onAgentRequestConsumed,
+}: {
+  adapter: HostAdapter;
+  /** Chat → agent: ønsket og chatsvaret, der skal bruges som indhold. */
+  agentRequest?: AgentRequest | null;
+  onAgentRequestConsumed?: () => void;
+}) {
   const { t, lang } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
@@ -152,7 +162,8 @@ export function ActionsTab({ adapter, agentRequest, onAgentRequestConsumed }: { 
     }
     setTaskId(tk.id);
     const defaults = Object.fromEntries(tk.params.filter((p) => p.default).map((p) => [p.name, p.default!]));
-    setParams({ ...defaults, prompt: agentRequest });
+    // Chatsvaret gives med som indhold, så agenten indsætter den tekst, brugeren har set – ikke en ny.
+    setParams({ ...defaults, prompt: agentRequest.prompt, material: agentRequest.material });
     setInputError(undefined);
     reset();
     onAgentRequestConsumed?.();
@@ -186,6 +197,8 @@ export function ActionsTab({ adapter, agentRequest, onAgentRequestConsumed }: { 
       const ctx = await adapter.getContext({
         // Agenten arbejder på markeringen eller – uden markering – hele dokumentet (#6).
         wholeDocumentFallback: task.input === "selectionOrDocument" || task.id === "agent",
+        // Agenten ser afsnittene med typografi, så den kan bevare formateringen.
+        structure: task.id === "agent",
         // Kolonnestatistik over hele arket er dyr at hente og bruges kun af dataanalysen.
         overview: task.id === "analyze-data" ? "stats" : "headers",
         // Opgaver, der deler lange tekster op, kan få meget mere end standardgrænsen.
@@ -331,6 +344,15 @@ export function ActionsTab({ adapter, agentRequest, onAgentRequestConsumed }: { 
               </Field>
             ),
           )}
+
+        {params.material && (
+          <div className={s.runRow}>
+            <Caption1 className={s.muted}>{t("agentMaterial")}</Caption1>
+            <Button size="small" appearance="subtle" onClick={() => setParams(({ material: _, ...rest }) => rest)}>
+              {t("agentMaterialRemove")}
+            </Button>
+          </div>
+        )}
 
         <div className={s.runRow}>
           {running ? (
