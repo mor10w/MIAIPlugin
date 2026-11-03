@@ -60,8 +60,8 @@ Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
 Add-in'et hostes på GitHub Pages, og add-in'et kalder selv dit inference-værktøj. Du skal kun bruge inference-værktøjet og ét manifest:
 
-1. Hent `https://<bruger>.github.io/<repo>/manifest.xml` og sideload det.
-2. Tillad CORS fra `https://<bruger>.github.io` i dit værktøj:
+1. Hent [`https://mor10w.github.io/MIAIPlugin/manifest.xml`](https://mor10w.github.io/MIAIPlugin/manifest.xml) og sideload det (i en fork: `https://<bruger>.github.io/<repo>/manifest.xml`).
+2. Tillad CORS fra `https://mor10w.github.io` i dit værktøj:
    - Ollama, Windows: sæt brugermiljøvariablen `OLLAMA_ORIGINS=https://mor10w.github.io` og genstart Ollama.
    - Ollama, Mac: `launchctl setenv OLLAMA_ORIGINS https://mor10w.github.io` og genstart Ollama.
    - LM Studio: slå "Enable CORS" til under Developer/Server.
