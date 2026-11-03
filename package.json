@@ -12,7 +12,7 @@
   ],
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "build": "npm run build -w @miai/shared && npm run build -w @miai/bridge && npm run build -w @miai/addin",

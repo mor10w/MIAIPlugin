@@ -199,6 +199,34 @@ Hele sessionen kan fortrydes med **Fortryd agent-session**. I Word gendannes dok
 
 Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark. Den har ingen adgang til netværk, filer eller formatering, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
 
+### Viden fra mine mapper (bridge og MIAI App)
+
+Chatten kan svare ud fra dine egne filer og vise, hvilke filer svaret bygger på. Filerne bliver på maskinen. Kun de relevante tekstuddrag sendes til din egen model.
+
+1. **Hent en embedding-model** i dit inference-værktøj. Det er en lille model, der gør tekst søgbar:
+
+   | Model | Hvornår | Hent (Ollama) |
+   |---|---|---|
+   | **bge-m3** (anbefalet) | Dansk og blandede sprog, god kvalitet | `ollama pull bge-m3` |
+   | embeddinggemma | Lettere, flersproget, til laptops | `ollama pull embeddinggemma` |
+   | nomic-embed-text | Hurtig, mest til engelsk | `ollama pull nomic-embed-text` |
+   | qwen3-embedding | Organisationer med en GPU-server | `ollama pull qwen3-embedding` |
+
+   LM Studio, llama.cpp og vLLM virker også, hvis de understøtter `/v1/embeddings`. Gør de ikke, siger MIAI det.
+2. **Indstillinger → Viden fra mine mapper.** Slå *Søg i mine mapper* til, og tilføj mapper, fx `C:\Users\dig\Documents\Politikker` eller `~/Dokumenter`. Vælg embedding-modellen og tryk **Gem**. Indekseringen starter, og status viser antal filer og uddrag.
+3. **I chatten** er *Søg i mine mapper* slået til. Svaret citerer kilderne som [1], [2] …, og under svaret står **Kilder fra dine mapper**. Klik på en kilde for at se uddraget og stien. **Åbn fil** åbner filen i Word, Acrobat osv.
+
+**Hvad der indekseres:**
+- Filtyper: Word (.docx), PDF, Excel (.xlsx), PowerPoint (.pptx), Markdown, tekst og CSV.
+- Springes over: skjulte filer, Office' låsefiler (`~$…`) og filer over 30 MB.
+- Loftet er 10.000 filer.
+
+**Opdatering:** ændringer i mapperne opdages automatisk og indekseres efter få sekunder, og kun ændrede filer læses igen. *Indeksér nu* tvinger en opdatering. Skifter du embedding-model, bygges indekset forfra.
+
+**Hvor data ligger:** indekset ligger i `knowledge.db` ved siden af `config.json`. Slet filen for at fjerne alt.
+
+**Politik:** en organisation kan slå funktionen fra (`"knowledge": false` i `policy.json`) eller begrænse den til bestemte mapper (`"knowledgeFolders": ["D:\\Fælles\\Håndbøger"]`). Med audit-log slået til logges indeksering og opslag med antal og varighed, aldrig stier, spørgsmål eller indhold. Se [ADR-0013](adr/0013-lokal-rag.md).
+
 ## Brugerdefinerede opgaver
 
 Fanen **Opgaver** viser dine egne opgaver, som du kan oprette, redigere, slette og importere/eksportere. En opgave er en JSON-fil:

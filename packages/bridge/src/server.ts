@@ -25,6 +25,8 @@ import { PolicyError, type ConfigStore } from "./config.js";
 import { invalidateUserTasks, loadUserTasks, mergedCatalog, userTasksDir } from "./userTasks.js";
 import { tokenMatches } from "./identity.js";
 import { runTask } from "./runner.js";
+import { folderAllowed, KnowledgeIndex } from "./knowledge/index.js";
+import { openFile } from "./knowledge/open.js";
 import { pickLang, renderStatusPage } from "./statusPage.js";
 
 export const VERSION = "0.1.0";
@@ -43,12 +45,26 @@ export interface ServerOptions {
   /** TLS (cert/key). Udeladt i tests. */
   https?: { cert: Buffer; key: Buffer };
   fastify?: FastifyServerOptions;
+  /** Vidensindeks (F15). Udeladt = et indeks i konfigurationsmappen. */
+  knowledge?: KnowledgeIndex;
+  /** Åbner en fil i dens standardprogram (kan erstattes i tests). */
+  open?: (path: string) => Promise<void>;
 }
 
-export async function buildServer({ store, port, addinDir, https, token, fastify }: ServerOptions): Promise<FastifyInstance> {
+export async function buildServer({
+  store,
+  port,
+  addinDir,
+  https,
+  token,
+  fastify,
+  knowledge: kIndex,
+  open = openFile,
+}: ServerOptions): Promise<FastifyInstance> {
   const opts = { logger: false, bodyLimit: 2 * 1024 * 1024, ...fastify, ...(https ? { https } : {}) };
   // Fastifys typer skelner mellem http- og https-instanser; vi bruger den fælles FastifyInstance.
   const app = Fastify(opts as FastifyServerOptions) as unknown as FastifyInstance;
+  const knowledge = attachKnowledge(app, kIndex ?? new KnowledgeIndex(store));
 
   // --- Sikkerhed -----------------------------------------------------------
   // Bridgen lytter kun på loopback. Derudover:
@@ -167,12 +183,18 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
     for (const e of body.data.settings.endpoints) {
       if (e.apiKey === KEY_MASK) e.apiKey = current.endpoints.find((c) => c.id === e.id)?.apiKey ?? "";
     }
+    // Mapper til lokal RAG skal være tilladt af den politik, der gælder efter gem (F15).
+    const nextPolicy = body.data.policy ?? store.getPolicy();
+    const k = body.data.settings.knowledge;
+    const denied = k.enabled ? k.folders.find((f) => !folderAllowed(f, nextPolicy)) : undefined;
+    if (denied) return reply.code(400).send({ error: `Mappen ${denied} må ikke indekseres ifølge politikken.` });
     try {
       store.update(body.data.settings, body.data.policy);
     } catch (err) {
       if (err instanceof PolicyError) return reply.code(400).send({ error: err.message });
       throw err;
     }
+    knowledge.configure();
     return { ok: true };
   });
 
@@ -202,7 +224,7 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
       if (!reply.raw.writableEnded) reply.raw.write(`data: ${JSON.stringify(e)}\n\n`);
     };
     try {
-      await runTask({ task, req: parsed.data, store, emit, signal: abort.signal });
+      await runTask({ task, req: parsed.data, store, emit, signal: abort.signal, knowledge });
     } finally {
       reply.raw.end();
     }
@@ -249,9 +271,51 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
   // --- Audit-log (kun metadata) ----------------------------------------------
   app.get("/api/audit", async () => readAuditTail(auditFile(store.dir), 100));
 
+  // --- Lokal RAG (F15, ADR-0013) ---------------------------------------------
+  app.get("/api/knowledge", async () => knowledge.getStatus());
+  app.addHook("preHandler", async (req, reply) => {
+    if (knowledge.unavailable && req.url.startsWith("/api/knowledge/")) return reply.code(503).send({ error: knowledge.unavailable });
+  });
+
+  app.post("/api/knowledge/reindex", async () => {
+    void knowledge.reindex();
+    // Lad kørslen nå at starte, så status viser "indexing".
+    await new Promise((ok) => setImmediate(ok));
+    return knowledge.getStatus();
+  });
+
+  /** Hele uddraget bag en kildehenvisning. */
+  app.get("/api/knowledge/chunks/:id", async (req, reply) => {
+    const id = Number((req.params as { id: string }).id);
+    const c = Number.isInteger(id) ? knowledge.db.chunk(id) : undefined;
+    if (!c) return reply.code(404).send({ error: "Uddraget findes ikke (indekset kan være opdateret)." });
+    return c;
+  });
+
+  /**
+   * Åbner kildefilen i dens standardprogram. Kun filer, der står i indekset, kan åbnes –
+   * stien tages fra indekset, aldrig fra forespørgslen.
+   */
+  app.post("/api/knowledge/open", async (req, reply) => {
+    const body = z.object({ chunkId: z.number().int() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "chunkId mangler" });
+    const c = knowledge.db.chunk(body.data.chunkId);
+    if (!c) return reply.code(404).send({ error: "Filen findes ikke i indekset." });
+    if (!existsSync(c.path)) return reply.code(404).send({ error: "Filen er flyttet eller slettet." });
+    await open(c.path);
+    return { ok: true };
+  });
+
   // --- Add-in'ets statiske filer (same origin som API'et) -------------------
   // index: false – "/" er statussiden; manifestet peger direkte på /taskpane.html.
   if (addinBuilt) await app.register(fastifyStatic, { root: addinDir!, index: false });
 
   return app;
+}
+
+/** Vidensindekset startes sammen med serveren og lukkes med den. */
+function attachKnowledge(app: FastifyInstance, k: KnowledgeIndex): KnowledgeIndex {
+  k.configure();
+  app.addHook("onClose", async () => k.close());
+  return k;
 }

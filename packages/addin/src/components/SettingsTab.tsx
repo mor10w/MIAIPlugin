@@ -45,12 +45,14 @@ import {
   Search20Regular,
   Shield20Regular,
   TextEditStyle20Regular,
+  BookSearch20Regular,
 } from "@fluentui/react-icons";
 import { useBackend } from "../backend";
 import { ui } from "../theme";
 import { useI18n } from "../i18n";
 import { SetupGuide } from "./SetupGuide";
 import { TaskModels } from "./TaskModels";
+import { KnowledgeSection } from "./KnowledgeSection";
 
 /** Kendte værktøjer (fælles liste i shared, #4) + "Andet" til alt andet. */
 const PRESETS: KnownTool[] = [...KNOWN_TOOLS, { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" }];
@@ -116,6 +118,8 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
   const [settings, setSettings] = useState<Settings>();
   const [policy, setPolicy] = useState<Policy>();
   const [policySource, setPolicySource] = useState<string>("default");
+  /** Tæller gem, så vidensindeksets status hentes igen (indekseringen starter ved gem). */
+  const [saves, setSaves] = useState(0);
   const [hostsText, setHostsText] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ intent: "success" | "error" | "info"; text: string }>();
@@ -225,6 +229,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       if (nextPolicy) setPolicy(nextPolicy);
       onLanguage(next.uiLanguage);
       onSaved?.();
+      setSaves((n) => n + 1);
       setMsg({ intent: "success", text: t("saved") });
     } catch (e) {
       setMsg({ intent: "error", text: (e as Error).message });
@@ -556,6 +561,16 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
             <Caption1 className={s.muted}>
               {t("policySource")}: {policySourceLabel}
             </Caption1>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* --- Viden fra mine mapper (F15) ------------------------------------------------ */}
+        <AccordionItem value="knowledge" className={s.section}>
+          <AccordionHeader icon={<BookSearch20Regular />} size="large">
+            {t("secKnowledge")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            <KnowledgeSection key={saves} settings={settings} setSettings={setSettings} policy={policy} models={models} api={api.knowledge} />
           </AccordionPanel>
         </AccordionItem>
 

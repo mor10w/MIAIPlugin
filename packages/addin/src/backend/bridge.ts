@@ -2,6 +2,7 @@ import type {
   AuditEntry,
   Endpoint,
   HealthInfo,
+  KnowledgeStatus,
   ProbeResult,
   ModelInfo,
   Policy,
@@ -12,7 +13,7 @@ import type {
   TaskView,
   UserTaskFile,
 } from "@miai/shared";
-import type { Backend, UserTaskInfo } from "./types";
+import type { Backend, KnowledgeApi, UserTaskInfo } from "./types";
 
 // Task pane serveres af bridgen, så API'et ligger på samme origin.
 // Adgangstokenet (#11) står i task pane-adressen fra brugerens personlige manifest
@@ -76,6 +77,15 @@ export class BridgeBackend implements Backend {
   audit() {
     return fetch("/api/audit", { headers: H }).then((r) => json<AuditEntry[]>(r));
   }
+
+  readonly knowledge: KnowledgeApi = {
+    status: () => fetch("/api/knowledge", { headers: H }).then((r) => json<KnowledgeStatus>(r)),
+    reindex: () => fetch("/api/knowledge/reindex", { method: "POST", headers: H, body: "{}" }).then((r) => json<KnowledgeStatus>(r)),
+    chunk: (id) => fetch(`/api/knowledge/chunks/${id}`, { headers: H }).then((r) => json<{ title: string; path: string; text: string }>(r)),
+    open: async (chunkId) => {
+      await fetch("/api/knowledge/open", { method: "POST", headers: H, body: JSON.stringify({ chunkId }) }).then((r) => json(r));
+    },
+  };
 
   async runTask(id: string, body: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void> {
     const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, { method: "POST", headers: H, body: JSON.stringify(body), signal });

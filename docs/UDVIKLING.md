@@ -103,6 +103,7 @@ node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 | Brugerindstillinger | Windows `%APPDATA%\MIAI\config.json` · Mac `~/Library/Application Support/MIAI/config.json` · Linux `~/.config/miai/config.json` |
 | Maskinpolitik (organisation) | Windows `%ProgramData%\MIAI\policy.json` · Mac `/Library/Application Support/MIAI/policy.json` · Linux `/etc/miai/policy.json` |
 | Audit-log (hvis slået til) | `audit.log` ved siden af `config.json` |
+| Vidensindeks (F15) | `knowledge.db` ved siden af `config.json` (SQLite via `node:sqlite`) |
 | API-nøgler | OS'ets nøglering, tjeneste `MIAI` (konto `endpoint:<id>`). `MIAI_KEYRING=off` gemmer dem i `config.json` i stedet; unit-testene sætter den, så udviklerens nøglering ikke røres. |
 
 Miljøvariabler for bridgen: `MIAI_PORT` (44321), `MIAI_CONFIG_DIR`, `MIAI_POLICY_FILE`, `MIAI_TLS_CERT`, `MIAI_TLS_KEY`, `MIAI_ADDIN_DIR`, `MIAI_LOG`.

@@ -93,6 +93,17 @@ Modelvalg er konfiguration. Bridgen lister modeller fra endpointen
 
 Forslagene evalueres med eval-sættet i `packages/evals` (se [EVAL.md](EVAL.md)).
 
+**Embedding-modeller (F15, lokal RAG – ADR-0013):** embeddings hentes fra samme endpoint via `/v1/embeddings`.
+
+| Brug | Model | Begrundelse |
+|------|-------|-------------|
+| Standard (dansk og blandet) | **bge-m3** (568M, 1.024 dim.) | Trænet på 100+ sprog inkl. dansk, lang kontekst (8k), ingen præfikser |
+| Laptop uden GPU | embeddinggemma (308M, 768 dim.) | Flersproget og lille; MIAI tilføjer modellens præfikser |
+| Engelsk, hurtigst | nomic-embed-text (137M, 768 dim.) | Meget udbredt i Ollama; svagere på dansk |
+| GPU-server | qwen3-embedding (0,6B–8B) | Stærk flersproget søgning til store mængder |
+
+Valget er baseret på modellernes dokumenterede egenskaber. Det skal bekræftes med eval-sættet på dansk materiale, når der køres på rigtig hardware (#2).
+
 Struktureret output (grammatik-rettelser, slides, formler) bruger
 `response_format: json_schema`, når endpointen understøtter det. Ellers bruges
 `json_object` eller prompt + parsing + ét genforsøg. Dette sættes pr. endpoint
@@ -128,7 +139,7 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af
 - Outlook. Office på web via central udrulning plus on-prem endpoint.
 
 ### Fase 4
-- F15: lokal RAG (SQLite + sqlite-vec, embeddings via `/v1/embeddings` på samme endpoint).
+- [x] F15: lokal RAG (node:sqlite + vektorsøgning i bridgen, embeddings via `/v1/embeddings` på samme endpoint, kilder i chatten) – ADR-0013.
 
 ## 7. Ikke-funktionelle krav
 

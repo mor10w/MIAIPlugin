@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Caption1, Switch, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { ChatAdd20Regular, ChatSparkle20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
-import type { ApplyMode, ChatMessage, DocContext } from "@miai/shared";
+import type { ApplyMode, ChatMessage, DocContext, SourceRef } from "@miai/shared";
+import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
 import { TaskNotices } from "./TaskNotices";
@@ -10,6 +11,7 @@ import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
 import { EmptyState, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
+import { SourceList } from "./SourceList";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS, minHeight: 0 },
@@ -59,7 +61,7 @@ const useStyles = makeStyles({
   },
   inputRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
   grow: { flex: 1, minWidth: 0 },
-  footer: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS },
+  footer: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
   switch: { flex: 1, minWidth: 0 },
   muted: { color: tokens.colorNeutralForeground3 },
 });
@@ -68,7 +70,17 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const { t } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
-  const [messages, setMessages] = useState<(ChatMessage & { model?: string })[]>([]);
+  const [messages, setMessages] = useState<(ChatMessage & { model?: string; sources?: SourceRef[] })[]>([]);
+  const api = useBackend();
+  // Søgning i egne mapper (F15): kun når bridgen har et aktivt vidensindeks.
+  const [knowledgeOn, setKnowledgeOn] = useState(false);
+  const [useKnowledge, setUseKnowledge] = useState(true);
+  useEffect(() => {
+    api.knowledge?.status().then(
+      (st) => setKnowledgeOn(st.state !== "disabled"),
+      () => setKnowledgeOn(false),
+    );
+  }, [api]);
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
   /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
@@ -93,8 +105,9 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
       : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
     setLastCtx(useContext ? ctx : null);
-    const final = await start("chat", { context: ctx, params: { prompt }, history: history.slice(-20) });
-    if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text, model: final.model }]);
+    const params: Record<string, string> = { prompt, ...(knowledgeOn && useKnowledge ? { useKnowledge: "true" } : {}) };
+    const final = await start("chat", { context: ctx, params, history: history.slice(-20) });
+    if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text, model: final.model, sources: final.sources }]);
   };
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));
@@ -140,6 +153,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
                 <Caption1>{m.model ?? "MIAI"}</Caption1>
               </div>
               <Markdown text={m.content} />
+              {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
               {i === lastAssistant && !running && (
                 <ApplyBar
                   modes={modesFor(m.content)}
@@ -165,6 +179,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
               </Caption1>
             )}
             {state.text ? <Markdown text={state.text} /> : <TextSkeleton lines={2} label={t("working")} />}
+            {state.sources && <SourceList sources={state.sources} api={api.knowledge} />}
           </div>
         )}
         <TaskNotices state={state} ctx={lastCtx} />
@@ -195,6 +210,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
         </div>
         <div className={s.footer}>
           <Switch className={s.switch} label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(d.checked)} />
+          {knowledgeOn && <Switch label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
           {lastCtx?.address && useContext ? (
             <Caption1 className={s.muted}>
               {t("contextSent")} {lastCtx.address}

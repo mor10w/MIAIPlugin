@@ -24,6 +24,8 @@ export interface TaskpaneOptions extends FakeOfficeOptions {
 export interface Taskpane {
   page: Page;
   model: MockModel;
+  /** Bridge-tilstand: filer, bridgen er blevet bedt om at åbne (F15, "Åbn fil"). */
+  opened: string[];
   /** Det, adapterne har gjort ved det simulerede dokument. */
   calls(): Promise<OfficeCall[]>;
   /** Første registrerede kald af en bestemt slags (fx "picture"), typet efter behov. */
@@ -31,7 +33,7 @@ export interface Taskpane {
   /** Vælger en fane i task pane. */
   tab(name: "Handlinger" | "Egne opgaver" | "Chat" | "Indstillinger"): Promise<void>;
   /** Åbner en sektion under Indstillinger (accordion), hvis den er lukket. */
-  section(name: "Forbindelse" | "Modeller" | "Svar" | "Privatliv og politik" | "Generelt"): Promise<void>;
+  section(name: "Forbindelse" | "Modeller" | "Svar" | "Privatliv og politik" | "Viden fra mine mapper" | "Generelt"): Promise<void>;
   /** Vælger en handling og trykker Kør. */
   run(action: string): Promise<void>;
 }
@@ -57,6 +59,7 @@ export const test = base.extend<{ open: Open }>({
 
       let origin: string;
       let query = "";
+      let opened: string[] = [];
       if (opts.mode === "bridge") {
         const endpointExtra = opts.endpoint ?? {};
         const bridge = await startBridge(model.url, {
@@ -65,6 +68,7 @@ export const test = base.extend<{ open: Open }>({
         });
         cleanup.push(bridge.stop);
         origin = bridge.origin;
+        opened = bridge.opened;
         if (!opts.omitToken) query = `?token=${encodeURIComponent(bridge.token)}`;
       } else {
         const host = await startStaticHost();
@@ -81,6 +85,7 @@ export const test = base.extend<{ open: Open }>({
       return {
         page,
         model,
+        opened,
         calls: () => page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls),
         find: async <T>(kind: string) =>
           (await page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls)).find((c) => c.kind === kind) as T | undefined,

@@ -31,6 +31,51 @@ export const ChatMessage = z.object({
 });
 export type ChatMessage = z.infer<typeof ChatMessage>;
 
+/**
+ * Uddrag fra brugerens egne filer (F15, lokal RAG – ADR-0013). Sættes af bridgen ud fra
+ * vidensindekset; det, en klient selv sender, overskrives i bridge-tilstand.
+ */
+export const Source = z.object({
+  /** Nummeret, modellen citerer med, fx [1]. */
+  n: z.number().int().min(1).max(50),
+  title: z.string().max(300),
+  path: z.string().max(2_000),
+  text: z.string().max(6_000),
+});
+export type Source = z.infer<typeof Source>;
+
+/** Kildehenvisning, som vises under svaret (uden hele teksten). */
+export interface SourceRef {
+  n: number;
+  title: string;
+  path: string;
+  /** Chunk-id i bridgens indeks – til at hente uddraget og åbne filen. */
+  chunkId: number;
+  /** Lighed mellem spørgsmål og uddrag (0–1). */
+  score: number;
+  snippet: string;
+}
+
+/** Vidensindeksets tilstand (F15), som bridgen viser under Indstillinger. */
+export interface KnowledgeStatus {
+  state: "disabled" | "idle" | "indexing" | "error";
+  /** Under indeksering: filer behandlet / i alt. */
+  done: number;
+  total: number;
+  documents: number;
+  chunks: number;
+  /** Filer, der ikke kunne læses (fx beskyttede PDF'er). */
+  failed: { path: string; error: string }[];
+  /** Mapper, der ikke findes eller ikke er tilladt af politikken. */
+  skippedFolders: { folder: string; reason: "missing" | "policy" }[];
+  embeddingModel: string;
+  lastIndexed?: string;
+  /** Fejl, der stoppede indekseringen (fx endpointen understøtter ikke embeddings). */
+  error?: string;
+  /** Der var flere filer end MAX_FILES; resten er ikke indekseret. */
+  truncated?: boolean;
+}
+
 export const TaskRequest = z.object({
   context: DocContext,
   /** Opgaveparametre, fx { targetLanguage: "engelsk" } eller { tone: "formel" }. */
@@ -39,6 +84,8 @@ export const TaskRequest = z.object({
   history: z.array(ChatMessage).max(100).default([]),
   /** Overstyr model for denne forespørgsel. */
   model: z.string().optional(),
+  /** Chat: uddrag fra brugerens egne mapper (F15). Udfyldes af bridgen. */
+  sources: z.array(Source).max(20).default([]),
 });
 export type TaskRequest = z.input<typeof TaskRequest>;
 export type ParsedTaskRequest = z.output<typeof TaskRequest>;
@@ -51,6 +98,8 @@ export type TaskEvent =
   | { type: "progress"; chars: number; step?: { done: number; total: number } }
   /** Fjern de sidste `chars` tegn fra den viste tekst (fx indledning fra en runde, der endte med en søgning). */
   | { type: "retract"; chars: number }
+  /** Kilder fra brugerens mapper, som svaret bygger på (F15). Sendes før svaret. */
+  | { type: "sources"; sources: SourceRef[] }
   /** Modellen søger på webbet (vises i UI, fx "Søger på web…"). */
   | { type: "search"; query: string }
   | { type: "result"; data: unknown }
@@ -129,6 +178,18 @@ export const Settings = z.object({
   webSearch: z.boolean().default(false),
   /** Hvilken søgetjeneste web-søgningen bruger (#12). */
   search: SearchConfig.default({ provider: "duckduckgo" }),
+  /** Lokal RAG over brugerens mapper (F15, ADR-0013). Kun bridge. */
+  knowledge: z
+    .object({
+      enabled: z.boolean().default(false),
+      /** Mapper, der indekseres (absolutte stier på maskinen). */
+      folders: z.array(z.string().min(1).max(1_024)).max(20).default([]),
+      /** Embedding-model på den aktive endpoint (/v1/embeddings), fx "bge-m3". */
+      embeddingModel: z.string().max(200).default(""),
+      /** Antal uddrag, der gives til modellen pr. spørgsmål. */
+      topK: z.number().int().min(1).max(12).default(5),
+    })
+    .default({ enabled: false, folders: [], embeddingModel: "", topK: 5 }),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
 });
@@ -143,6 +204,13 @@ export const Policy = z.object({
   webSearch: z.boolean().default(true),
   /** Låser søgetjenesten, fx til organisationens egen SearXNG (#12). Har forrang for brugerens valg. */
   search: SearchConfig.optional(),
+  /** Må lokal RAG (F15) bruges? */
+  knowledge: z.boolean().default(true),
+  /**
+   * Mapper, der må indekseres (og alt under dem). Udeladt = alle mapper brugeren vælger.
+   * En organisation kan fx begrænse til et fælles drev.
+   */
+  knowledgeFolders: z.array(z.string()).optional(),
 });
 export type Policy = z.infer<typeof Policy>;
 

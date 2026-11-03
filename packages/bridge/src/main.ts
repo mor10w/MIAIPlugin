@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./quiet.js";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";

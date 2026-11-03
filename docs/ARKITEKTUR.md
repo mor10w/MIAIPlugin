@@ -30,6 +30,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 - **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
 - **`userTasks.ts`**: brugerdefinerede opgaver (F14, ADR-0011) – `UserTaskFile`-skema (JSON-filer med prompt-skabelon), `renderTemplate`, omsætning til `TaskDefinition` og det serialiserbare `TaskView`.
 - **`agent.ts`**: agent-tilstand (#6, ADR-0012) – `AgentPlan`/`AgentAction` (lukket union af Word- og Excel-handlinger), værktøjsbeskrivelse til prompten og `checkPlan`, der markerer handlinger, som ikke kan udføres. Udførelsen sker i add-in'ets host-adaptere (`applyAgent`) med fortryd for hele sessionen.
+- **`knowledge.ts`**: lokal RAG (F15, ADR-0013) – opdeling i uddrag (`chunkText`), normalisering og brute force-søgning (`topK`). `openai.ts` har `embed()` og `embeddingPrefix()`; chat-opgaven giver modellen uddrag som nummererede `<source>`-blokke.
 - **`audit.ts`**: `AuditEntry`-skema (kun metadata) og grænser for loggen.
 - **`engine.ts`** (`executeTask`):
   - vælger model (forespørgsel → model pr. opgave → standard → første fra `/v1/models`)
@@ -86,6 +87,7 @@ Node.js-service (Fastify) på `https://127.0.0.1:44321`. Serverer add-in'ets fil
 Bridgen bidrager med det, en browser ikke kan:
 - en **maskinpolitik**, som brugeren ikke kan ændre (ADR-0006)
 - **brugerdefinerede opgaver** som filer: brugers mappe (`settings.customTasksDir`, standard `<config>/tasks`) og organisationsmappe (`MIAI_TASKS_DIR`), hvor maskin-opgaver vinder ved id-kollision og er read-only (ADR-0011)
+- **vidensindeks** (F15, ADR-0013): `knowledge/` udtrækker tekst (docx/pdf/xlsx/pptx/md), indekserer brugerens mapper med embeddings i `knowledge.db` (node:sqlite), holder indekset opdateret (fs.watch) og søger med brute force. `GET /api/knowledge`, `POST /api/knowledge/reindex`, `GET /api/knowledge/chunks/:id`, `POST /api/knowledge/open`. Mapper tjekkes mod `policy.knowledgeFolders`.
 - **audit-log** med metadata (aldrig indhold): JSONL i `audit.log` med rotation ved 1 MB (`audit.log.old`)
 - UI uden internet
 - filsystemadgang til senere RAG (fase 4)

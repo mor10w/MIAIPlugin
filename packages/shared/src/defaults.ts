@@ -34,5 +34,7 @@ export function checkSettings(next: Settings, policy: Policy, isAllowed: (url: s
     if (!next.search.url) return "Angiv adressen på din SearXNG.";
     if (!isAllowed(next.search.url, policy)) return `Søgetjenesten (${next.search.url}) er ikke tilladt af politikken. Tilføj hosten under "Tilladte hosts".`;
   }
+  // Lokal RAG (F15): mapperne tjekkes mod politikken i bridgen, som kender filsystemet.
+  if (next.knowledge.enabled && !policy.knowledge) return "Søgning i egne mapper er slået fra af din organisation.";
   return undefined;
 }

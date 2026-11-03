@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { TaskRequest, TaskWarning } from "@miai/shared";
+import type { SourceRef, TaskRequest, TaskWarning } from "@miai/shared";
 import { useBackend } from "./backend";
 
 export interface TaskState {
@@ -8,6 +8,8 @@ export interface TaskState {
   result?: unknown;
   model?: string;
   progressChars: number;
+  /** Kilder fra brugerens mapper, som svaret bygger på (F15). */
+  sources?: SourceRef[];
   /** Værende web-søgning (vises i UI, ADR-0010). */
   searchQuery?: string;
   error?: string;
@@ -57,6 +59,9 @@ export function useTask() {
                 break;
               case "progress":
                 update((s) => ({ ...s, progressChars: e.chars, step: e.step ?? s.step }));
+                break;
+              case "sources":
+                update((s) => ({ ...s, sources: e.sources }));
                 break;
               case "search":
                 update((s) => ({ ...s, searchQuery: e.query }));

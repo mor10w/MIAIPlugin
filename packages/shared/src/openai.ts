@@ -6,7 +6,8 @@ import type { Endpoint } from "./types.js";
  * bruger kun fetch, ReadableStream.getReader og AbortController.
  */
 
-export type UpstreamCode = "UPSTREAM_UNREACHABLE" | "UPSTREAM_HTTP" | "UPSTREAM_TIMEOUT" | "UPSTREAM_PROTOCOL" | "NO_MODEL" | "POLICY" | "CONTEXT_OVERFLOW";
+export type UpstreamCode =
+  "UPSTREAM_UNREACHABLE" | "UPSTREAM_HTTP" | "UPSTREAM_TIMEOUT" | "UPSTREAM_PROTOCOL" | "NO_MODEL" | "POLICY" | "CONTEXT_OVERFLOW" | "NO_EMBEDDINGS";
 
 export class UpstreamError extends Error {
   constructor(
@@ -275,4 +276,52 @@ export function parseSseLine(line: string): StreamChunk | "done" | null {
   const usage = mapUsage(json.usage);
   if (!text && !usage && !toolCalls) return null;
   return { text: text ?? undefined, usage, toolCalls, finishReason: choice?.finish_reason ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// Embeddings (F15, lokal RAG – ADR-0013)
+// ---------------------------------------------------------------------------
+
+/**
+ * Nogle embedding-modeller er trænet med faste præfikser for spørgsmål og dokumenter og giver
+ * mærkbart dårligere søgning uden dem. Ukendte modeller får ingen præfiks.
+ */
+export function embeddingPrefix(model: string, kind: "query" | "document"): string {
+  const m = model.toLowerCase();
+  if (m.includes("nomic-embed")) return kind === "query" ? "search_query: " : "search_document: ";
+  if (/(^|[/:_-])e5([-_:]|$)|multilingual-e5/.test(m)) return kind === "query" ? "query: " : "passage: ";
+  if (m.includes("embeddinggemma")) return kind === "query" ? "task: search result | query: " : "title: none | text: ";
+  if (m.includes("qwen3-embedding") && kind === "query")
+    return "Instruct: Given a question, retrieve passages from the user's documents that answer it\nQuery: ";
+  return "";
+}
+
+/**
+ * Henter embeddings fra /v1/embeddings. Ikke alle OpenAI-kompatible værktøjer understøtter
+ * endpointen (eller modellen er en chatmodel) – så kastes en fejl med koden NO_EMBEDDINGS og en
+ * forklaring, brugeren kan handle på.
+ */
+export async function embed(ep: Endpoint, model: string, input: string[], signal?: AbortSignal): Promise<number[][]> {
+  if (!model) throw new UpstreamError("Vælg en embedding-model under Indstillinger → Viden.", "NO_EMBEDDINGS");
+  if (!input.length) return [];
+  let res: Response;
+  try {
+    res = await doFetch(ep, "/embeddings", { method: "POST", body: JSON.stringify({ model, input }) }, signal, {});
+  } catch (err) {
+    const e = err as UpstreamError;
+    if (e.code === "UPSTREAM_HTTP" && e.status !== undefined && [400, 404, 405, 501].includes(e.status))
+      throw new UpstreamError(
+        `${ep.name} kunne ikke lave embeddings med '${model}' (${e.message}). Tjek, at værktøjet understøtter /v1/embeddings, og at modellen er en embedding-model (fx bge-m3 eller nomic-embed-text).`,
+        "NO_EMBEDDINGS",
+        e.status,
+      );
+    throw err;
+  }
+  const json = (await res.json().catch(() => null)) as { data?: { embedding?: unknown; index?: number }[] } | null;
+  const data = json?.data;
+  if (!Array.isArray(data) || data.length !== input.length || !data.every((d) => Array.isArray(d.embedding) && (d.embedding as unknown[]).length > 0))
+    throw new UpstreamError(`Uventet svar fra ${ep.name}/embeddings – er '${model}' en embedding-model?`, "NO_EMBEDDINGS");
+  // Rækkefølgen følger `index`, hvis serveren angiver den.
+  const sorted = data.every((d) => typeof d.index === "number") ? [...data].sort((a, b) => a.index! - b.index!) : data;
+  return sorted.map((d) => d.embedding as number[]);
 }

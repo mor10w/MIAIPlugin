@@ -13,3 +13,4 @@ export * from "./tools.js";
 export * from "./defaults.js";
 export * from "./audit.js";
 export * from "./agent.js";
+export * from "./knowledge.js";

@@ -2,6 +2,7 @@
 // Bridgen KAN IKKE køre i Electron's main-process: Chromiums netværksspecifik
 // forstyrrer Node's TLS-server, så håndskaber hænger. I en utility-process
 // (uden Chromium) fungerer TLS som i almindelig Node – verificeret med curl.
+import "@miai/bridge/dist/quiet.js";
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";

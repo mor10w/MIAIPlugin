@@ -7,8 +7,11 @@ import { z } from "zod";
 export const AuditEntry = z.object({
   /** ISO-8601-tidsstempel. */
   ts: z.string(),
-  /** task = en opgavekørsel; models = henting af modeller fra /v1/models; search = web-søgning (ADR-0010). */
-  kind: z.enum(["task", "models", "search"]),
+  /**
+   * task = en opgavekørsel; models = henting af modeller fra /v1/models; search = web-søgning (ADR-0010);
+   * index = indeksering af mapper (F15); retrieve = opslag i vidensindekset (F15).
+   */
+  kind: z.enum(["task", "models", "search", "index", "retrieve"]),
   /** Opgave-id (fx "grammar"), kun ved kind=task. */
   task: z.string().max(80).optional(),
   /** Endpointens host inkl. port, fx "127.0.0.1:11434". */
@@ -23,6 +26,8 @@ export const AuditEntry = z.object({
   outputChars: z.number().int().nonnegative().max(1_000_000).optional(),
   promptTokens: z.number().int().nonnegative().max(1_000_000).optional(),
   completionTokens: z.number().int().nonnegative().max(1_000_000).optional(),
+  /** index: antal filer indekseret/fjernet; retrieve: antal uddrag fundet. Aldrig stier eller indhold. */
+  count: z.number().int().nonnegative().max(10_000_000).optional(),
 });
 export type AuditEntry = z.infer<typeof AuditEntry>;
 

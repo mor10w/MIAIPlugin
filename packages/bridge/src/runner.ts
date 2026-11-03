@@ -13,6 +13,7 @@ import {
 } from "@miai/shared";
 import { searchWeb } from "./search.js";
 import type { ConfigStore } from "./config.js";
+import type { KnowledgeIndex } from "./knowledge/index.js";
 
 interface RunOptions {
   task: TaskDefinition;
@@ -20,6 +21,19 @@ interface RunOptions {
   store: ConfigStore;
   emit: (e: TaskEvent) => void;
   signal: AbortSignal;
+  /** Vidensindekset (F15). Bruges af chat, når brugeren har slået "Brug mine mapper" til. */
+  knowledge?: KnowledgeIndex;
+}
+
+/**
+ * Spørgsmålet, der søges med: prompten – og ved korte opfølgninger ("og i Sverige?") også
+ * brugerens forrige besked, så søgningen har nok at gå efter.
+ */
+function retrievalQuery(req: ParsedTaskRequest): string {
+  const prompt = (req.params.prompt ?? "").trim();
+  if (prompt.length >= 40) return prompt;
+  const prev = [...req.history].reverse().find((m) => m.role === "user")?.content ?? "";
+  return `${prev}\n${prompt}`.trim();
 }
 
 /** Bygger en audit-post (kun metadata) ud fra modelkaldets resultat. */
@@ -68,7 +82,7 @@ function makeToolExecutor(
 }
 
 /** Kører en opgave med den fælles motor og skriver evt. audit-log (kun metadata, aldrig indhold). */
-export async function runTask({ task, req, store, emit, signal }: RunOptions): Promise<void> {
+export async function runTask({ task, req: clientReq, store, emit, signal, knowledge }: RunOptions): Promise<void> {
   const settings = store.getSettings();
   const ep = store.activeEndpoint();
   let host: string;
@@ -90,6 +104,32 @@ export async function runTask({ task, req, store, emit, signal }: RunOptions): P
           durationMs,
         });
     };
+    // Kilder kommer kun fra bridgens eget indeks – aldrig fra klienten.
+    const req: ParsedTaskRequest = { ...clientReq, sources: [] };
+    const policy = store.getPolicy();
+    if (task.id === "chat" && knowledge && clientReq.params.useKnowledge === "true" && settings.knowledge.enabled && policy.knowledge) {
+      const started = Date.now();
+      try {
+        const found = await knowledge.search(retrievalQuery(clientReq), undefined, signal);
+        req.sources = found.sources;
+        emit({ type: "sources", sources: found.refs });
+        if (settings.auditLog)
+          await appendAudit(auditFile(store.dir), {
+            ts: new Date().toISOString(),
+            kind: "retrieve",
+            task: task.id,
+            host,
+            model: settings.knowledge.embeddingModel,
+            status: "ok",
+            durationMs: Date.now() - started,
+            count: found.sources.length,
+          });
+      } catch (err) {
+        if (settings.auditLog)
+          await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "retrieve", task: task.id, host, status: "error" });
+        throw err;
+      }
+    }
     const summary = await executeTask(task, req, {
       settings,
       endpoint: ep,

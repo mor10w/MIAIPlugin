@@ -2,6 +2,7 @@ import type {
   AuditEntry,
   Endpoint,
   HealthInfo,
+  KnowledgeStatus,
   ProbeResult,
   ModelInfo,
   Policy,
@@ -27,6 +28,16 @@ export interface UserTaskInfo {
   source: "user" | "machine";
 }
 
+/** Lokal RAG (F15) – kun bridgen kan læse brugerens mapper. */
+export interface KnowledgeApi {
+  status(): Promise<KnowledgeStatus>;
+  reindex(): Promise<KnowledgeStatus>;
+  /** Hele uddraget bag en kildehenvisning. */
+  chunk(id: number): Promise<{ title: string; path: string; text: string }>;
+  /** Åbner kildefilen i dens standardprogram på maskinen. */
+  open(chunkId: number): Promise<void>;
+}
+
 export interface Backend {
   readonly mode: BackendMode;
   health(): Promise<HealthInfo>;
@@ -44,4 +55,6 @@ export interface Backend {
   audit(): Promise<AuditEntry[]>;
   /** Kører en opgave; kalder onEvent for hver hændelse. Kaster kun ved transportfejl. */
   runTask(id: string, req: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void>;
+  /** Søgning i egne mapper (F15). Kun i bridge-tilstand. */
+  readonly knowledge?: KnowledgeApi;
 }

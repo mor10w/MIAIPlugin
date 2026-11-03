@@ -33,6 +33,8 @@ export interface ChatRequestBody {
 /** OpenAI-kompatibel mock (som Ollama/LM Studio) på en tilfældig port. */
 export class MockModel {
   readonly requests: ChatRequestBody[] = [];
+  /** Tekster sendt til /v1/embeddings (F15). */
+  readonly embeddingInputs: string[] = [];
   /** Bestemmer svaret ud fra forespørgslen. Standard: et kort streamet svar. */
   reply: (body: ChatRequestBody) => ModelReply = () => ({ stream: ["ok"] });
   private server?: Server;
@@ -54,6 +56,23 @@ export class MockModel {
       if (req.url === "/v1/models") {
         res.setHeader("content-type", "application/json");
         return res.end(JSON.stringify({ object: "list", data: (this.opts.models ?? ["qwen3:4b"]).map((id) => ({ id })) }));
+      }
+      // Embeddings (F15): ord hashes til 64 dimensioner – deterministisk, og tekster med de samme
+      // ord ligner hinanden, så søgningen finder det rigtige uddrag.
+      if (req.url === "/v1/embeddings") {
+        const { input } = JSON.parse(await readBody(req)) as { input: string[] };
+        this.embeddingInputs.push(...input);
+        const vec = (t: string) => {
+          const v = new Array(64).fill(0);
+          for (const w of t.toLowerCase().match(/\p{L}{3,}/gu) ?? []) {
+            let h = 0;
+            for (const ch of w) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+            v[h % 64] += 1;
+          }
+          return v;
+        };
+        res.setHeader("content-type", "application/json");
+        return res.end(JSON.stringify({ data: input.map((t, index) => ({ index, embedding: vec(t) })) }));
       }
       if (req.url !== "/v1/chat/completions") {
         res.statusCode = 404;
@@ -174,7 +193,7 @@ export async function startStaticHost(): Promise<{ origin: string; stop: () => P
 export async function startBridge(
   modelUrl: string,
   settings: Record<string, unknown> = {},
-): Promise<{ origin: string; token: string; stop: () => Promise<void> }> {
+): Promise<{ origin: string; token: string; opened: string[]; stop: () => Promise<void> }> {
   const { ConfigStore } = await import("@miai/bridge/dist/config.js");
   // Testene må ikke skrive i udviklerens rigtige nøglering (#16).
   const { MemorySecrets } = await import("@miai/bridge/dist/secrets.js");
@@ -188,9 +207,19 @@ export async function startBridge(
   // forceCloseConnections: luk browserens keep-alive-forbindelser ved oprydning (ellers venter close ~15 s).
   // Adgangstoken som i det personlige manifest (#11).
   const token = `e2e-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
-  const app = await buildServer({ store, port, token, addinDir: DIST, https: testCert(), fastify: { forceCloseConnections: true } });
+  // "Åbn fil" (F15) må ikke starte et program på testmaskinen – åbnede stier registreres i stedet.
+  const opened: string[] = [];
+  const app = await buildServer({
+    store,
+    port,
+    token,
+    addinDir: DIST,
+    https: testCert(),
+    fastify: { forceCloseConnections: true },
+    open: async (p: string) => void opened.push(p),
+  });
   await app.listen({ host: "127.0.0.1", port });
-  return { origin: `https://localhost:${port}`, token, stop: () => app.close() };
+  return { origin: `https://localhost:${port}`, token, opened, stop: () => app.close() };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
