@@ -35,12 +35,15 @@ interface StoredConfig {
 
 export class ConfigStore {
   readonly file: string;
+  /** Mappen config.json ligger i – audit.log og opgave-mappen (tasks/) ligger her. */
+  readonly dir: string;
   private settings: Settings;
   private userPolicy: Policy | undefined;
   private machinePolicy: Policy | undefined;
 
   constructor(dir = configDir(), policyFile = machinePolicyFile()) {
     this.file = join(dir, "config.json");
+    this.dir = dir;
     this.machinePolicy = readJson(policyFile, (raw) => Policy.parse(raw));
     if (!this.machinePolicy && existsSync(policyFile)) {
       // Fail closed: en ulæselig organisationspolitik må ikke åbne for flere hosts.

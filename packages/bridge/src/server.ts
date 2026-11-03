@@ -1,14 +1,15 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
 import {
   cachedModels,
-  getTask,
   isUrlAllowed,
   Policy,
   Settings,
   TaskRequest,
-  TASKS,
+  toTaskView,
+  UserTaskFile,
   validateInput,
   type HealthInfo,
   type ModelInfo,
@@ -17,7 +18,9 @@ import {
   type UpstreamError,
 } from "@miai/shared";
 import { z } from "zod";
+import { appendAudit, auditFile, readAuditTail } from "./audit.js";
 import { PolicyError, type ConfigStore } from "./config.js";
+import { invalidateUserTasks, loadUserTasks, machineTasksDir, mergedCatalog, userTasksDir } from "./userTasks.js";
 import { runTask } from "./runner.js";
 
 export const VERSION = "0.1.0";
@@ -75,28 +78,29 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
     }
   });
 
-  app.get("/api/tasks", async () =>
-    TASKS.map(({ id, label, description, hosts, input, output, params, applyModes }) => ({
-      id,
-      label,
-      description,
-      hosts,
-      input,
-      output: output.kind === "text" ? output : { kind: "json" },
-      params,
-      applyModes,
-    })),
-  );
+  app.get("/api/tasks", async () => {
+    const cat = mergedCatalog(store.getSettings(), store.dir);
+    return cat.defs.map((t) => toTaskView(t, cat.customIds.has(t.id)));
+  });
 
   app.get("/api/models", async (req, reply) => {
     const q = z.object({ endpoint: z.string().optional() }).parse(req.query);
     const s = store.getSettings();
     const ep = s.endpoints.find((e) => e.id === (q.endpoint ?? s.activeEndpoint)) ?? store.activeEndpoint();
     if (!isUrlAllowed(ep.baseUrl, store.getPolicy())) return reply.code(403).send({ error: "Endpoint ikke tilladt af politikken" });
+    let host = ep.baseUrl;
+    try {
+      host = new URL(ep.baseUrl).host;
+    } catch {
+      // Ugyldig URL: bruges kun i audit-posten.
+    }
+    const started = Date.now();
     try {
       const models = await cachedModels(ep, AbortSignal.timeout(5_000));
+      if (s.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "ok", durationMs: Date.now() - started });
       return models.map((id): ModelInfo => ({ id, endpoint: ep.id }));
     } catch (err) {
+      if (s.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "error" });
       return reply.code(502).send({ error: (err as Error).message, code: (err as UpstreamError).code });
     }
   });
@@ -124,10 +128,10 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
     return { ok: true };
   });
 
-  /** Kør en opgave. Svarer altid med en SSE-strøm af TaskEvent. */
+  /** Kør en opgave (indbygget eller brugerdefineret). Svarer altid med en SSE-strøm af TaskEvent. */
   app.post("/api/tasks/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const task = getTask(id);
+    const task = mergedCatalog(store.getSettings(), store.dir).defs.find((t) => t.id === id);
     if (!task) return reply.code(404).send({ error: `Ukendt opgave '${id}'` });
     const parsed = TaskRequest.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
@@ -155,6 +159,40 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
       reply.raw.end();
     }
   });
+
+  // --- Brugerdefinerede opgaver (F14) ----------------------------------------
+  // Filerne ligger i bruger-mappen (indstillingen customTasksDir, standard <config>/tasks)
+  // og evt. i maskin-mappen (MIAI_TASKS_DIR). Maskin-opgaver er read-only via UI.
+
+  app.get("/api/user-tasks", async () => [...loadUserTasks(store.getSettings(), store.dir).values()]);
+
+  app.put("/api/user-tasks/:id", async (req, reply) => {
+    const parsed = UserTaskFile.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const s = store.getSettings();
+    if (loadUserTasks(s, store.dir).get(parsed.data.id)?.source === "machine") {
+      return reply.code(409).send({ error: "Opgaven er defineret af din organisation og kan ikke ændres." });
+    }
+    const dir = userTasksDir(s, store.dir);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, `${parsed.data.id}.json`), JSON.stringify(parsed.data, null, 2));
+    invalidateUserTasks();
+    return { ok: true };
+  });
+
+  app.delete("/api/user-tasks/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const s = store.getSettings();
+    const loaded = loadUserTasks(s, store.dir).get(id);
+    if (!loaded) return reply.code(404).send({ error: "Opgaven findes ikke." });
+    if (loaded.source === "machine") return reply.code(409).send({ error: "Opgaven er defineret af din organisation og kan ikke slettes." });
+    rmSync(join(userTasksDir(s, store.dir), `${loaded.spec.id}.json`), { force: true });
+    invalidateUserTasks();
+    return { ok: true };
+  });
+
+  // --- Audit-log (kun metadata) ----------------------------------------------
+  app.get("/api/audit", async () => readAuditTail(auditFile(store.dir), 100));
 
   // --- Add-in'ets statiske filer (same origin som API'et) -------------------
   if (addinDir && existsSync(addinDir)) {

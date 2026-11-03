@@ -1,5 +1,5 @@
-import { appendFile } from "node:fs/promises";
-import { errorEvent, executeTask, type ParsedTaskRequest, type TaskDefinition, type TaskEvent } from "@miai/shared";
+import { appendAudit, auditFile } from "./audit.js";
+import { errorEvent, executeTask, type AuditEntry, type ParsedTaskRequest, type TaskDefinition, type TaskEvent } from "@miai/shared";
 import { webSearch } from "./search.js";
 import type { ConfigStore } from "./config.js";
 
@@ -9,6 +9,11 @@ interface RunOptions {
   store: ConfigStore;
   emit: (e: TaskEvent) => void;
   signal: AbortSignal;
+}
+
+/** Bygger en audit-post (kun metadata) ud fra modelkaldets resultat. */
+function baseEntry(task: TaskDefinition, epHost: string): Pick<AuditEntry, "ts" | "kind" | "task" | "host"> {
+  return { ts: new Date().toISOString(), kind: "task", task: task.id, host: epHost };
 }
 
 /** Værktøjskald fra modellen (ADR-0010). Kun web_search leveres – ukendte navne afvises. */
@@ -46,22 +51,33 @@ function makeToolExecutor(signal: AbortSignal) {
 export async function runTask({ task, req, store, emit, signal }: RunOptions): Promise<void> {
   const settings = store.getSettings();
   const ep = store.activeEndpoint();
+  let host: string;
+  try {
+    host = new URL(ep.baseUrl).host;
+  } catch {
+    host = ep.baseUrl; // skal ikke kunne bryde kørslen, hvis URL'en er ulæselig
+  }
   try {
     const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal) });
     if (settings.auditLog) {
-      const entry = {
-        ts: new Date().toISOString(),
-        task: task.id,
-        endpoint: new URL(ep.baseUrl).host,
+      await appendAudit(auditFile(store.dir), {
+        ...baseEntry(task, host),
         model: summary.model,
+        status: "ok",
         durationMs: summary.durationMs,
         inputChars: summary.inputChars,
         outputChars: summary.output.length,
-        usage: summary.usage,
-      };
-      await appendFile(store.file.replace(/config\.json$/, "audit.log"), JSON.stringify(entry) + "\n").catch(() => {});
+        promptTokens: summary.usage?.promptTokens,
+        completionTokens: summary.usage?.completionTokens,
+      });
     }
   } catch (err) {
-    if (!signal.aborted) emit(errorEvent(err));
+    if (!signal.aborted) {
+      const e = errorEvent(err);
+      emit(e);
+      if (settings.auditLog && e.type === "error") {
+        await appendAudit(auditFile(store.dir), { ...baseEntry(task, host), status: "error", code: e.code });
+      }
+    }
   }
 }
