@@ -22,6 +22,7 @@ import { appendAudit, auditFile, readAuditTail } from "./audit.js";
 import { PolicyError, type ConfigStore } from "./config.js";
 import { invalidateUserTasks, loadUserTasks, machineTasksDir, mergedCatalog, userTasksDir } from "./userTasks.js";
 import { runTask } from "./runner.js";
+import { pickLang, renderStatusPage } from "./statusPage.js";
 
 export const VERSION = "0.1.0";
 const KEY_MASK = "********";
@@ -68,15 +69,36 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
 
   // --- API ------------------------------------------------------------------
 
-  app.get("/api/health", async (): Promise<HealthInfo> => {
+  /** Bruges af /api/health og statussiden. Endpoints uden for politikken kontaktes ikke. */
+  const health = async (): Promise<HealthInfo> => {
     const ep = store.activeEndpoint();
     try {
+      if (!isUrlAllowed(ep.baseUrl, store.getPolicy())) throw new Error("Endpoint er ikke tilladt af politikken.");
       await cachedModels(ep, AbortSignal.timeout(3_000));
       return { ok: true, version: VERSION, endpoint: { id: ep.id, baseUrl: ep.baseUrl, reachable: true } };
     } catch (err) {
       return { ok: true, version: VERSION, endpoint: { id: ep.id, baseUrl: ep.baseUrl, reachable: false, error: (err as Error).message } };
     }
-  });
+  };
+
+  app.get("/api/health", health);
+
+  // Statusside (#15): "/" åbnes typisk i en almindelig browser; selve UI'et er /taskpane.html i Office.
+  const addinBuilt = !!addinDir && existsSync(addinDir);
+  app.get("/", async (req, reply) =>
+    reply.type("text/html; charset=utf-8").header("cache-control", "no-store").send(
+      renderStatusPage({
+        version: VERSION,
+        health: await health(),
+        settings: store.getSettings(),
+        policy: store.getPolicy(),
+        policySource: store.policySource,
+        addinBuilt,
+        configFile: store.file,
+        lang: pickLang(req.headers["accept-language"]),
+      }),
+    ),
+  );
 
   app.get("/api/tasks", async () => {
     const cat = mergedCatalog(store.getSettings(), store.dir);
@@ -202,11 +224,8 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
   app.get("/api/audit", async () => readAuditTail(auditFile(store.dir), 100));
 
   // --- Add-in'ets statiske filer (same origin som API'et) -------------------
-  if (addinDir && existsSync(addinDir)) {
-    await app.register(fastifyStatic, { root: addinDir, index: ["taskpane.html"] });
-  } else {
-    app.get("/", async () => ({ name: "MIAI Bridge", version: VERSION, note: "Add-in er ikke bygget. Kør 'npm run build'." }));
-  }
+  // index: false – "/" er statussiden; manifestet peger direkte på /taskpane.html.
+  if (addinBuilt) await app.register(fastifyStatic, { root: addinDir!, index: false });
 
   return app;
 }
