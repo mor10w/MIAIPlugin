@@ -7,6 +7,7 @@ import {
   Field,
   Input,
   MessageBar,
+  MessageBarActions,
   MessageBarBody,
   Option,
   Radio,
@@ -17,22 +18,14 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import type { AuditEntry, Endpoint, Policy, Settings, StructuredOutputMode } from "@miai/shared";
-import { corsHint, useBackend } from "../backend";
+import { KNOWN_TOOLS, type AuditEntry, type Endpoint, type KnownTool, type Policy, type ProbeResult, type Settings, type StructuredOutputMode } from "@miai/shared";
+import { useBackend } from "../backend";
 import { useI18n } from "../i18n";
+import { SetupGuide } from "./SetupGuide";
 import { TaskModels } from "./TaskModels";
 
-/** Kendte OpenAI-kompatible inference-værktøjer og deres standardporte. "Andet" dækker alt andet. */
-const PRESETS: { id: string; name: string; baseUrl: string; structuredOutput: StructuredOutputMode }[] = [
-  { id: "ollama", name: "Ollama", baseUrl: "http://127.0.0.1:11434/v1", structuredOutput: "json_schema" },
-  { id: "lmstudio", name: "LM Studio", baseUrl: "http://127.0.0.1:1234/v1", structuredOutput: "json_schema" },
-  { id: "llamacpp", name: "llama.cpp server", baseUrl: "http://127.0.0.1:8080/v1", structuredOutput: "json_schema" },
-  { id: "vllm", name: "vLLM", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "json_schema" },
-  { id: "localai", name: "LocalAI", baseUrl: "http://127.0.0.1:8080/v1", structuredOutput: "json_object" },
-  { id: "jan", name: "Jan", baseUrl: "http://127.0.0.1:1337/v1", structuredOutput: "json_object" },
-  { id: "kobold", name: "KoboldCpp", baseUrl: "http://127.0.0.1:5001/v1", structuredOutput: "none" },
-  { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" },
-];
+/** Kendte værktøjer (fælles liste i shared, #4) + "Andet" til alt andet. */
+const PRESETS: KnownTool[] = [...KNOWN_TOOLS, { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" }];
 
 /** presence_penalty-forudindstillinger. "" = sendes ikke (serverens standard). */
 const PENALTY_PRESETS = [
@@ -57,7 +50,7 @@ function uniqueId(base: string, taken: string[]): string {
   return id;
 }
 
-export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => void }) {
+export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "en") => void; onSaved?: () => void }) {
   const { t, lang } = useI18n();
   const s = useStyles();
   const api = useBackend();
@@ -70,6 +63,10 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
   const [testing, setTesting] = useState(false);
   const [preset, setPreset] = useState(PRESETS[1].id);
   const [showAudit, setShowAudit] = useState(false);
+  /** Guiden vises automatisk, når den aktive endpoint ikke svarer (#4). */
+  const [showGuide, setShowGuide] = useState(false);
+  /** Gem ventede på bekræftelse, fordi endpointen ikke svarede. */
+  const [unverified, setUnverified] = useState<ProbeResult | null>(null);
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>();
 
   /** Henter loggen, når visningen åbnes. Posterne vises nyeste først. */
@@ -94,7 +91,13 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
         setHostsText(v.policy.allowedHosts.join("\n"));
       })
       .catch((e) => setMsg({ intent: "error", text: (e as Error).message }));
-    api.models().then((m) => setModels(m.map((x) => x.id)), () => setModels([]));
+    api.models().then(
+      (m) => setModels(m.map((x) => x.id)),
+      () => {
+        setModels([]);
+        setShowGuide(true);
+      },
+    );
   }, [api]);
 
   if (!settings || !policy) return msg ? <MessageBar intent="error"><MessageBarBody>{msg.text}</MessageBarBody></MessageBar> : <Spinner />;
@@ -114,17 +117,41 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
     setSettings({ ...settings, endpoints: [...settings.endpoints, ep] });
   };
 
-  const save = async () => {
+  /** Gemmer – men tester først den aktive endpoint, så en forkert adresse ikke gemmes ubemærket (#4). */
+  const save = async (force = false, next: Settings = settings) => {
     setMsg(undefined);
+    setUnverified(null);
     const nextPolicy = locked ? undefined : { ...policy, allowedHosts: hostsText.split(/\s+/).map((h) => h.trim()).filter(Boolean) };
+    if (!force) {
+      const active = next.endpoints.find((e) => e.id === next.activeEndpoint);
+      const probe = active ? await api.probe(active).catch((e): ProbeResult => ({ ok: false, reason: "absent", message: (e as Error).message })) : null;
+      if (probe && !probe.ok && probe.reason !== "policy") {
+        setUnverified(probe);
+        return;
+      }
+      if (probe?.ok) setModels(probe.models);
+    }
     try {
-      await api.saveSettings(settings, nextPolicy);
+      await api.saveSettings(next, nextPolicy);
       if (nextPolicy) setPolicy(nextPolicy);
-      onLanguage(settings.uiLanguage);
+      onLanguage(next.uiLanguage);
+      onSaved?.();
       setMsg({ intent: "success", text: t("saved") });
     } catch (e) {
       setMsg({ intent: "error", text: (e as Error).message });
     }
+  };
+
+  /** Fra guiden: brug et fundet værktøj – eksisterende endpoint med samme adresse genbruges. */
+  const useTool = async (tool: KnownTool, found: string[]) => {
+    const existing = settings.endpoints.find((e) => e.baseUrl.replace(/\/+$/, "") === tool.baseUrl);
+    const ep: Endpoint = existing ?? { id: uniqueId(tool.id, settings.endpoints.map((e) => e.id)), name: tool.name, baseUrl: tool.baseUrl, apiKey: "", structuredOutput: tool.structuredOutput, stripThinking: true, extraBody: {}, timeoutMs: 120_000 };
+    const next: Settings = { ...settings, endpoints: existing ? settings.endpoints : [...settings.endpoints, ep], activeEndpoint: ep.id, defaultModel: "" };
+    setSettings(next);
+    setModels(found);
+    await save(true, next);
+    setShowGuide(false);
+    setMsg({ intent: "success", text: t("setupConnected", { name: tool.name, n: found.length }) });
   };
 
   const test = async () => {
@@ -146,8 +173,18 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
   return (
     <div className={s.root}>
       <MessageBar intent="info">
-        <MessageBarBody>{api.mode === "bridge" ? t("modeBridgeInfo") : `${t("modeDirectInfo")} ${corsHint()}`}</MessageBarBody>
+        {/* CORS-vejledningen står præcist pr. værktøj i guiden nedenfor (#4). */}
+        <MessageBarBody>{api.mode === "bridge" ? t("modeBridgeInfo") : t("modeDirectInfo")}</MessageBarBody>
       </MessageBar>
+      {showGuide ? (
+        <SetupGuide onUse={useTool} />
+      ) : (
+        <div>
+          <Button size="small" onClick={() => setShowGuide(true)}>
+            {t("setupOpen")}
+          </Button>
+        </div>
+      )}
       <Subtitle2>{t("endpoints")}</Subtitle2>
       {settings.endpoints.map((ep) => (
         <Card key={ep.id} className={s.card}>
@@ -315,9 +352,26 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
         {t("policySource")}: {policySource}
       </Caption1>
 
-      <Button appearance="primary" onClick={save}>
+      <Button appearance="primary" onClick={() => void save()}>
         {t("save")}
       </Button>
+      {unverified && !unverified.ok && (
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")} <Caption1>{unverified.message}</Caption1>
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={() => void save(true)}>
+              {t("saveAnyway")}
+            </Button>
+            {unverified.reason === "cors" && (
+              <Button size="small" onClick={() => setShowGuide(true)}>
+                {t("setupOpen")}
+              </Button>
+            )}
+          </MessageBarActions>
+        </MessageBar>
+      )}
       {msg && (
         <MessageBar intent={msg.intent}>
           <MessageBarBody>{msg.text}</MessageBarBody>

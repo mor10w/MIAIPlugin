@@ -96,6 +96,12 @@ Ved første start er endpointet **Ollama** (`http://127.0.0.1:11434/v1`) og stan
 
 Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af bridgen):
 
+**Førstegangsguiden:** uden forbindelse til en model viser MIAI **Kom i gang**, der åbner Indstillinger med **Find lokale værktøjer**.
+- **Søgning:** guiden leder efter Ollama, LM Studio, llama.cpp, vLLM, LocalAI, Jan og KoboldCpp på deres standardporte.
+- **Klar:** et værktøj, der svarer, tages i brug med **Brug**.
+- **Mangler CORS:** kører værktøjet, men mangler CORS-opsætning (kun direkte tilstand), vises den præcise opsætning med add-in'ets adresse, og kommandoer kan kopieres. MIAI anbefaler aldrig `*`, da det ville lade enhver webside bruge din lokale model.
+- **Gem** tester den aktive endpoint først. Svarer den ikke, skal du bekræfte med **Gem alligevel**.
+
 1. **Endpoints** – ét endpoint pr. kort. Vælg en skabelon og klik *Tilføj endpoint*:
 
    | Skabelon | Standard-URL |

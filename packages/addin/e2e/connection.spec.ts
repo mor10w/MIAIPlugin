@@ -26,7 +26,7 @@ test.describe("direkte tilstand", () => {
     const tp = await open({ host: "Word", selection: "Tekst", cors: false });
     await expect(tp.page.getByText("Ingen forbindelse til modellen")).toBeVisible();
     await tp.run("Forenkl");
-    await expect(tp.page.locator(".fui-MessageBarBody")).toContainText(/tillader CORS fra https:\/\/localhost:\d+/);
+    await expect(tp.page.locator(".fui-MessageBarBody").filter({ hasText: "Kunne ikke forbinde" })).toContainText(/tillader CORS fra https:\/\/localhost:\d+/);
   });
 
   test("grammatik indsættes som sporede ændringer", async ({ open }) => {

@@ -10,6 +10,9 @@ import {
   getTask,
   isUrlAllowed,
   MAX_LOCAL_AUDIT_ENTRIES,
+  Endpoint,
+  probeEndpoint,
+  type ProbeResult,
   Policy,
   Settings,
   TASKS,
@@ -163,6 +166,18 @@ export class DirectBackend implements Backend {
     const rest = all.filter((x) => x.id !== id);
     if (rest.length === all.length) throw new Error("Opgaven findes ikke.");
     store.set(KEY_USER_TASKS, JSON.stringify(rest));
+  }
+
+  async probe(endpoint: Endpoint): Promise<ProbeResult> {
+    return probeEndpoint(Endpoint.parse(endpoint), this.policyNow, {
+      signal: timeout(6_000),
+      client: this.client,
+      // Et no-cors-kald lykkes (opakt svar), når noget lytter – så mangler kun CORS-opsætningen.
+      reachableWithoutCors: async (url) => {
+        await fetch(url, { mode: "no-cors", signal: timeout(3_000) });
+        return true;
+      },
+    });
   }
 
   async audit(): Promise<AuditEntry[]> {

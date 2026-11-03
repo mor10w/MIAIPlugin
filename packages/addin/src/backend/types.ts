@@ -1,4 +1,4 @@
-import type { AuditEntry, HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
+import type { AuditEntry, Endpoint, HealthInfo, ProbeResult, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
 
 /**
  * Hvordan add-in'et når modellen (ADR-0007):
@@ -25,6 +25,8 @@ export interface Backend {
   userTasks(): Promise<UserTaskInfo[]>;
   saveUserTask(spec: UserTaskFile): Promise<void>;
   deleteUserTask(id: string): Promise<void>;
+  /** Tester en (evt. ikke gemt) endpoint: svarer den, og hvilke modeller har den? (#4) */
+  probe(endpoint: Endpoint): Promise<ProbeResult>;
   /** Seneste audit-logposter (kun metadata). */
   audit(): Promise<AuditEntry[]>;
   /** Kører en opgave; kalder onEvent for hver hændelse. Kaster kun ved transportfejl. */

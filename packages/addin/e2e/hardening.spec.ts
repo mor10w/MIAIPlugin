@@ -46,7 +46,7 @@ test("401 fra endpointen giver en forståelig fejl med serverens detalje", async
   tp.model.reply = () => ({ status: 401, error: "invalid api key" });
   await tp.run("Forenkl");
   await expect(tp.page.getByText("Endpointen afviste adgang – tjek API-nøglen.")).toBeVisible();
-  await expect(tp.page.locator(".fui-MessageBarBody")).toContainText("invalid api key");
+  await expect(tp.page.locator(".fui-MessageBarBody").filter({ hasText: "Endpointen afviste" })).toContainText("invalid api key");
 });
 
 test("kendt kontekst: for lang tekst afvises med det samme", async ({ open }) => {

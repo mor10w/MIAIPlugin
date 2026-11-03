@@ -38,7 +38,7 @@ export class MockModel {
   private server?: Server;
   url = "";
 
-  constructor(readonly opts: { cors?: boolean; models?: string[] } = {}) {}
+  constructor(readonly opts: { cors?: boolean; models?: string[]; port?: number } = {}) {}
 
   get lastRequest(): ChatRequestBody | undefined {
     return this.requests.at(-1);
@@ -85,7 +85,7 @@ export class MockModel {
       }
       res.end("data: [DONE]\n\n");
     });
-    this.url = `http://127.0.0.1:${await listen(this.server)}/v1`;
+    this.url = `http://127.0.0.1:${await listen(this.server, this.opts.port)}/v1`;
     return this;
   }
 
@@ -149,8 +149,24 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-function listen(server: Server | ReturnType<typeof createHttps>): Promise<number> {
-  return new Promise((ok) => server.listen(0, "127.0.0.1", () => ok((server.address() as AddressInfo).port)));
+function listen(server: Server | ReturnType<typeof createHttps>, port = 0): Promise<number> {
+  return new Promise((ok, fail) => {
+    server.once("error", fail);
+    server.listen(port, "127.0.0.1", () => ok((server.address() as AddressInfo).port));
+  });
+}
+
+/** Er en fast port ledig? (Tests, der bruger kendte værktøjsporte, springes over, hvis fx Ollama kører lokalt.) */
+export async function portIsFree(port: number): Promise<boolean> {
+  const s = createHttp();
+  try {
+    await listen(s, port);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await close(s);
+  }
 }
 
 function close(server?: { close: (cb: () => void) => void; closeAllConnections?: () => void }): Promise<void> {

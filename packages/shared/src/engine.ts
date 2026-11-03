@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { isDegenerating } from "./degenerate.js";
 import { extractJson } from "./json.js";
-import { listModelEntries, streamChat, UpstreamError, type ModelEntry, type ApiMessage, type ClientOptions, type ToolCall, type ToolSpec } from "./openai.js";
+import { listModelEntries, listModels, streamChat, UpstreamError, type ModelEntry, type ApiMessage, type ClientOptions, type ToolCall, type ToolSpec } from "./openai.js";
 import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
-import type { Endpoint, ParsedTaskRequest, Policy, Settings, TaskEvent, TaskWarning } from "./types.js";
+import type { Endpoint, ParsedTaskRequest, Policy, ProbeResult, Settings, TaskEvent, TaskWarning } from "./types.js";
 
 /**
  * Opgavemotoren: bygger prompts, kalder endpointen, filtrerer <think>, validerer strukturerede svar.
@@ -316,5 +316,33 @@ function tryParse(schema: z.ZodType, text: string): { ok: true; data: unknown } 
     return r.success ? { ok: true, data: r.data } : { ok: false, error: z.prettifyError(r.error).slice(0, 500) };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
+  }
+}
+
+/**
+ * Tester en endpoint uden at gemme den (#4): svarer /v1/models, og hvilke modeller findes?
+ * `reachableWithoutCors` bruges i browseren til at skelne "CORS mangler" fra "intet kører":
+ * et kald med mode "no-cors" lykkes (opakt svar), når noget lytter på porten.
+ */
+export async function probeEndpoint(
+  ep: Endpoint,
+  policy: Policy,
+  opts: { signal?: AbortSignal; client?: ClientOptions; reachableWithoutCors?: (url: string) => Promise<boolean> } = {},
+): Promise<ProbeResult> {
+  if (!isUrlAllowed(ep.baseUrl, policy)) return { ok: false, reason: "policy", message: `${ep.baseUrl} er ikke tilladt af politikken.` };
+  // Kort timeout: en lukket port svarer straks, men en filtreret kan hænge.
+  const probeEp = { ...ep, timeoutMs: Math.min(ep.timeoutMs, 5_000) };
+  try {
+    return { ok: true, models: await listModels(probeEp, opts.signal, opts.client) };
+  } catch (err) {
+    if (!(err instanceof UpstreamError)) throw err;
+    if (err.code === "UPSTREAM_UNREACHABLE" || err.code === "UPSTREAM_TIMEOUT") {
+      const url = ep.baseUrl.replace(/\/+$/, "") + "/models";
+      if (opts.reachableWithoutCors && (await opts.reachableWithoutCors(url).catch(() => false))) {
+        return { ok: false, reason: "cors", message: err.message };
+      }
+      return { ok: false, reason: "absent", message: err.message };
+    }
+    return { ok: false, reason: err.code === "UPSTREAM_HTTP" ? "http" : "protocol", message: err.message };
   }
 }

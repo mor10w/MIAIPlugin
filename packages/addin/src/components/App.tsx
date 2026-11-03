@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Badge, Caption1, FluentProvider, Tab, TabList, Text, Tooltip, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Badge, Button, Caption1, FluentProvider, MessageBar, MessageBarActions, MessageBarBody, Tab, TabList, Text, Tooltip, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
@@ -12,6 +12,7 @@ const useStyles = makeStyles({
   shell: { height: "100%", display: "flex", flexDirection: "column", background: tokens.colorNeutralBackground1 },
   header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}` },
   body: { flex: 1, overflowY: "auto", padding: tokens.spacingHorizontalM },
+  banner: { marginBottom: tokens.spacingVerticalM },
 });
 
 type Status = { kind: "ok" | "warn" | "down"; detail?: string };
@@ -29,21 +30,30 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
   const [tab, setTab] = useState<"actions" | "tasks" | "chat" | "settings">("actions");
   const [status, setStatus] = useState<Status>({ kind: "warn" });
+  /** Først når første statustjek er færdigt, vises "Kom i gang" (ellers blinker banneret ved start). */
+  const [checked, setChecked] = useState(false);
   const i18n = useMemo(() => ({ lang, t: makeT(lang) }), [lang]);
   const { t } = i18n;
   const api = useBackend();
 
+  const check = useCallback(
+    () =>
+      api
+        .health()
+        .then(
+          (h) => setStatus(h.endpoint.reachable ? { kind: "ok", detail: h.endpoint.baseUrl } : { kind: "warn", detail: h.endpoint.error }),
+          (e) => setStatus({ kind: "down", detail: (e as Error).message }),
+        )
+        .finally(() => setChecked(true)),
+    [api],
+  );
+
   useEffect(() => {
     api.settings().then((v) => setLang(v.settings.uiLanguage), () => {});
-    const check = () =>
-      api.health().then(
-        (h) => setStatus(h.endpoint.reachable ? { kind: "ok", detail: h.endpoint.baseUrl } : { kind: "warn", detail: h.endpoint.error }),
-        (e) => setStatus({ kind: "down", detail: (e as Error).message }),
-      );
     void check();
     const id = setInterval(check, 15_000);
     return () => clearInterval(id);
-  }, [api]);
+  }, [api, check]);
 
   const badge = { ok: { color: "success", text: t("connected") }, warn: { color: "warning", text: t("notConnected") }, down: { color: "danger", text: t("bridgeDown") } }[status.kind] as {
     color: "success" | "warning" | "danger";
@@ -72,10 +82,21 @@ export function App({ adapter }: { adapter: HostAdapter }) {
           <Tab value="settings">{t("tabSettings")}</Tab>
         </TabList>
         <div className={s.body}>
+          {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
+          {checked && status.kind !== "ok" && tab !== "settings" && (
+            <MessageBar intent="warning" className={s.banner}>
+              <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
+              <MessageBarActions>
+                <Button size="small" appearance="primary" onClick={() => setTab("settings")}>
+                  {t("getStarted")}
+                </Button>
+              </MessageBarActions>
+            </MessageBar>
+          )}
           {tab === "actions" && <ActionsTab adapter={adapter} />}
           {tab === "tasks" && <TasksTab />}
           {tab === "chat" && <ChatTab adapter={adapter} />}
-          {tab === "settings" && <SettingsTab onLanguage={setLang} />}
+          {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
         </div>
         </div>
       </FluentProvider>

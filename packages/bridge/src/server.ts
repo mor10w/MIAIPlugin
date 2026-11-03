@@ -4,6 +4,8 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import fastifyStatic from "@fastify/static";
 import {
   cachedModels,
+  Endpoint,
+  probeEndpoint,
   isUrlAllowed,
   Policy,
   Settings,
@@ -125,6 +127,15 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
       if (s.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "error" });
       return reply.code(502).send({ error: (err as Error).message, code: (err as UpstreamError).code });
     }
+  });
+
+  /** Tester en (evt. ikke gemt) endpoint uden CORS-begrænsninger (#4). Maskerede nøgler slås op. */
+  app.post("/api/probe", async (req, reply) => {
+    const body = z.object({ endpoint: Endpoint }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: z.prettifyError(body.error) });
+    const ep = body.data.endpoint;
+    if (ep.apiKey === KEY_MASK) ep.apiKey = store.getSettings().endpoints.find((e) => e.id === ep.id)?.apiKey ?? "";
+    return probeEndpoint(ep, store.getPolicy(), { signal: AbortSignal.timeout(6_000) });
   });
 
   app.get("/api/settings", async (): Promise<SettingsView> => {

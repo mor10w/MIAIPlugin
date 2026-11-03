@@ -1,4 +1,4 @@
-import type { AuditEntry, HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
+import type { AuditEntry, Endpoint, HealthInfo, ProbeResult, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
 import type { Backend, UserTaskInfo } from "./types";
 
 // Task pane serveres af bridgen, så API'et ligger på samme origin.
@@ -37,6 +37,9 @@ export class BridgeBackend implements Backend {
   }
   async deleteUserTask(id: string) {
     await fetch(`/api/user-tasks/${encodeURIComponent(id)}`, { method: "DELETE", headers: H }).then((r) => json(r));
+  }
+  probe(endpoint: Endpoint) {
+    return fetch("/api/probe", { method: "POST", headers: H, body: JSON.stringify({ endpoint }) }).then((r) => json<ProbeResult>(r));
   }
   audit() {
     return fetch("/api/audit", { headers: H }).then((r) => json<AuditEntry[]>(r));

@@ -148,3 +148,11 @@ export interface HealthInfo {
   version: string;
   endpoint: { id: string; baseUrl: string; reachable: boolean; error?: string };
 }
+
+/**
+ * Resultat af at teste en endpoint (#4). reason: cors = noget svarer, men browseren må ikke læse
+ * svaret (CORS mangler); absent = intet svarer; policy = ikke tilladt; http = fejlsvar fra serveren.
+ */
+export type ProbeResult =
+  | { ok: true; models: string[] }
+  | { ok: false; reason: "cors" | "absent" | "policy" | "http" | "protocol"; message: string };
