@@ -13,6 +13,8 @@ export interface TaskpaneOptions extends FakeOfficeOptions {
   endpoint?: Record<string, unknown>;
   /** Ekstra indstillinger, fx { webSearch: true }. */
   settings?: Record<string, unknown>;
+  /** Modeller, mock-modellen udbyder på /v1/models (standard: ["qwen3:4b"]). */
+  models?: string[];
 }
 
 export interface Taskpane {
@@ -42,7 +44,7 @@ export const test = base.extend<{ open: Open }>({
     page.on("pageerror", (e) => errors.push(e.message));
 
     await use(async (opts) => {
-      const model = await new MockModel({ cors: opts.cors }).start();
+      const model = await new MockModel({ cors: opts.cors, models: opts.models }).start();
       cleanup.push(() => model.stop());
 
       await page.route("https://appsforoffice.microsoft.com/**", (r) => r.fulfill({ contentType: "text/javascript", body: fakeOfficeScript(opts) }));

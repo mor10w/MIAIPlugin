@@ -20,6 +20,7 @@ import {
 import type { AuditEntry, Endpoint, Policy, Settings, StructuredOutputMode } from "@miai/shared";
 import { corsHint, useBackend } from "../backend";
 import { useI18n } from "../i18n";
+import { TaskModels } from "./TaskModels";
 
 /** Kendte OpenAI-kompatible inference-værktøjer og deres standardporte. "Andet" dækker alt andet. */
 const PRESETS: { id: string; name: string; baseUrl: string; structuredOutput: StructuredOutputMode }[] = [
@@ -229,6 +230,7 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
           ))}
         </Dropdown>
       </Field>
+      <TaskModels value={settings.taskModels} models={models} onChange={(taskModels) => setSettings({ ...settings, taskModels })} />
       <div className={s.row}>
         <Field label={t("temperature")}>
           <Input type="number" min={0} max={2} step={0.1} value={String(settings.temperature)} onChange={(_, d) => setSettings({ ...settings, temperature: Number(d.value) })} />

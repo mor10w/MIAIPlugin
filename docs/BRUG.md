@@ -112,12 +112,13 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
    Pr. endpoint kan du sætte navn, basis-URL (inkl. `/v1`), API-nøgle (valgfri), **struktureret output** (`json_schema` / `json_object` / `none`) og *Skjul <think>-tankegang*.
 2. **Test forbindelse** – gemmer indstillingerne og henter modellenavnene; viser fx "3 modeller fundet".
 3. **Standardmodel** – vælg fra de fundne modeller, eller lad den første tilgængelige bruges.
-4. **Temperatur** (0–2) og **Maks. tokens i svar**.
-5. **Sprog** – Dansk eller English (følger som udgangspunkt Office-sproget).
-6. **Web-søgning** (fra som standard) – gør det muligt for modellen at søge online efter aktuelle oplysninger (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle, og modellen citerer sine kilder. **Bemærk:** søgeordene dannes af modellen ud fra dit dokument og sendes til DuckDuckGo – det er det eneste, der forlader maskinen, og derfor et aktivt valg. Kræver bridge- eller app-tilstand. En organisation kan forbyde web-søgning i maskinpolitikken (`"webSearch": false`), og med audit-log slået til logges hver søgning (host og tid, aldrig søgeord).
-7. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
-8. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
-9. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
+4. **Model pr. opgave** – hver opgave kan få sin egen model, fx en lille og hurtig til grammatik og oversættelse og en større til formler, diagrammer og dataanalyse. Opgaver uden valg bruger standardmodellen. Findes en valgt model ikke på den aktive endpoint (fx efter skift af værktøj), vises en advarsel.
+5. **Temperatur** (0–2) og **Maks. tokens i svar**.
+6. **Sprog** – Dansk eller English (følger som udgangspunkt Office-sproget).
+7. **Web-søgning** (fra som standard) – gør det muligt for modellen at søge online efter aktuelle oplysninger (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle, og modellen citerer sine kilder. **Bemærk:** søgeordene dannes af modellen ud fra dit dokument og sendes til DuckDuckGo – det er det eneste, der forlader maskinen, og derfor et aktivt valg. Kræver bridge- eller app-tilstand. En organisation kan forbyde web-søgning i maskinpolitikken (`"webSearch": false`), og med audit-log slået til logges hver søgning (host og tid, aldrig søgeord).
+8. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
+9. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
+10. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
 
 Klik **Gem** – uden dette virker ændringerne ikke.
 
