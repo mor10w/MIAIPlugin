@@ -290,9 +290,12 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
           )}
         </Card>
       )}
-      <Field hint={t("webSearchHint")}>
-        <Switch label={t("webSearch")} checked={settings.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
-      </Field>
+      {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
+      {api.mode === "bridge" && (
+        <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>
+          <Switch label={t("webSearch")} disabled={!policy.webSearch} checked={settings.webSearch && policy.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
+        </Field>
+      )}
       <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : undefined}>
         <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
       </Field>

@@ -4,6 +4,7 @@ import { Send20Regular } from "@fluentui/react-icons";
 import type { ApplyMode, ChatMessage, DocContext } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
+import { extractGraphic } from "../svg";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
 import { Markdown } from "./Markdown";
@@ -42,7 +43,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
     setDraft("");
     const history = messages;
     setMessages([...history, { role: "user", content: prompt }]);
-    const ctx = useContext ? await adapter.getContext({ wholeDocumentFallback: true }).catch(() => ctxRef.current) : { host: adapter.host, text: "", isWholeDocument: false };
+    const ctx = useContext ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current) : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
     setLastCtx(useContext ? ctx : null);
     const final = await start("chat", { context: ctx, params: { prompt }, history: history.slice(-20) });
@@ -50,6 +51,8 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   };
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));
+  // "Indsæt som billede" kun når svaret faktisk indeholder en ```mermaid- eller ```svg-figur.
+  const modesFor = (content: string): ApplyMode[] => (adapter.supports("image") && extractGraphic(content) ? ["image", ...modes] : modes);
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
 
   return (
@@ -63,7 +66,11 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
           ) : (
             <div key={i} className={s.bot}>
               <Markdown text={m.content} />
-              {i === lastAssistant && state.status !== "running" && <ApplyBar modes={modes} apply={(mode) => adapter.applyText(m.content, "markdown", mode, ctxRef.current)} copyText={m.content} />}
+              {i === lastAssistant && state.status !== "running" && <ApplyBar
+                  modes={modesFor(m.content)}
+                  apply={(mode) => (mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current))}
+                  copyText={m.content}
+                />}
             </div>
           ),
         )}

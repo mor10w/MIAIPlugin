@@ -14,6 +14,8 @@ export type TaskSource = "user" | "machine";
 export interface LoadedTask {
   spec: UserTaskFile;
   source: TaskSource;
+  /** Filen opgaven blev læst fra (bruges ved sletning – filnavnet behøver ikke være <id>.json). */
+  file: string;
 }
 
 /** Maskin-mappe sat af administratoren. Udefineret = ingen organisation-opgaver. */
@@ -53,7 +55,7 @@ function loadDir(dir: string, source: TaskSource): LoadedTask[] {
   for (const file of jsonFiles(dir)) {
     try {
       const r = UserTaskFile.safeParse(JSON.parse(readFileSync(file, "utf8")));
-      if (r.success) out.push({ spec: r.data, source });
+      if (r.success) out.push({ spec: r.data, source, file });
       else console.warn(`[miai] Ugyldig opgavefil ${file}: ${r.error.issues.map((i) => i.message).join(", ")}`);
     } catch (err) {
       console.warn(`[miai] Kan ikke læse opgavefil ${file}: ${(err as Error).message}`);

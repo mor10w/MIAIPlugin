@@ -140,6 +140,26 @@ describe("brugerdefinerede opgaver", () => {
     expect(existsSync(file)).toBe(false);
   });
 
+  it("DELETE fjerner filen, selvom den ligger i en undermappe med et andet navn", async () => {
+    const file = join(dir, "tasks", "salg", "tilbud-v2.json");
+    mkdirSync(join(dir, "tasks", "salg"), { recursive: true });
+    writeFileSync(file, JSON.stringify(spec));
+    expect((await app.inject({ method: "DELETE", url: "/api/user-tasks/pris-tilbud", headers: H })).statusCode).toBe(200);
+    expect(existsSync(file)).toBe(false);
+    const list = (await app.inject({ url: "/api/user-tasks", headers: H })).json() as { file?: string }[];
+    expect(list).toHaveLength(0);
+  });
+
+  it("GET /api/user-tasks sender ikke filstier til webviewet", async () => {
+    writeTask("pris-tilbud");
+    const list = (await app.inject({ url: "/api/user-tasks", headers: H })).json() as Record<string, unknown>[];
+    expect(list[0]).not.toHaveProperty("file");
+  });
+
+  it("PUT afviser forskelligt id i URL og indhold", async () => {
+    expect((await app.inject({ method: "PUT", url: "/api/user-tasks/andet-id", headers: H, payload: spec })).statusCode).toBe(400);
+  });
+
   it("GET /api/user-tasks returnerer tom liste uden filer", async () => {
     expect((await app.inject({ url: "/api/user-tasks", headers: H })).json()).toEqual([]);
   });

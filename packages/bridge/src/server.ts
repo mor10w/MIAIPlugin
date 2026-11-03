@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
 import {
@@ -164,11 +164,13 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
   // Filerne ligger i bruger-mappen (indstillingen customTasksDir, standard <config>/tasks)
   // og evt. i maskin-mappen (MIAI_TASKS_DIR). Maskin-opgaver er read-only via UI.
 
-  app.get("/api/user-tasks", async () => [...loadUserTasks(store.getSettings(), store.dir).values()]);
+  // Filstier sendes ikke til webviewet.
+  app.get("/api/user-tasks", async () => [...loadUserTasks(store.getSettings(), store.dir).values()].map(({ spec, source }) => ({ spec, source })));
 
   app.put("/api/user-tasks/:id", async (req, reply) => {
     const parsed = UserTaskFile.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    if (parsed.data.id !== (req.params as { id: string }).id) return reply.code(400).send({ error: "Id i URL og indhold er forskellige." });
     const s = store.getSettings();
     if (loadUserTasks(s, store.dir).get(parsed.data.id)?.source === "machine") {
       return reply.code(409).send({ error: "Opgaven er defineret af din organisation og kan ikke ændres." });
@@ -186,7 +188,12 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
     const loaded = loadUserTasks(s, store.dir).get(id);
     if (!loaded) return reply.code(404).send({ error: "Opgaven findes ikke." });
     if (loaded.source === "machine") return reply.code(409).send({ error: "Opgaven er defineret af din organisation og kan ikke slettes." });
-    rmSync(join(userTasksDir(s, store.dir), `${loaded.spec.id}.json`), { force: true });
+    // Slet den fil, opgaven faktisk blev læst fra (kan ligge i en undermappe eller have et andet navn),
+    // men kun hvis den ligger i brugerens opgavemappe.
+    const dir = resolve(userTasksDir(s, store.dir));
+    const file = resolve(loaded.file);
+    if (!file.startsWith(dir + sep)) return reply.code(409).send({ error: "Opgavefilen ligger uden for opgavemappen." });
+    rmSync(file);
     invalidateUserTasks();
     return { ok: true };
   });

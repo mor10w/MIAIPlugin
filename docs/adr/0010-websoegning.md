@@ -29,7 +29,7 @@ add-in'ets webview.
 2. **Søgebackend uden API-nøgle**: DuckDuckGo's HTML-endpoint (`html.duckduckgo.com`)
    skraperes i `bridge/search.ts`. Resultater (titel, URL, snippet) formateres som
    tekst til modellen. Ingen nye afhængigheder (ren `fetch` + regex-parsning).
-3. **Indstilling**: `webSearch` (boolean, standard: til) i fælles `Settings`.
+3. **Indstilling**: `webSearch` (boolean, **standard: fra** – rettet ved code review 2026-11-03) i fælles `Settings`.
    Bridgen leverer værktøjet kun når det er til. I direkte tilstand (browser → model
    uden bridge) leveres intet værktøj – funktionaliteten er således automatisk
    bridge-baseret, som architecturen kræver.
@@ -50,3 +50,16 @@ add-in'ets webview.
    `run()`-grænse, hvis det bliver nødvendigt.
 - **Overvågning:** Hver opgave kan køre op til 4 model-runder; audit-loggen fortsætter
   med at logge kun metadata.
+
+## Tillæg (code review 2026-11-03)
+
+Søgeordene dannes af modellen ud fra dokumentet og sendes til en ekstern tjeneste. Det er den eneste
+udgående trafik, der ikke går til den konfigurerede model-endpoint, og den var hverken omfattet af
+politikken (ADR-0006) eller audit-loggen. Rettet:
+
+- `Settings.webSearch` er **fra** som standard (aktivt valg, jf. løftet om at data bliver lokalt).
+- Ny politik-indstilling `Policy.webSearch` (standard `true`). En organisation kan sætte den til `false`
+  i maskinpolitikken og dermed forbyde søgning; motoren kræver både indstilling og politik.
+- Hver søgning skrives i audit-loggen (`kind: "search"`, host `html.duckduckgo.com`, varighed – aldrig søgeord).
+- Værktøjskald sendes tilbage med `type: "function"`, som OpenAI-specifikationen kræver (vLLM m.fl. afviser ellers).
+- Indstillingen vises kun i bridge-tilstand og er låst, når politikken forbyder søgning.

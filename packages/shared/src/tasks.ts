@@ -342,7 +342,7 @@ export const TASKS: TaskDefinition[] = [
           { value: "persuasive and energetic", label: { da: "Overbevisende", en: "Persuasive" } },
           { value: "professional and confident", label: { da: "Professionel", en: "Professional" } },
           { value: "friendly and warm", label: { da: "Venlig", en: "Friendly" } },
-          { value: "bold and direct", label: { da: "Drægtig", en: "Bold" } },
+          { value: "bold and direct", label: { da: "Dristig", en: "Bold" } },
         ],
         default: "persuasive and energetic",
       },

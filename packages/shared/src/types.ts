@@ -94,8 +94,12 @@ export const Settings = z.object({
   maxTokens: z.number().int().min(16).max(65_536).default(8_192),
   uiLanguage: z.enum(["da", "en"]).default("da"),
   auditLog: z.boolean().default(false),
-  /** Modellen kan søge på webbet (kræver bridge – direkte tilstand har ingen eksekverer). */
-  webSearch: z.boolean().default(true),
+  /**
+   * Modellen kan søge på webbet (kræver bridge – direkte tilstand har ingen eksekverer).
+   * Slået FRA som standard: søgeordene dannes af modellen ud fra dokumentet og sendes til en
+   * ekstern søgetjeneste, så det skal være et aktivt valg (løftet om, at data bliver lokalt).
+   */
+  webSearch: z.boolean().default(false),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
 });
@@ -106,6 +110,8 @@ export const Policy = z.object({
   allowedHosts: z.array(z.string()).default(["127.0.0.1", "localhost", "::1"]),
   /** Låst politik kan ikke ændres via UI (sat af organisationen). */
   locked: z.boolean().default(false),
+  /** Må web-søgning slås til? En organisation kan forbyde den helt (søgeord forlader maskinen). */
+  webSearch: z.boolean().default(true),
 });
 export type Policy = z.infer<typeof Policy>;
 

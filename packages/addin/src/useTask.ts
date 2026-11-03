@@ -44,7 +44,8 @@ export function useTask() {
               break;
             case "delta":
               onDelta?.(e.text);
-              update((s) => ({ ...s, text: s.text + e.text }));
+              // Når svaret begynder igen efter en søgning, er søgningen afsluttet.
+              update((s) => ({ ...s, text: s.text + e.text, searchQuery: e.text ? undefined : s.searchQuery }));
               break;
             case "progress":
               update((s) => ({ ...s, progressChars: e.chars }));

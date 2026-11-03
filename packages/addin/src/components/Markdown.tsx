@@ -43,8 +43,9 @@ export function Markdown({ text }: { text: string }) {
 
     const replaceBlock = (block: Element, node: Node) => {
       if (!block.isConnected) return;
-      const pre = block.parentElement?.parentElement; // <pre><code>…</code></pre>
-      if (pre) pre.replaceWith(node);
+      // Erstat kun <pre>-blokken – ikke hele beskeden (parentElement.parentElement var Markdown-roden).
+      const pre = block.closest("pre");
+      if (pre && root.contains(pre)) pre.replaceWith(node);
     };
 
     const renderMermaid = async () => {
@@ -82,11 +83,14 @@ export function Markdown({ text }: { text: string }) {
       }
     };
 
-    if (root.querySelector("code.language-mermaid")) void renderMermaid();
     renderSvg();
+    // Mermaid: vent på en pause i strømmen, så et halvfærdigt diagram ikke rendres ved hvert token.
+    // mermaidToSvg cacher pr. kode, så færdige diagrammer vises straks ved genrendering.
+    const timer = root.querySelector("code.language-mermaid") ? setTimeout(() => void renderMermaid(), 300) : undefined;
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [text]);
 

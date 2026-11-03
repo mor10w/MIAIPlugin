@@ -1,5 +1,6 @@
 import { appendFile } from "node:fs/promises";
-import { existsSync, readFileSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { AuditEntry, MAX_AUDIT_FILE_BYTES } from "@miai/shared";
 
 /**
@@ -9,14 +10,14 @@ import { AuditEntry, MAX_AUDIT_FILE_BYTES } from "@miai/shared";
  */
 
 export function auditFile(configDir: string): string {
-  return `${configDir}/audit.log`;
+  return join(configDir, "audit.log");
 }
 
 export async function appendAudit(file: string, entry: AuditEntry): Promise<void> {
   try {
+    // stat i stedet for at læse hele filen (op til 1 MB) ved hver skrivning.
     if (existsSync(file)) {
-      const size = readFileSync(file).length;
-      if (size > MAX_AUDIT_FILE_BYTES) {
+      if (statSync(file).size > MAX_AUDIT_FILE_BYTES) {
         try {
           renameSync(file, `${file}.old`);
         } catch {

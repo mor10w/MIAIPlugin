@@ -56,7 +56,7 @@ beforeAll(async () => {
 });
 afterAll(() => server.close());
 
-const settings = (ep: object = {}) => Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x" });
+const settings = (ep: object = {}, extra: object = {}) => Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x", ...extra });
 
 async function run(id: string, body: object, policy = Policy.parse({}), hint?: string, ep: object = {}) {
   const events: TaskEvent[] = [];
@@ -149,7 +149,7 @@ describe("executeTask (direkte tilstand)", () => {
   it("kører tool-løkke (web_search) og udsender search-event", async () => {
     const calls: string[] = [];
     const events: TaskEvent[] = [];
-    const s = settings();
+    const s = settings({}, { webSearch: true });
     await executeTask(
       getTask("chat")!,
       TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }),
@@ -173,6 +173,22 @@ describe("executeTask (direkte tilstand)", () => {
     const text = events.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
     expect(text).toContain("Endeligt svar baseret på søgning.");
     expect(events.some((e) => e.type === "search" && (e as { query: string }).query === "test query")).toBe(true);
+    // Værktøjskaldet sendes tilbage med type: "function" (kræves af OpenAI-specifikationen, fx vLLM).
+    const assistant = (lastBody.messages as { role: string; tool_calls?: { type?: string }[] }[]).find((m) => m.tool_calls);
+    expect(assistant?.tool_calls?.[0].type).toBe("function");
+  });
+
+  it("web-søgning er slået fra som standard og kan forbydes af politikken", async () => {
+    const calls: string[] = [];
+    const tools = { specs: [{ type: "function" as const, function: { name: "web_search", description: "", parameters: {} } }], run: async () => (calls.push("x"), "resultat") };
+    const req = TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } });
+    const base = { emit: () => {}, signal: new AbortController().signal, tools };
+    const def = settings();
+    expect(def.webSearch).toBe(false);
+    await executeTask(getTask("chat")!, req, { ...base, settings: def, endpoint: def.endpoints[0], policy: Policy.parse({}) });
+    const on = settings({}, { webSearch: true });
+    await executeTask(getTask("chat")!, req, { ...base, settings: on, endpoint: on.endpoints[0], policy: Policy.parse({ webSearch: false }) });
+    expect(calls).toHaveLength(0);
   });
 
   it("kører ikke værktøjer, når webSearch er slået fra", async () => {

@@ -41,9 +41,10 @@ export interface ToolSpec {
   function: { name: string; description: string; parameters: Record<string, unknown> };
 }
 
-/** Et komplet værktøjskald fra modellen. */
+/** Et komplet værktøjskald fra modellen. `type` kræves af OpenAI-specifikationen, når kaldet sendes tilbage. */
 export interface ToolCall {
   id: string;
+  type?: "function";
   function: { name: string; arguments: string };
 }
 

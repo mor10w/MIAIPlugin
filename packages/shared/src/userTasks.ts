@@ -30,7 +30,8 @@ export const UserTaskFile = z.object({
   input: z.enum(["selection", "selectionOrDocument", "prompt"]),
   output: z.object({ format: z.enum(["plain", "markdown", "tsv"]) }),
   params: z.array(UserParamDef).max(8).default([]),
-  applyModes: z.array(z.enum(["replace", "trackChanges", "insertAfter", "comment"])).min(1).max(4),
+  /** "cells" bruges til TSV-output i Excel (celle for celle). */
+  applyModes: z.array(z.enum(["replace", "trackChanges", "insertAfter", "comment", "cells"])).min(1).max(5),
   temperature: z.number().min(0).max(2).optional(),
   prompt: z.object({
     /** Valgfri ekstra systemprompt (udover MIAI's basisregler). */
@@ -72,7 +73,8 @@ export function toTaskDefinition(spec: UserTaskFile): TaskDefinition {
       options: p.options?.map((o) => ({ value: o.value, label: fill(o.label) })),
       default: p.default,
     })),
-    applyModes: [...spec.applyModes],
+    // TSV-output hører hjemme i Excel-celler; sørg for, at knappen findes.
+    applyModes: spec.output.format === "tsv" && !spec.applyModes.includes("cells") ? [...spec.applyModes, "cells"] : [...spec.applyModes],
     temperature: spec.temperature,
     buildMessages(req: ParsedTaskRequest): ChatMessage[] {
       const ctx = req.context;
@@ -85,7 +87,8 @@ export function toTaskDefinition(spec: UserTaskFile): TaskDefinition {
         prompt: req.params.prompt ?? "",
         language: req.params.language ?? "English",
         address: ctx.address ?? "",
-        table: ctx.table ?? "",
+        // Tabellen er dokumentindhold og pakkes som markeringen (prompt-injection-sikring).
+        table: ctx.table ? doc(ctx.table) : "",
       };
       const sysParts = [SYSTEM_BASE, `The user is working in ${hostName(ctx.host)}.`];
       if (spec.prompt.system.trim()) sysParts.push(renderTemplate(spec.prompt.system, values));

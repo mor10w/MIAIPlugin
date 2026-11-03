@@ -114,7 +114,7 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 3. **Standardmodel** – vælg fra de fundne modeller, eller lad den første tilgængelige bruges.
 4. **Temperatur** (0–2) og **Maks. tokens i svar**.
 5. **Sprog** – Dansk eller English (følger som udgangspunkt Office-sproget).
-6. **Web-søgning** – gør det muligt for modellen at søge online efter aktuelle oplysninger og inspiration (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle; modellen citerer sine kilder. Kræver bridge- eller app-tilstand (direkte tilstand har ingen søgetjeneste). Slåes fra, hvis du vil have modellen til kun at svare ud fra sine egne data.
+6. **Web-søgning** (fra som standard) – gør det muligt for modellen at søge online efter aktuelle oplysninger (fx nyheder, versioner, priser). Søgningen kører i bridgen/appen uden API-nøgle, og modellen citerer sine kilder. **Bemærk:** søgeordene dannes af modellen ud fra dit dokument og sendes til DuckDuckGo – det er det eneste, der forlader maskinen, og derfor et aktivt valg. Kræver bridge- eller app-tilstand. En organisation kan forbyde web-søgning i maskinpolitikken (`"webSearch": false`), og med audit-log slået til logges hver søgning (host og tid, aldrig søgeord).
 7. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
 8. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
 9. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
@@ -171,7 +171,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument som kontekst** (til som udgangspunkt) giver modellen din aktuelle markering – i Excel dit markerede område – med. De seneste 20 beskeder medsendes som historik. Svar kan indsættes **efter** markeringen, **erstattes** eller indsættes **som kommentar**. **Ny samtale** nulstiller historikken. Enter sender, Shift+Enter linjeskift.
 
 - **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8).
-- **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, til som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
+- **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, fra som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
 
 ## Brugerdefinerede opgaver
 

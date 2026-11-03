@@ -10,13 +10,14 @@ Løftet "data forbliver hos brugeren" skal kunne håndhæves, og senere skal en 
 Bridgen validerer hver endpoint-`baseUrl` mod en politik:
 
 ```json
-{ "allowedHosts": ["127.0.0.1", "localhost", "::1"], "locked": false }
+{ "allowedHosts": ["127.0.0.1", "localhost", "::1"], "locked": false, "webSearch": true }
 ```
 
 - Standard: kun loopback.
 - Brugeren kan selv tilføje hosts (fx en GPU-maskine på LAN), medmindre `locked` er sat.
 - En maskin-politikfil (`MIAI_POLICY_FILE`, senere fast placering under ProgramData / `/Library/Application Support`) har forrang og kan ikke ændres via UI.
 - Wildcards: `*.firma.local`.
+- `webSearch: false` forbyder modellens web-søgning (ADR-0010), som ellers sender søgeord til en ekstern tjeneste.
 
 ## Konsekvenser
 + Privatliv kan håndhæves og revideres.

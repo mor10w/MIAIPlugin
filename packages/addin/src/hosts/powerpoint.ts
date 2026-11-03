@@ -204,6 +204,8 @@ export class PowerPointAdapter implements HostAdapter {
         height: h,
       });
       sh.fill.setImage(png.base64);
+      sh.lineFormat.visible = false; // ellers får billedet rektanglets kant
+      sh.name = "MIAI-figur";
       await ctx.sync();
     });
     return { message: "Diagrammet er placeret på den valgte slide – klik på det for at flytte eller redigere." };

@@ -6,6 +6,8 @@ const MAX_ROWS = 200;
 const MAX_COLS = 30;
 /** Statistikken regnes over højst dette antal rækker i used range (afgrænsning nævnes i prompten). */
 const MAX_STAT_ROWS = 5_000;
+/** Uden statistik: overskrifter + så mange rækker af used range. */
+const HEADER_ROWS = 6;
 
 const toTsv = (values: unknown[][]) => values.map((r) => r.map((v) => String(v ?? "").replace(/[\t\n\r]+/g, " ")).join("\t")).join("\n");
 
@@ -58,14 +60,18 @@ function columnStats(values: unknown[][], baseCol: number): ColumnStat[] {
   return stats;
 }
 
-/** Kompakt oversigt over filen: arkliste, headers og kolonne-statistik regnet over hele used range. */
-function buildOverview(
+/**
+ * Kompakt oversigt over filen: arkliste, headers og – med `withStats` – kolonne-statistik
+ * regnet over hele used range. Uden statistik vises de første rækker i stedet.
+ */
+export function buildOverview(
   sheetLines: string[],
   activeName: string,
   usedAddress: string, // fx "A1:E30" – uden arknavn
   usedRows: number,
   usedCols: number,
-  values: unknown[][], // første MAX_STAT_ROWS rækker × maks. MAX_COLS kolonner
+  values: unknown[][], // første rækker × maks. MAX_COLS kolonner
+  withStats = true,
 ): string {
   const lines: string[] = [];
   lines.push(`Active sheet '${activeName}', used range ${usedAddress} (${usedRows} rows x ${usedCols} columns)`);
@@ -75,6 +81,10 @@ function buildOverview(
   const firstRow = values[0] ?? [];
   if (firstRow.some((v) => typeof v === "string" && v.trim() !== "")) {
     lines.push(`Headers (row 1): ${stats.map((s, i) => `${s.letter}=${String(firstRow[i] ?? "").trim() || "-"}`).join(" ")}`);
+  }
+  if (!withStats) {
+    lines.push(`First rows:\n${toTsv(values)}`);
+    return lines.join("\n");
   }
   lines.push(
     `Column stats (${values.length} rows): ${stats.map((s) => `${s.letter}: ${s.nonEmpty} non-empty${s.numeric ? `, numeric sum=${fmtNum(s.numeric.sum)} min=${fmtNum(s.numeric.min)} max=${fmtNum(s.numeric.max)}` : ""}`).join(" ")}`,
@@ -101,7 +111,8 @@ export class ExcelAdapter implements HostAdapter {
     return mode === "cells" || mode === "formula" || mode === "replace";
   }
 
-  async getContext(_opts: ContextOptions): Promise<DocContext> {
+  async getContext(opts: ContextOptions): Promise<DocContext> {
+    const withStats = opts.overview === "stats";
     return Excel.run(async (ctx) => {
       const sel = ctx.workbook.getSelectedRange();
       sel.load("address,rowCount,columnCount");
@@ -131,7 +142,8 @@ export class ExcelAdapter implements HostAdapter {
       for (const r of sheetUsed) r.load("address");
       let data: Excel.Range | undefined;
       if (!used.isNullObject) {
-        const dRows = Math.min(used.rowCount, MAX_STAT_ROWS);
+        // Statistik kræver op til 5.000 × 30 celler; ellers hentes kun de første rækker.
+        const dRows = Math.min(used.rowCount, withStats ? MAX_STAT_ROWS : HEADER_ROWS);
         const dCols = Math.min(used.columnCount, MAX_COLS);
         data = used.getCell(0, 0).getResizedRange(dRows - 1, dCols - 1);
         data.load("values");
@@ -145,7 +157,8 @@ export class ExcelAdapter implements HostAdapter {
         if (values.length > 0) {
           const sheetLines = sheetList.items.map((s, i) => `${s.name} ${sheetUsed[i].isNullObject ? "(empty)" : sheetUsed[i].address}`);
           // 20k tegn er DocContext.surroundings' grænse – afkortning sker der ved validering.
-          surroundings = buildOverview(sheetLines, ws.name, used.address, used.rowCount, used.columnCount, values);
+          // used.address indeholder arknavnet ("Ark1!A1:E30"); kolonnebogstaver skal regnes ud fra selve området.
+          surroundings = buildOverview(sheetLines, ws.name, splitAddress(used.address).range, used.rowCount, used.columnCount, values, withStats);
         }
       }
 

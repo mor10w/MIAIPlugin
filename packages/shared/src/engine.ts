@@ -106,8 +106,9 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   // mod sløjfer i fritekst, men skader JSON (gentagne nøgler) og tabeller (gentagne værdier).
   const presencePenalty = guardLoops && ep.presencePenalty ? ep.presencePenalty : undefined;
 
-  // Værktøjer (ADR-0010): kun når bridgen leverer en eksekverer, og web-søgning er slået til.
-  const tools = deps.tools && settings.webSearch ? deps.tools : undefined;
+  // Værktøjer (ADR-0010): kun når bridgen leverer en eksekverer, brugeren har slået web-søgning
+  // til, og politikken tillader det (søgeord sendes til en ekstern tjeneste).
+  const tools = deps.tools && settings.webSearch && policy.webSearch ? deps.tools : undefined;
 
   const addUsage = (u: { promptTokens?: number; completionTokens?: number } | undefined) => {
     if (!u) return;
@@ -177,7 +178,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
         output = r.text;
         break;
       }
-      const toolMsgs: ApiMessage[] = [{ role: "assistant", content: r.text, tool_calls: r.toolCalls }];
+      const toolMsgs: ApiMessage[] = [{ role: "assistant", content: r.text, tool_calls: r.toolCalls.map((tc) => ({ ...tc, type: "function" as const })) }];
       for (const tc of r.toolCalls) {
         if (tc.function.name === "web_search") {
           let query = "";

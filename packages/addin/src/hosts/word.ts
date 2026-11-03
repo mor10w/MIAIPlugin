@@ -1,5 +1,5 @@
 import type { ApplyMode, DiagramResult, DocContext, GrammarResult } from "@miai/shared";
-import { diagramToPng, graphicToPng } from "../image";
+import { diagramToPng, graphicToPng, pointSize, type PngImage } from "../image";
 import { mdToSafeHtml } from "../markdown";
 import { extractGraphic } from "../svg";
 import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
@@ -125,31 +125,32 @@ export class WordAdapter implements HostAdapter {
    */
   async applyDiagram(result: DiagramResult, dc: DocContext): Promise<ApplyOutcome> {
     const png = await diagramToPng(result);
-    // PNG'en er renderet i 2x; naturlig størrelse i punkter = px/2 · 0,75. Aldrig bredere end A4's tekstområde.
-    const width = Math.min(450, (png.width / 2) * 0.75);
-    const height = width * (png.height / png.width);
-    return this.run(async (ctx, range) => {
-      const para = dc.isWholeDocument ? ctx.document.body.insertParagraph("", "End") : range.insertParagraph("", "After");
-      const pic = para.insertInlinePictureFromBase64(png.base64, "Start");
-      pic.width = width;
-      pic.height = height;
-      pic.altTextTitle = result.title ?? "Diagram";
-      pic.altTextDescription = result.nodes.map((n) => n.label).join(" → ");
-      await ctx.sync();
-      return { message: "Diagrammet er indsat efter markeringen." };
-    });
+    return this.insertPicture(png, dc, result.title ?? "Diagram", result.nodes.map((n) => n.label).join(" → "));
   }
 
-  /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede ved markeringen. */
-  async applyImage(text: string): Promise<ApplyOutcome> {
+  /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede efter markeringen. */
+  async applyImage(text: string, dc?: DocContext): Promise<ApplyOutcome> {
     const block = extractGraphic(text);
     if (!block) throw new Error("Svaret indeholder ikke et diagram (mermaid eller svg).");
     const png = await graphicToPng(block);
+    return this.insertPicture(png, dc, "Figur", block.kind === "mermaid" ? block.code.slice(0, 500) : "");
+  }
+
+  /**
+   * Fælles indsættelse af billeder: i et nyt afsnit efter markeringen (eller sidst i dokumentet, hvis
+   * hele dokumentet blev brugt), i naturlig størrelse – højst A4's tekstbredde – og med alt-tekst.
+   */
+  private insertPicture(png: PngImage, dc: DocContext | undefined, title: string, description: string): Promise<ApplyOutcome> {
+    const { width, height } = pointSize(png);
     return this.run(async (ctx, range) => {
-      const pic = range.insertInlinePictureFromBase64(png.base64, "After");
-      pic.width = 450; // punkter – passer i A4's tekstområde
+      const para = dc?.isWholeDocument ? ctx.document.body.insertParagraph("", "End") : range.insertParagraph("", "After");
+      const pic = para.insertInlinePictureFromBase64(png.base64, "Start");
+      pic.width = width;
+      pic.height = height;
+      pic.altTextTitle = title;
+      if (description) pic.altTextDescription = description;
       await ctx.sync();
-      return { message: "Diagrammet er indsat ved markeringen." };
+      return { message: "Figuren er indsat efter markeringen." };
     });
   }
 }

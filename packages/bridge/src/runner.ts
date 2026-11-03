@@ -16,8 +16,11 @@ function baseEntry(task: TaskDefinition, epHost: string): Pick<AuditEntry, "ts" 
   return { ts: new Date().toISOString(), kind: "task", task: task.id, host: epHost };
 }
 
+/** Søgetjenestens host – logges i audit-loggen (aldrig selve søgeordene). */
+const SEARCH_HOST = "html.duckduckgo.com";
+
 /** Værktøjskald fra modellen (ADR-0010). Kun web_search leveres – ukendte navne afvises. */
-function makeToolExecutor(signal: AbortSignal) {
+function makeToolExecutor(signal: AbortSignal, onSearch: (ok: boolean, durationMs: number) => Promise<void>) {
   return {
     specs: [
       {
@@ -42,7 +45,10 @@ function makeToolExecutor(signal: AbortSignal) {
         // Ugyldige argumenter fra modellen.
       }
       if (!query) return "Manglende søgeforespørgsel i argumenterne.";
-      return webSearch(query, signal);
+      const started = Date.now();
+      const result = await webSearch(query, signal);
+      await onSearch(!result.startsWith("Søgetjenesten"), Date.now() - started);
+      return result;
     },
   };
 }
@@ -58,7 +64,11 @@ export async function runTask({ task, req, store, emit, signal }: RunOptions): P
     host = ep.baseUrl; // skal ikke kunne bryde kørslen, hvis URL'en er ulæselig
   }
   try {
-    const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal) });
+    // Søgninger er udgående kald til en ekstern tjeneste og logges derfor også (kun host og tid).
+    const onSearch = async (ok: boolean, durationMs: number) => {
+      if (settings.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "search", task: task.id, host: SEARCH_HOST, status: ok ? "ok" : "error", durationMs });
+    };
+    const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal, onSearch) });
     if (settings.auditLog) {
       await appendAudit(auditFile(store.dir), {
         ...baseEntry(task, host),

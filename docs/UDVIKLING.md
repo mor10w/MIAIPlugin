@@ -89,7 +89,7 @@ Miljøvariabler for bridgen: `MIAI_PORT` (44321), `MIAI_CONFIG_DIR`, `MIAI_POLIC
 
 Eksempel på maskinpolitik, der kun tillader en intern inference-server:
 ```json
-{ "allowedHosts": ["127.0.0.1", "localhost", "llm.firma.local"], "locked": true }
+{ "allowedHosts": ["127.0.0.1", "localhost", "llm.firma.local"], "locked": true, "webSearch": false }
 ```
 
 ## Fase 0 – manuel testliste

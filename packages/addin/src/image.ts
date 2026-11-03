@@ -8,11 +8,20 @@ export interface PngImage {
   base64: string;
   width: number;
   height: number;
+  /** Den skala, der faktisk blev brugt (kan være < 2 for store figurer) – giver naturlig størrelse = width / scale. */
+  scale: number;
+}
+
+/** Naturlig størrelse i punkter (1 px = 0,75 pt), højst `maxWidth` bred. */
+export function pointSize(png: PngImage, maxWidth = 450): { width: number; height: number } {
+  const width = Math.min(maxWidth, (png.width / png.scale) * 0.75);
+  return { width, height: width * (png.height / png.width) };
 }
 
 /** Læser dimensioner fra SVG (viewBox foretrækkes – mermaid skriver width="100%"). */
-function svgSize(svg: string): { w: number; h: number } {
-  const vb = /viewBox="[\d.]+ [\d.]+ ([\d.]+) ([\d.]+)"/.exec(svg);
+export function svgSize(svg: string): { w: number; h: number } {
+  // viewBox kan have negative/decimale tal og komma-separering (Mermaid skriver fx "-8 -8 512.5 300").
+  const vb = /viewBox="\s*-?[\d.]+[\s,]+-?[\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(svg);
   if (vb && Number(vb[1]) > 0 && Number(vb[2]) > 0) return { w: Number(vb[1]), h: Number(vb[2]) };
   const wh = /width="([\d.]+)"\s+height="([\d.]+)"/.exec(svg);
   return wh ? { w: Number(wh[1]), h: Number(wh[2]) } : { w: 600, h: 400 };
@@ -40,7 +49,7 @@ export async function svgToPng(svg: string, scale = 2): Promise<PngImage> {
     if (!ctx2d) throw new Error("Canvas understøttes ikke i dette webview.");
     ctx2d.drawImage(img, 0, 0, W, H);
     const dataUrl = canvas.toDataURL("image/png");
-    return { base64: dataUrl.slice("data:image/png;base64,".length), width: W, height: H };
+    return { base64: dataUrl.slice("data:image/png;base64,".length), width: W, height: H, scale: s };
   } finally {
     URL.revokeObjectURL(url);
   }

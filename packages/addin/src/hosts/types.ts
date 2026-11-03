@@ -13,6 +13,12 @@ export interface ApplyOutcome {
 export interface ContextOptions {
   /** Brug hele dokumentet, hvis intet er markeret. */
   wholeDocumentFallback: boolean;
+  /**
+   * Excel: hvor meget af arket modellen skal se ud over markeringen.
+   * "headers" (standard) = overskrifter og første rækker – billigt.
+   * "stats" = kolonnestatistik over hele used range (op til 5.000 rækker) – kun når opgaven bruger den.
+   */
+  overview?: "headers" | "stats";
 }
 
 export interface HostAdapter {
@@ -27,7 +33,7 @@ export interface HostAdapter {
   /** Indsætter diagrammet visuelt (billede i Word, native shapes i PowerPoint). */
   applyDiagram?(result: DiagramResult, ctx: DocContext): Promise<ApplyOutcome>;
   /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede. Kaster, hvis ingen blok findes. */
-  applyImage?(text: string): Promise<ApplyOutcome>;
+  applyImage?(text: string, ctx?: DocContext): Promise<ApplyOutcome>;
 }
 
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */

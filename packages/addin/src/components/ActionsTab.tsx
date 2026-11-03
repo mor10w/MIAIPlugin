@@ -50,7 +50,8 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   // Det samlede katalog (indbygget + brugerdefineret, F14) filtreres på den aktive app.
   const [tasks, setTasks] = useState<TaskView[]>([]);
   useEffect(() => {
-    api.tasks().then((all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host))), () => {});
+    // Chat har sin egen fane og vises ikke som handling.
+    api.tasks().then((all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host) && x.id !== "chat")), () => {});
   }, [api, adapter.host]);
   const [taskId, setTaskId] = useState<string>();
   const task = tasks.find((x) => x.id === taskId);
@@ -70,7 +71,11 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     if (!task) return;
     setInputError(undefined);
     try {
-      const ctx = await adapter.getContext({ wholeDocumentFallback: task.input === "selectionOrDocument" });
+      const ctx = await adapter.getContext({
+        wholeDocumentFallback: task.input === "selectionOrDocument",
+        // Kolonnestatistik over hele arket er dyr at hente og bruges kun af dataanalysen.
+        overview: task.id === "analyze-data" ? "stats" : "headers",
+      });
       ctxRef.current = ctx;
       await start(task.id, { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params } });
     } catch (err) {
@@ -93,7 +98,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const apply = async (mode: ApplyMode) => {
     const ctx = ctxRef.current!;
     if (!task) throw new Error("Ingen opgave");
-    if (mode === "image") return adapter.applyImage!(shownText);
+    if (mode === "image") return adapter.applyImage!(shownText, ctx);
     if (format) return adapter.applyText(shownText, format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);

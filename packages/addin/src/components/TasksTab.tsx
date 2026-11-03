@@ -26,7 +26,7 @@ interface FormState {
   hosts: ("word" | "excel" | "powerpoint")[];
   input: "selection" | "selectionOrDocument" | "prompt";
   format: "plain" | "markdown" | "tsv";
-  applyModes: ("replace" | "trackChanges" | "insertAfter" | "comment")[];
+  applyModes: FileApplyMode[];
   temperature: string;
   system: string;
   user: string;
@@ -34,7 +34,7 @@ interface FormState {
 }
 
 /** De anvendelsesmuligheder, som en brugeropgave kan have (formula-output er ikke tilladt i filer). */
-type FileApplyMode = "replace" | "trackChanges" | "insertAfter" | "comment";
+type FileApplyMode = UserTaskFile["applyModes"][number];
 
 interface ParamEdit {
   name: string;
@@ -137,7 +137,7 @@ export function TasksTab() {
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f!, ...p }));
   const patchParam = (i: number, p: Partial<ParamEdit>) => setForm((f) => ({ ...f!, params: f!.params.map((x, j) => (j === i ? { ...x, ...p } : x)) }));
 
-  const applyLabel: Record<FileApplyMode, string> = { replace: t("apply_replace"), trackChanges: t("apply_trackChanges"), insertAfter: t("apply_insertAfter"), comment: t("apply_comment") };
+  const applyLabel: Record<FileApplyMode, string> = { replace: t("apply_replace"), trackChanges: t("apply_trackChanges"), insertAfter: t("apply_insertAfter"), comment: t("apply_comment"), cells: t("apply_cells") };
   const appLabel = { word: t("appWord"), excel: t("appExcel"), powerpoint: t("appPowerPoint") };
 
   const save = async () => {
@@ -261,7 +261,7 @@ export function TasksTab() {
           </div>
           <Field label={t("applyModesLabel")}>
             <div className={s.row}>
-              {(["replace", "trackChanges", "insertAfter", "comment"] as const).map((m) => (
+              {(["replace", "trackChanges", "insertAfter", "comment", "cells"] as const).map((m) => (
                 <Checkbox key={m} label={t(`apply_${m}`)} checked={form.applyModes.includes(m)} onChange={() => patch({ applyModes: toggle(form.applyModes, m) })} />
               ))}
             </div>

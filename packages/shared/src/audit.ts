@@ -7,8 +7,8 @@ import { z } from "zod";
 export const AuditEntry = z.object({
   /** ISO-8601-tidsstempel. */
   ts: z.string(),
-  /** task = en opgavekørsel; models = henting af modeller fra /v1/models. */
-  kind: z.enum(["task", "models"]),
+  /** task = en opgavekørsel; models = henting af modeller fra /v1/models; search = web-søgning (ADR-0010). */
+  kind: z.enum(["task", "models", "search"]),
   /** Opgave-id (fx "grammar"), kun ved kind=task. */
   task: z.string().max(80).optional(),
   /** Endpointens host inkl. port, fx "127.0.0.1:11434". */
