@@ -1,5 +1,6 @@
 export * from "./types.js";
 export * from "./tasks.js";
+export * from "./userTasks.js";
 export * from "./diagram.js";
 export * from "./text.js";
 export * from "./think.js";
@@ -8,3 +9,4 @@ export * from "./policy.js";
 export * from "./openai.js";
 export * from "./engine.js";
 export * from "./defaults.js";
+export * from "./audit.js";

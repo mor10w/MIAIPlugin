@@ -126,6 +126,26 @@ describe("executeTask (direkte tilstand)", () => {
     expect(lastBody).not.toHaveProperty("presence_penalty");
   });
 
+  it("inkluderer arkoversigt og områder i Excel-chat (mod partielle svar som '30 for hele kolonnen')", async () => {
+    await run(
+      "chat",
+      {
+        context: {
+          host: "excel",
+          address: "Ark1!E9:E30",
+          table: "5\n6",
+          surroundings:
+            "Active sheet 'Ark1', used range A1:E30 (30 rows x 5 columns)\nHeaders (row 1): E=Beløb\nColumn stats (30 rows): E: 29 non-empty, numeric sum=1234 min=10 max=98",
+        },
+        params: { prompt: "Hvad summer kolonne E op til?" },
+      },
+    );
+    const sys = lastBody.messages?.[0].content as string;
+    expect(sys).toContain("Column stats (30 rows)"); // oversigten når til modellen
+    expect(sys).toContain("Never present figures from the selection as if they covered the whole sheet");
+    expect(sys).toContain("Ark1!E9:E30"); // markeringen er navngivet
+  });
+
   it("kører tool-løkke (web_search) og udsender search-event", async () => {
     const calls: string[] = [];
     const events: TaskEvent[] = [];

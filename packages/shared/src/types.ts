@@ -16,7 +16,7 @@ export const DocContext = z.object({
   formula: z.string().optional(),
   /** Excel: markeringen som TSV (værdier), begrænset i størrelse. */
   table: z.string().max(100_000).optional(),
-  /** Excel: kolonneoverskrifter eller andet omkringliggende indhold, der hjælper modellen. */
+  /** Excel: oversigt over filen – arkliste, headers og kolonne-statistik regnet over hele used range (bygget af add-in'et). */
   surroundings: z.string().max(20_000).optional(),
 });
 export type DocContext = z.infer<typeof DocContext>;
@@ -96,6 +96,8 @@ export const Settings = z.object({
   auditLog: z.boolean().default(false),
   /** Modellen kan søge på webbet (kræver bridge – direkte tilstand har ingen eksekverer). */
   webSearch: z.boolean().default(true),
+  /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
+  customTasksDir: z.string().max(1024).default(""),
 });
 export type Settings = z.infer<typeof Settings>;
 
