@@ -112,6 +112,7 @@ export interface TaskView {
   applyModes: ApplyMode[];
   /** true = brugerdefineret (fil), false = indbygget. */
   custom: boolean;
+  chunking?: "map-reduce";
 }
 
 export function toTaskView(t: TaskDefinition, custom = false): TaskView {
@@ -125,6 +126,7 @@ export function toTaskView(t: TaskDefinition, custom = false): TaskView {
     params: [...t.params],
     applyModes: [...t.applyModes],
     custom,
+    chunking: t.chunking,
   };
 }
 

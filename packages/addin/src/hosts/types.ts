@@ -19,6 +19,8 @@ export interface ContextOptions {
    * "stats" = kolonnestatistik over hele used range (op til 5.000 rækker) – kun når opgaven bruger den.
    */
   overview?: "headers" | "stats";
+  /** Maks. antal tegn tekst (standard MAX_CONTEXT_CHARS; opgaver med map-reduce får mere). */
+  maxChars?: number;
 }
 
 export interface HostAdapter {
@@ -39,6 +41,11 @@ export interface HostAdapter {
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */
 export const MAX_CONTEXT_CHARS = 24_000;
 
-export function truncate(text: string): string {
-  return text.length > MAX_CONTEXT_CHARS ? `${text.slice(0, MAX_CONTEXT_CHARS)}\n[… afkortet]` : text;
+/** Opgaver, der deler lange tekster op (map-reduce), kan få så meget (≈ 60 sider; DocContext' grænse). */
+export const MAX_CHUNKED_CHARS = 200_000;
+
+/** Afkorter teksten og fortæller, om det skete, så UI'et kan vise det (#3). */
+export function truncate(text: string, maxChars = MAX_CONTEXT_CHARS): { text: string; truncated?: true; originalChars?: number } {
+  if (text.length <= maxChars) return { text };
+  return { text: `${text.slice(0, maxChars)}\n[… afkortet]`, truncated: true, originalChars: text.length };
 }

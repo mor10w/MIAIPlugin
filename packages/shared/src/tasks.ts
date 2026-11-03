@@ -62,6 +62,11 @@ export interface TaskDefinition {
   output: TaskOutput;
   params: ParamDef[];
   applyModes: ApplyMode[];
+  /**
+   * map-reduce: lange tekster deles, hver del behandles for sig, og resultaterne samles i en
+   * afsluttende kørsel (#3). Add-in'et sender så mere tekst end normalt.
+   */
+  chunking?: "map-reduce";
   /** Lav temperatur for rettelser, højere for kreativ tekst. Overstyrer indstillingen, hvis sat. */
   temperature?: number;
   buildMessages(req: ParsedTaskRequest): ChatMessage[];
@@ -283,6 +288,7 @@ export const TASKS: TaskDefinition[] = [
         default: "3-5 bullet points",
       },
     ],
+    chunking: "map-reduce",
     applyModes: ["insertAfter", "comment"],
     temperature: 0.2,
     buildMessages: (req) => [

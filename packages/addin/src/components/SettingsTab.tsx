@@ -195,6 +195,16 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
               ))}
             </Dropdown>
           </Field>
+          <Field label={t("contextTokens")} hint={t("contextTokensHint")}>
+            <Input
+              type="number"
+              min={512}
+              step={1024}
+              placeholder="auto"
+              value={ep.contextTokens ? String(ep.contextTokens) : ""}
+              onChange={(_, d) => setEp(ep.id, { contextTokens: d.value ? Math.max(512, Math.round(Number(d.value))) || undefined : undefined })}
+            />
+          </Field>
           <Switch label={t("stripThinking")} checked={ep.stripThinking} onChange={(_, d) => setEp(ep.id, { stripThinking: d.checked })} />
         </Card>
       ))}

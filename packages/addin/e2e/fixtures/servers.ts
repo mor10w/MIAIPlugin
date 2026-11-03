@@ -11,8 +11,10 @@ export const DIST = resolve(fileURLToPath(new URL("../../dist", import.meta.url)
 
 /** Svar fra mock-modellen pr. forespørgsel. */
 export type ModelReply =
-  /** Streamet svar (SSE), ét chunk pr. element. */
-  | { stream: string[] }
+  /** Streamet svar (SSE), ét chunk pr. element. promptTokens sendes som usage (kun med stream_options). */
+  | { stream: string[]; promptTokens?: number; finishReason?: string }
+  /** HTTP-fejl fra endpointen. */
+  | { status: number; error: string }
   /** Server, der ignorerer stream=true og svarer med ét JSON-objekt. */
   | { json: string }
   /** Værktøjskald (OpenAI tool_calls). */
@@ -60,6 +62,11 @@ export class MockModel {
       const body = JSON.parse(await readBody(req)) as ChatRequestBody;
       this.requests.push(body);
       const r = this.reply(body);
+      if ("status" in r) {
+        res.statusCode = r.status;
+        res.setHeader("content-type", "application/json");
+        return res.end(JSON.stringify({ error: { message: r.error } }));
+      }
       if ("json" in r) {
         res.setHeader("content-type", "application/json");
         return res.end(JSON.stringify({ choices: [{ message: { content: r.json }, finish_reason: "stop" }] }));
@@ -68,7 +75,10 @@ export class MockModel {
       const chunks =
         "toolCall" in r
           ? [{ choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: r.toolCall.name, arguments: JSON.stringify(r.toolCall.args) } }] }, finish_reason: "tool_calls" }] }]
-          : r.stream.map((content) => ({ choices: [{ delta: { content } }] }));
+          : [
+              ...r.stream.map((content, i) => ({ choices: [{ delta: { content }, finish_reason: i === r.stream.length - 1 ? (r.finishReason ?? "stop") : null }] })),
+              ...(r.promptTokens !== undefined && body.stream_options ? [{ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 10 } }] : []),
+            ];
       for (const c of chunks) {
         res.write(`data: ${JSON.stringify(c)}\n\n`);
         await new Promise((ok) => setTimeout(ok, 5)); // realistisk streaming: flere renders i UI'et

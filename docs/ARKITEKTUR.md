@@ -35,6 +35,12 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
   - tjekker politikken
   - streamer svaret og filtrerer `<think>`
   - ved JSON-opgaver: sætter `response_format` efter endpointens `structuredOutput`, sender skemaet i prompten, validerer med Zod og prøver én gang mere ved fejl
+- **`context.ts`** (#3): token-estimat, svarbudget, opdeling ved afsnit og detektion af afkortning. Motoren bruger dem til:
+  - at begrænse `max_tokens` og afvise for lange prompts, når kontekstlængden er kendt (endpointens `contextTokens` eller aflæst fra `/v1/models`)
+  - at køre map-reduce for opgaver med `chunking: "map-reduce"` (opsummering)
+  - at melde `done.warnings`, når `usage.prompt_tokens` viser, at modellen fik mindre, end der blev sendt, eller når `finish_reason` er `length`
+
+  Tekst fra en værktøjsrunde trækkes tilbage med en `retract`-event.
 - **`openai.ts`**: minimal klient. Bruger `fetch` + `ReadableStream.getReader()` og har fallback for `AbortSignal.any`. GET-kald sendes uden ekstra headers, så browseren undgår CORS-preflight. Tåler servere, der ignorerer `stream: true`.
 - **`policy.ts`**: `allowedHosts` med `*.domæne`-wildcards.
 

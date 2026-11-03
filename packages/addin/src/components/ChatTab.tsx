@@ -4,6 +4,7 @@ import { Send20Regular } from "@fluentui/react-icons";
 import type { ApplyMode, ChatMessage, DocContext } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
+import { TaskNotices } from "./TaskNotices";
 import { extractGraphic } from "../svg";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
@@ -84,16 +85,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
             <Markdown text={state.text || (state.searchQuery ? " " : "…")} />
           </div>
         )}
-        {state.stopReason === "repetition" && state.status === "done" && (
-          <MessageBar intent="warning">
-            <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
-          </MessageBar>
-        )}
-        {state.error && (
-          <MessageBar intent="error">
-            <MessageBarBody>{state.error}</MessageBarBody>
-          </MessageBar>
-        )}
+        <TaskNotices state={state} ctx={lastCtx} />
       </div>
       <div className={s.input}>
         <Textarea

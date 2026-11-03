@@ -18,7 +18,9 @@ import { diagramToSvg, formatForView, parseTsv, stripEmphasis, type ApplyMode, t
 import type { HostAdapter } from "../hosts";
 import { extractGraphic } from "../svg";
 import { useBackend } from "../backend";
+import { MAX_CHUNKED_CHARS } from "../hosts/types";
 import { useI18n } from "../i18n";
+import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
 import { Markdown } from "./Markdown";
@@ -75,6 +77,8 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
         wholeDocumentFallback: task.input === "selectionOrDocument",
         // Kolonnestatistik over hele arket er dyr at hente og bruges kun af dataanalysen.
         overview: task.id === "analyze-data" ? "stats" : "headers",
+        // Opgaver, der deler lange tekster op, kan få meget mere end standardgrænsen.
+        maxChars: task.chunking === "map-reduce" ? MAX_CHUNKED_CHARS : undefined,
       });
       ctxRef.current = ctx;
       await start(task.id, { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params } });
@@ -159,20 +163,11 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
         </div>
       )}
 
-      {(inputError || state.error) && (
-        <MessageBar intent="error">
-          <MessageBarBody>{inputError ?? state.error}</MessageBarBody>
-        </MessageBar>
-      )}
+      <TaskNotices state={state} ctx={ctxRef.current} inputError={inputError} />
 
       {task && (state.text || state.result !== undefined) && (
         <Card className={s.result}>
           <ResultView task={task} format={format} text={shownText} result={state.result} />
-          {state.stopReason === "repetition" && (
-            <MessageBar intent="warning">
-              <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
-            </MessageBar>
-          )}
           {state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length) && (
             <ApplyBar key={state.text + JSON.stringify(state.result)} modes={modes} apply={apply} copyText={task.output.kind === "text" ? shownText : undefined} />
           )}

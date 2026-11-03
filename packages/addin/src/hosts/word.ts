@@ -46,7 +46,7 @@ export class WordAdapter implements HostAdapter {
       ctx.trackedObjects.add(target);
       await ctx.sync();
       this.range = target;
-      return { host: "word", text: truncate(text), isWholeDocument };
+      return { host: "word", ...truncate(text, opts.maxChars), isWholeDocument };
     });
   }
 

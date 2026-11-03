@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import type { TaskRequest } from "@miai/shared";
+import type { TaskRequest, TaskWarning } from "@miai/shared";
 import { useBackend } from "./backend";
 
 export interface TaskState {
@@ -11,8 +11,15 @@ export interface TaskState {
   /** Værende web-søgning (vises i UI, ADR-0010). */
   searchQuery?: string;
   error?: string;
+  /** Fejlkode og HTTP-status fra motoren – oversættes i UI'et (#3). */
+  errorCode?: string;
+  errorStatus?: number;
   /** Sat, hvis motoren afbrød svaret (fx gentagelsessløjfe). */
   stopReason?: "repetition";
+  /** Fx at modellen så mindre, end der blev sendt (kontekstgrænse). */
+  warnings?: TaskWarning[];
+  /** Fremskridt ved opdeling af lange tekster (map-reduce). */
+  step?: { done: number; total: number };
 }
 
 const initial: TaskState = { status: "idle", text: "", progressChars: 0 };
@@ -48,7 +55,7 @@ export function useTask() {
               update((s) => ({ ...s, text: s.text + e.text, searchQuery: e.text ? undefined : s.searchQuery }));
               break;
             case "progress":
-              update((s) => ({ ...s, progressChars: e.chars }));
+              update((s) => ({ ...s, progressChars: e.chars, step: e.step ?? s.step }));
               break;
             case "search":
               update((s) => ({ ...s, searchQuery: e.query }));
@@ -57,10 +64,14 @@ export function useTask() {
               update((s) => ({ ...s, result: e.data }));
               break;
             case "error":
-              update((s) => ({ ...s, status: "error", error: e.message }));
+              update((s) => ({ ...s, status: "error", error: e.message, errorCode: e.code, errorStatus: e.status }));
+              break;
+            case "retract":
+              // Tekst fra en runde, der endte med en søgning, hører ikke til svaret.
+              update((s) => ({ ...s, text: s.text.slice(0, Math.max(0, s.text.length - e.chars)) }));
               break;
             case "done":
-              update((s) => ({ ...s, status: "done", stopReason: e.stopReason }));
+              update((s) => ({ ...s, status: "done", stopReason: e.stopReason, warnings: e.warnings, step: undefined }));
               break;
           }
         },

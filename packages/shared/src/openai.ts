@@ -6,7 +6,7 @@ import type { Endpoint } from "./types.js";
  * bruger kun fetch, ReadableStream.getReader og AbortController.
  */
 
-export type UpstreamCode = "UPSTREAM_UNREACHABLE" | "UPSTREAM_HTTP" | "UPSTREAM_TIMEOUT" | "UPSTREAM_PROTOCOL" | "NO_MODEL" | "POLICY";
+export type UpstreamCode = "UPSTREAM_UNREACHABLE" | "UPSTREAM_HTTP" | "UPSTREAM_TIMEOUT" | "UPSTREAM_PROTOCOL" | "NO_MODEL" | "POLICY" | "CONTEXT_OVERFLOW";
 
 export class UpstreamError extends Error {
   constructor(
@@ -120,12 +120,33 @@ async function doFetch(ep: Endpoint, path: string, init: RequestInit, signal: Ab
   return res;
 }
 
-export async function listModels(ep: Endpoint, signal?: AbortSignal, opts: ClientOptions = {}): Promise<string[]> {
-  const res = await doFetch(ep, "/models", { method: "GET" }, signal, opts);
-  const json = (await res.json().catch(() => null)) as { data?: { id?: string }[] } | null;
-  if (!json || !Array.isArray(json.data)) throw new UpstreamError("Uventet svar fra /models", "UPSTREAM_PROTOCOL");
-  return json.data.map((m) => m.id).filter((id): id is string => typeof id === "string");
+export interface ModelEntry {
+  id: string;
+  /** Modellens kontekstlængde, hvis værktøjet oplyser den (vLLM: max_model_len; andre: context_length m.fl.). */
+  contextTokens?: number;
 }
+
+/** Felter, som forskellige værktøjer bruger til kontekstlængden i /v1/models. */
+const CONTEXT_FIELDS = ["max_model_len", "context_length", "max_context_length", "n_ctx", "loaded_context_length"];
+
+export async function listModelEntries(ep: Endpoint, signal?: AbortSignal, opts: ClientOptions = {}): Promise<ModelEntry[]> {
+  const res = await doFetch(ep, "/models", { method: "GET" }, signal, opts);
+  const json = (await res.json().catch(() => null)) as { data?: Record<string, unknown>[] } | null;
+  if (!json || !Array.isArray(json.data)) throw new UpstreamError("Uventet svar fra /models", "UPSTREAM_PROTOCOL");
+  return json.data
+    .filter((m): m is Record<string, unknown> & { id: string } => typeof m.id === "string")
+    .map((m) => {
+      const ctx = CONTEXT_FIELDS.map((f) => m[f]).find((v) => typeof v === "number" && v > 0) as number | undefined;
+      return { id: m.id, contextTokens: ctx };
+    });
+}
+
+export async function listModels(ep: Endpoint, signal?: AbortSignal, opts: ClientOptions = {}): Promise<string[]> {
+  return (await listModelEntries(ep, signal, opts)).map((m) => m.id);
+}
+
+/** Endpoints, der har afvist stream_options (så det ikke sendes igen i denne session). */
+const noStreamOptions = new Set<string>();
 
 /** Streamer en chat completion og giver tekst-deltaer. `reasoning_content` ignoreres bevidst. */
 export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptions = {}): AsyncGenerator<StreamChunk> {
@@ -140,8 +161,20 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   if (p.presencePenalty !== undefined) body.presence_penalty = p.presencePenalty;
   if (p.responseFormat) body.response_format = p.responseFormat;
   if (p.tools?.length) body.tools = p.tools;
+  // Bed om usage i strømmen: bruges til at opdage, at modellen har afkortet prompten (#3).
+  if (!noStreamOptions.has(ep.baseUrl)) body.stream_options = { include_usage: true };
 
-  const res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
+  let res: Response;
+  try {
+    res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
+  } catch (err) {
+    // Ældre/strenge servere afviser ukendte felter. Prøv igen uden stream_options, og husk det.
+    if (err instanceof UpstreamError && err.status === 400 && body.stream_options && /stream_options/i.test(err.message)) {
+      noStreamOptions.add(ep.baseUrl);
+      delete body.stream_options;
+      res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
+    } else throw err;
+  }
   const ctype = res.headers.get("content-type") ?? "";
 
   // Nogle servere ignorerer stream=true og svarer med ét JSON-objekt.

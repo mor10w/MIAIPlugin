@@ -35,8 +35,8 @@ export class PowerPointAdapter implements HostAdapter {
 
   async getContext(opts: ContextOptions): Promise<DocContext> {
     const text = await getSelectedText();
-    if (text.trim() || !opts.wholeDocumentFallback || !has("1.4")) return { host: "powerpoint", text: truncate(text), isWholeDocument: false };
-    return { host: "powerpoint", text: truncate(await this.allText()), isWholeDocument: true };
+    if (text.trim() || !opts.wholeDocumentFallback || !has("1.4")) return { host: "powerpoint", ...truncate(text, opts.maxChars), isWholeDocument: false };
+    return { host: "powerpoint", ...truncate(await this.allText(), opts.maxChars), isWholeDocument: true };
   }
 
   /** Al tekst i præsentationen, slide for slide. */

@@ -224,6 +224,13 @@ Knapper, som din Office-version ikke understøtter, skjules.
 
 - **Modellens størrelde** afgør kvaliteten. `qwen3:4b` er et pænt udgangspunkt; brug en større model (7B+) til artikler og oversættelser, hvis maskinen rækker.
 - **Reasoning-modeller** (fx Qwen3) sender `<think>`-blokke med – indstillingen *Skjul <think>-tankegang* er slået til som standard, så tankegangen ikke ender i dokumentet.
+- **Lange dokumenter og kontekstlængde**: hver model har en kontekstgrænse (hvor meget tekst den kan læse ad gangen).
+  - **Opsummér** deler lange dokumenter (op til ca. 60 sider) i dele, opsummerer hver del og samler til sidst. Mens det sker, vises "Læser lang tekst: del 3 af 12…".
+  - Andre opgaver sender højst 24.000 tegn. Bliver teksten afkortet, siger MIAI det.
+  - Har modellen alligevel ikke fået hele teksten med, vises en advarsel. MIAI sammenligner modellens egen optælling med det sendte; det sker fx med Ollama, hvis `num_ctx` er mindre end teksten. Øg så kontekstlængden i værktøjet (Ollama: `OLLAMA_CONTEXT_LENGTH`), og skriv den under **Kontekstlængde** for endpointen.
+  - Kendes kontekstlængden (angivet eller aflæst fra fx vLLM), begrænses svarlængden, så prompt og svar passer, og en alt for lang tekst afvises, før den sendes.
+  - Chat om meget store dokumenter kommer med lokal RAG (fase 4).
+- **Fejlbeskeder** vises på dansk eller engelsk med en forklaring (fx "tjek API-nøglen" ved 401/403) og serverens egen besked som detalje.
 - **Gentagelsessløjfer**: små, kvantiserede modeller kan gå i stå og gentage den samme frase. MIAI afbryder svaret, når slutningen gentager sig selv mange gange i træk, og viser en advarsel. Teksten forurenes ikke med en note. Vagten gælder kun fritekst; Excel-celler (TSV) og strukturerede svar (JSON) har legitime gentagelser og valideres på anden vis. Sker det ofte, så vælg **Modvirk gentagelser** under Indstillinger for endpointen. Det sender `presence_penalty` til modellen; Qwen anbefaler 1,0–1,5 til kvantiserede modeller. Den bruges kun til fritekst, ikke til JSON, formler eller Excel-celler. En for høj værdi kan give sprogblanding. Alternativt kan du prøve en større model.
 - **Struktureret output**: opgaver som grammatik, slides, formler og diagrammer kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
 - **Dokumenttekst behandles som data**, aldrig som instruktioner, så markeringer med fx "ignorer ovenstående" ikke styrer modellen.

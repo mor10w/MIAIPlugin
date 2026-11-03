@@ -18,6 +18,10 @@ export const DocContext = z.object({
   table: z.string().max(100_000).optional(),
   /** Excel: oversigt over filen – arkliste, headers og kolonne-statistik regnet over hele used range (bygget af add-in'et). */
   surroundings: z.string().max(20_000).optional(),
+  /** Sat af add-in'et, hvis teksten blev afkortet, før den blev sendt (#3). */
+  truncated: z.boolean().optional(),
+  /** Tekstens oprindelige længde i tegn, når den er afkortet. */
+  originalChars: z.number().int().nonnegative().optional(),
 });
 export type DocContext = z.infer<typeof DocContext>;
 
@@ -44,21 +48,27 @@ export type TaskEvent =
   | { type: "meta"; model: string; endpoint: string }
   | { type: "delta"; text: string }
   /** Fremdrift for strukturerede (JSON) svar, som ikke vises løbende. */
-  | { type: "progress"; chars: number }
+  | { type: "progress"; chars: number; step?: { done: number; total: number } }
+  /** Fjern de sidste `chars` tegn fra den viste tekst (fx indledning fra en runde, der endte med en søgning). */
+  | { type: "retract"; chars: number }
   /** Modellen søger på webbet (vises i UI, fx "Søger på web…"). */
   | { type: "search"; query: string }
   | { type: "result"; data: unknown }
-  | { type: "error"; message: string; code?: string }
+  | { type: "error"; message: string; code?: string; status?: number }
   | {
       type: "done";
       usage?: { promptTokens?: number; completionTokens?: number };
       /** Sat, hvis motoren afbrød svaret, fx fordi modellen gik i en gentagelsessløjfe. */
       stopReason?: "repetition";
+      /** input-truncated: modellen så mindre, end der blev sendt (kontekstgrænse). output-truncated: svaret ramte max_tokens. */
+      warnings?: TaskWarning[];
     };
 
 // ---------------------------------------------------------------------------
 // Indstillinger og politik
 // ---------------------------------------------------------------------------
+
+export type TaskWarning = "input-truncated" | "output-truncated";
 
 export const StructuredOutputMode = z.enum(["json_schema", "json_object", "none"]);
 export type StructuredOutputMode = z.infer<typeof StructuredOutputMode>;
@@ -77,6 +87,11 @@ export const Endpoint = z.object({
    * fritekst-opgaver; JSON og Excel-celler har legitime gentagelser.
    */
   presencePenalty: z.number().min(0).max(2).optional(),
+  /**
+   * Modellens kontekstlængde i tokens (#3). Udeladt = aflæses fra /v1/models, hvor værktøjet
+   * oplyser den (vLLM m.fl.); ellers ukendt, og der planlægges uden loft.
+   */
+  contextTokens: z.number().int().min(512).max(2_000_000).optional(),
   /** Ekstra felter, der flettes ind i hver chat/completions-forespørgsel (fx { "num_ctx": 8192 }). */
   extraBody: z.record(z.string(), z.unknown()).default({}),
   timeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),
