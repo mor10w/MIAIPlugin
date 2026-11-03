@@ -15,7 +15,11 @@ export const UserParamDef = z.object({
   name: z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,31}$/),
   label: UserLocalized,
   kind: z.enum(["select", "text"]),
-  options: z.array(z.object({ value: z.string().min(1).max(200), label: UserLocalized })).min(1).max(20).optional(),
+  options: z
+    .array(z.object({ value: z.string().min(1).max(200), label: UserLocalized }))
+    .min(1)
+    .max(20)
+    .optional(),
   default: z.string().max(500).optional(),
 });
 
@@ -25,13 +29,19 @@ export const UserTaskFile = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),
   label: UserLocalized,
   description: UserLocalized.optional(),
-  hosts: z.array(z.enum(["word", "excel", "powerpoint"])).min(1).max(3),
+  hosts: z
+    .array(z.enum(["word", "excel", "powerpoint"]))
+    .min(1)
+    .max(3),
   /** formula kræver JSON-output og kan derfor ikke bruges i filer. */
   input: z.enum(["selection", "selectionOrDocument", "prompt"]),
   output: z.object({ format: z.enum(["plain", "markdown", "tsv"]) }),
   params: z.array(UserParamDef).max(8).default([]),
   /** "cells" bruges til TSV-output i Excel (celle for celle). */
-  applyModes: z.array(z.enum(["replace", "trackChanges", "insertAfter", "comment", "cells"])).min(1).max(5),
+  applyModes: z
+    .array(z.enum(["replace", "trackChanges", "insertAfter", "comment", "cells"]))
+    .min(1)
+    .max(5),
   temperature: z.number().min(0).max(2).optional(),
   prompt: z.object({
     /** Valgfri ekstra systemprompt (udover MIAI's basisregler). */

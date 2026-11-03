@@ -40,8 +40,8 @@ function writePng(path, size, rgba) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0); // bredde
   ihdr.writeUInt32BE(size, 4); // højde
-  ihdr[8] = 8;  // bitdybde
-  ihdr[9] = 6;  // RGBA
+  ihdr[8] = 8; // bitdybde
+  ihdr[9] = 6; // RGBA
   const raw = Buffer.alloc(size * (size * 4 + 1));
   for (let y = 0; y < size; y++) {
     raw[y * (size * 4 + 1)] = 0; // filter: none
@@ -70,7 +70,9 @@ function segDist(px, py, ax, ay, bx, by) {
   return Math.hypot(px - cx, py - cy);
 }
 
-function lerp(a, b, t) { return a + (b - a) * t; }
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
 
 /**
  * Tegner app-ikonet: afrundet firkant med indigo-gradient og hvid "M".
@@ -79,7 +81,7 @@ function lerp(a, b, t) { return a + (b - a) * t; }
 function drawAppIcon(size) {
   const buf = Buffer.alloc(size * size * 4);
   const r = size * 0.225; // radius
-  const top = [79, 70, 229];    // #4F46E5
+  const top = [79, 70, 229]; // #4F46E5
   const bottom = [124, 58, 237]; // #7C3AED
   const aa = Math.max(1, size / 512); // antialias-bredde
 
@@ -100,7 +102,7 @@ function drawAppIcon(size) {
       const py = y / size;
       // Glyph: afstand til glyph-kant i pixels.
       const inset = 0; // glyph tegnes direkte i enhedsbokse
-      const t = size * 0.13 / 2 + aa / 2;
+      const t = (size * 0.13) / 2 + aa / 2;
       const d = Math.min(
         segDist(px, py, 0.26 + inset, 0.78, 0.26 + inset, 0.3),
         segDist(px, py, 0.26 + inset, 0.3, 0.5, 0.64),
@@ -165,11 +167,17 @@ function downscale(master, srcSize, dstSize) {
       const sy = Math.floor(y * factor);
       const sw = Math.ceil((x + 1) * factor) - sx;
       const sh = Math.ceil((y + 1) * factor) - sy;
-      let r = 0, g = 0, b = 0, a = 0;
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0;
       for (let dy = 0; dy < sh; dy++) {
         for (let dx = 0; dx < sw; dx++) {
           const i = ((sy + dy) * srcSize + (sx + dx)) * 4;
-          r += master[i]; g += master[i + 1]; b += master[i + 2]; a += master[i + 3];
+          r += master[i];
+          g += master[i + 1];
+          b += master[i + 2];
+          a += master[i + 3];
         }
       }
       const n = sw * sh;

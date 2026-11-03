@@ -18,7 +18,11 @@ const MAX_PERIOD = 6;
 const TAIL_CHARS = 1_000;
 
 export function isDegenerating(text: string): boolean {
-  const words = text.slice(-TAIL_CHARS).trim().split(/\s+/).map((w) => w.toLowerCase());
+  const words = text
+    .slice(-TAIL_CHARS)
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.toLowerCase());
   for (let period = 1; period <= MAX_PERIOD; period++) {
     const need = Math.max(MIN_REPEATS, Math.ceil(MIN_SPAN_WORDS / period));
     if (words.length < period * need) break;

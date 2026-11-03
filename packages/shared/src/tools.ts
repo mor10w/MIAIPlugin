@@ -46,22 +46,55 @@ export function corsSteps(toolId: string, origin: string, lang: "da" | "en"): Co
   switch (toolId) {
     case "ollama":
       return [
-        { platform: "Windows", code: `setx OLLAMA_ORIGINS "${origin}"`, text: `${da ? "Kør i en kommandoprompt." : "Run in a command prompt."} ${restart("Ollama")}` },
+        {
+          platform: "Windows",
+          code: `setx OLLAMA_ORIGINS "${origin}"`,
+          text: `${da ? "Kør i en kommandoprompt." : "Run in a command prompt."} ${restart("Ollama")}`,
+        },
         { platform: "macOS", code: `launchctl setenv OLLAMA_ORIGINS "${origin}"`, text: `${da ? "Kør i Terminal." : "Run in Terminal."} ${restart("Ollama")}` },
-        { platform: "Linux", code: `Environment="OLLAMA_ORIGINS=${origin}"`, text: da ? "Tilføj under [Service] med systemctl edit ollama, og genstart tjenesten." : "Add under [Service] with systemctl edit ollama and restart the service." },
+        {
+          platform: "Linux",
+          code: `Environment="OLLAMA_ORIGINS=${origin}"`,
+          text: da
+            ? "Tilføj under [Service] med systemctl edit ollama, og genstart tjenesten."
+            : "Add under [Service] with systemctl edit ollama and restart the service.",
+        },
       ];
     case "lmstudio":
-      return [{ text: da ? 'Developer → Server Settings → slå "Enable CORS" til, og genstart serveren.' : 'Developer → Server Settings → turn on "Enable CORS" and restart the server.' }];
+      return [
+        {
+          text: da
+            ? 'Developer → Server Settings → slå "Enable CORS" til, og genstart serveren.'
+            : 'Developer → Server Settings → turn on "Enable CORS" and restart the server.',
+        },
+      ];
     case "vllm":
       return [{ code: `--allowed-origins '["${origin}"]'`, text: da ? "Tilføj til vllm serve-kommandoen." : "Add to the vllm serve command." }];
     case "localai":
-      return [{ code: `CORS=true CORS_ALLOW_ORIGINS=${origin}`, text: da ? "Sæt miljøvariablerne, og genstart LocalAI." : "Set the environment variables and restart LocalAI." }];
+      return [
+        {
+          code: `CORS=true CORS_ALLOW_ORIGINS=${origin}`,
+          text: da ? "Sæt miljøvariablerne, og genstart LocalAI." : "Set the environment variables and restart LocalAI.",
+        },
+      ];
     case "jan":
       return [{ text: da ? "Settings → Local API Server → slå CORS til." : "Settings → Local API Server → turn on CORS." }];
     case "llamacpp":
     case "kobold":
-      return [{ text: da ? "Tillader normalt alle origins. Tjek, at serveren lytter på 127.0.0.1 og den viste port." : "Usually allows all origins. Check that the server listens on 127.0.0.1 and the port shown." }];
+      return [
+        {
+          text: da
+            ? "Tillader normalt alle origins. Tjek, at serveren lytter på 127.0.0.1 og den viste port."
+            : "Usually allows all origins. Check that the server listens on 127.0.0.1 and the port shown.",
+        },
+      ];
     default:
-      return [{ text: da ? `Tillad CORS fra ${origin} i værktøjets indstillinger, eller brug MIAI Bridge.` : `Allow CORS from ${origin} in the tool's settings, or use MIAI Bridge.` }];
+      return [
+        {
+          text: da
+            ? `Tillad CORS fra ${origin} i værktøjets indstillinger, eller brug MIAI Bridge.`
+            : `Allow CORS from ${origin} in the tool's settings, or use MIAI Bridge.`,
+        },
+      ];
   }
 }

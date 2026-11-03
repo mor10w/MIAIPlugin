@@ -99,7 +99,10 @@ export function buildOverview(
 /** "'Mit ark'!A1:B2" → { sheet: "Mit ark", range: "A1:B2" } */
 export function splitAddress(address: string): { sheet: string; range: string } {
   const i = address.lastIndexOf("!");
-  const sheet = address.slice(0, i).replace(/^'(.*)'$/, "$1").replace(/''/g, "'");
+  const sheet = address
+    .slice(0, i)
+    .replace(/^'(.*)'$/, "$1")
+    .replace(/''/g, "'");
   return { sheet, range: address.slice(i + 1) };
 }
 
@@ -207,7 +210,9 @@ export class ExcelAdapter implements HostAdapter {
       sel.load("rowCount,columnCount");
       await ctx.sync();
       const single = mode === "replace" || sel.rowCount * sel.columnCount === 1 || format !== "tsv";
-      const target = single ? sel.getCell(0, 0) : sel.getCell(0, 0).getResizedRange(Math.min(sel.rowCount, MAX_ROWS) - 1, Math.min(sel.columnCount, MAX_COLS) - 1);
+      const target = single
+        ? sel.getCell(0, 0)
+        : sel.getCell(0, 0).getResizedRange(Math.min(sel.rowCount, MAX_ROWS) - 1, Math.min(sel.columnCount, MAX_COLS) - 1);
       target.load("formulas,rowCount,columnCount,address");
       await ctx.sync();
       const undo = this.snapshotUndo(target.address, target.formulas);

@@ -104,9 +104,7 @@ export function tokenMatches(expected: string, given: unknown): boolean {
  */
 export function personalizeManifest(baseXml: string, id: BridgeIdentity): string {
   const origin = `https://localhost:${id.port}`;
-  return baseXml
-    .replaceAll("https://localhost:44321", origin)
-    .replaceAll(`${origin}/taskpane.html"`, `${origin}/taskpane.html?token=${id.token}"`);
+  return baseXml.replaceAll("https://localhost:44321", origin).replaceAll(`${origin}/taskpane.html"`, `${origin}/taskpane.html?token=${id.token}"`);
 }
 
 /** Skriver brugerens manifest i konfigurationsmappen (kun læsbart af brugeren) og returnerer stien. */

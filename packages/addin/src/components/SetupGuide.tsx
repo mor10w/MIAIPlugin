@@ -8,7 +8,13 @@ import { useI18n } from "../i18n";
 const useStyles = makeStyles({
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   head: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: tokens.spacingHorizontalS },
-  item: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS, paddingTop: tokens.spacingVerticalS, borderTop: `1px solid ${tokens.colorNeutralStroke2}` },
+  item: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXS,
+    paddingTop: tokens.spacingVerticalS,
+    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
   row: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, flexWrap: "wrap" },
   code: {
     display: "flex",
@@ -51,7 +57,9 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
     setScanning(true);
     const targets = discoveryTargets();
     setFound(targets);
-    const results = await Promise.all(targets.map((tg) => probe(tg.tools[0]).catch((e): ProbeResult => ({ ok: false, reason: "absent", message: (e as Error).message }))));
+    const results = await Promise.all(
+      targets.map((tg) => probe(tg.tools[0]).catch((e): ProbeResult => ({ ok: false, reason: "absent", message: (e as Error).message }))),
+    );
     setFound(targets.map((tg, i) => ({ ...tg, result: results[i] })));
     setScanning(false);
   }, [probe]);
@@ -111,7 +119,13 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
               {step.code && (
                 <div className={s.code}>
                   <span className={s.grow}>{step.code}</span>
-                  <Button size="small" appearance="subtle" icon={<Copy16Regular />} aria-label={t("copy")} onClick={() => navigator.clipboard?.writeText(step.code!)} />
+                  <Button
+                    size="small"
+                    appearance="subtle"
+                    icon={<Copy16Regular />}
+                    aria-label={t("copy")}
+                    onClick={() => navigator.clipboard?.writeText(step.code!)}
+                  />
                 </div>
               )}
               <Caption1>{step.text}</Caption1>

@@ -22,7 +22,9 @@ const CERT_FILE = join(TLS_DIR, "localhost.crt");
 function log(msg) {
   try {
     appendFileSync(join(MIAI_DIR, "MIAI.log"), `[${new Date().toISOString()}] [bridge-process] ${msg}\n`);
-  } catch { /* log skal aldrig fælde bridgen */ }
+  } catch {
+    /* log skal aldrig fælde bridgen */
+  }
 }
 
 /** macOS afviser TLS-servercertifikater med længere gyldighed end 825 dage (også lokalt betroede). */
@@ -71,11 +73,11 @@ function ensureTls() {
       ].join("\n"),
     );
     // /usr/bin/openssl (LibreSSL) medleveres på macOS.
-    execFileSync("/usr/bin/openssl", [
-      "req", "-x509", "-newkey", "rsa:2048", "-nodes",
-      "-days", String(CERT_DAYS), "-sha256",
-      "-keyout", keyFile, "-out", CERT_FILE, "-config", cnf,
-    ], { stdio: "ignore" });
+    execFileSync(
+      "/usr/bin/openssl",
+      ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", String(CERT_DAYS), "-sha256", "-keyout", keyFile, "-out", CERT_FILE, "-config", cnf],
+      { stdio: "ignore" },
+    );
   }
   return { cert: readFileSync(CERT_FILE), key: readFileSync(keyFile) };
 }

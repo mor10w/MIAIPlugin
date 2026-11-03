@@ -38,8 +38,7 @@ const T = {
     addin: "Add-in",
     addinOk: "Bygget og klar. Manifestet peger på",
     addinMissing: "Add-in'et er ikke bygget. Kør npm run build.",
-    officeOnly:
-      "MIAI's brugerflade kører kun i Word, Excel og PowerPoint (fanen Hjem → AI-assistent). Denne side viser bare, at bridgen kører.",
+    officeOnly: "MIAI's brugerflade kører kun i Word, Excel og PowerPoint (fanen Hjem → AI-assistent). Denne side viser bare, at bridgen kører.",
     api: "API",
     apiNote: "API'et under /api/ kræver headeren X-MIAI og kan derfor ikke åbnes direkte i browseren. Rå status:",
   },

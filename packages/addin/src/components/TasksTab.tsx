@@ -1,5 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, Button, Card, Checkbox, Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner, Subtitle2, Textarea, makeStyles, tokens } from "@fluentui/react-components";
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Dropdown,
+  Field,
+  Input,
+  MessageBar,
+  MessageBarBody,
+  Option,
+  Spinner,
+  Subtitle2,
+  Textarea,
+  makeStyles,
+  tokens,
+} from "@fluentui/react-components";
 import { UserTaskFile as UserTaskSchema, localize, type UserTaskFile } from "@miai/shared";
 import { useBackend } from "../backend";
 import type { UserTaskInfo } from "../backend/types";
@@ -8,7 +24,13 @@ import { useI18n } from "../i18n";
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
-  listRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
+  listRow: {
+    display: "flex",
+    gap: tokens.spacingHorizontalS,
+    alignItems: "center",
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+  },
   listLabel: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: tokens.spacingHorizontalS },
@@ -195,11 +217,27 @@ export function TasksTab() {
   return (
     <div className={s.root}>
       <div className={s.row}>
-        <Button appearance="primary" onClick={() => { setForm(emptyForm()); setMsg(undefined); }}>
+        <Button
+          appearance="primary"
+          onClick={() => {
+            setForm(emptyForm());
+            setMsg(undefined);
+          }}
+        >
           {t("newTask")}
         </Button>
         <Button onClick={() => fileRef.current?.click()}>{t("importTask")}</Button>
-        <input ref={fileRef} type="file" accept=".json,application/json" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void onImportFile(f); e.currentTarget.value = ""; }} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onImportFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
       </div>
 
       {msg && (
@@ -213,7 +251,12 @@ export function TasksTab() {
           <Subtitle2>{t("editTask")}</Subtitle2>
           <div className={s.twoCol}>
             <Field label={t("taskFieldId")}>
-              <Input className={s.mono} value={form.id} disabled={tasks?.some((x) => x.spec.id === form.id && x.source === "machine")} onChange={(_, d) => patch({ id: d.value })} />
+              <Input
+                className={s.mono}
+                value={form.id}
+                disabled={tasks?.some((x) => x.spec.id === form.id && x.source === "machine")}
+                onChange={(_, d) => patch({ id: d.value })}
+              />
             </Field>
             <Field label={t("temperature")}>
               <Input type="number" min={0} max={2} step={0.1} value={form.temperature} onChange={(_, d) => patch({ temperature: d.value })} />
@@ -244,14 +287,22 @@ export function TasksTab() {
           </Field>
           <div className={s.twoCol}>
             <Field label={t("inputKind")}>
-              <Dropdown value={{ selection: t("inputSelection"), selectionOrDocument: t("inputSelOrDoc"), prompt: t("inputPrompt") }[form.input]} selectedOptions={[form.input]} onOptionSelect={(_, d) => patch({ input: d.optionValue as FormState["input"] })}>
+              <Dropdown
+                value={{ selection: t("inputSelection"), selectionOrDocument: t("inputSelOrDoc"), prompt: t("inputPrompt") }[form.input]}
+                selectedOptions={[form.input]}
+                onOptionSelect={(_, d) => patch({ input: d.optionValue as FormState["input"] })}
+              >
                 <Option value="selection">{t("inputSelection")}</Option>
                 <Option value="selectionOrDocument">{t("inputSelOrDoc")}</Option>
                 <Option value="prompt">{t("inputPrompt")}</Option>
               </Dropdown>
             </Field>
             <Field label={t("outputFormat")}>
-              <Dropdown value={{ plain: t("formatPlain"), markdown: t("formatMarkdown"), tsv: t("formatTsv") }[form.format]} selectedOptions={[form.format]} onOptionSelect={(_, d) => patch({ format: d.optionValue as FormState["format"] })}>
+              <Dropdown
+                value={{ plain: t("formatPlain"), markdown: t("formatMarkdown"), tsv: t("formatTsv") }[form.format]}
+                selectedOptions={[form.format]}
+                onOptionSelect={(_, d) => patch({ format: d.optionValue as FormState["format"] })}
+              >
                 <Option value="plain">{t("formatPlain")}</Option>
                 <Option value="markdown">{t("formatMarkdown")}</Option>
                 <Option value="tsv">{t("formatTsv")}</Option>
@@ -261,7 +312,12 @@ export function TasksTab() {
           <Field label={t("applyModesLabel")}>
             <div className={s.row}>
               {(["replace", "trackChanges", "insertAfter", "comment", "cells"] as const).map((m) => (
-                <Checkbox key={m} label={t(`apply_${m}`)} checked={form.applyModes.includes(m)} onChange={() => patch({ applyModes: toggle(form.applyModes, m) })} />
+                <Checkbox
+                  key={m}
+                  label={t(`apply_${m}`)}
+                  checked={form.applyModes.includes(m)}
+                  onChange={() => patch({ applyModes: toggle(form.applyModes, m) })}
+                />
               ))}
             </div>
           </Field>
@@ -274,7 +330,11 @@ export function TasksTab() {
                   <Input className={s.mono} value={p.name} onChange={(_, d) => patchParam(i, { name: d.value })} />
                 </Field>
                 <Field label={t("paramKind")}>
-                  <Dropdown value={p.kind === "text" ? t("kindText") : t("kindSelect")} selectedOptions={[p.kind]} onOptionSelect={(_, d) => patchParam(i, { kind: d.optionValue as ParamEdit["kind"] })}>
+                  <Dropdown
+                    value={p.kind === "text" ? t("kindText") : t("kindSelect")}
+                    selectedOptions={[p.kind]}
+                    onOptionSelect={(_, d) => patchParam(i, { kind: d.optionValue as ParamEdit["kind"] })}
+                  >
                     <Option value="text">{t("kindText")}</Option>
                     <Option value="select">{t("kindSelect")}</Option>
                   </Dropdown>
@@ -303,7 +363,10 @@ export function TasksTab() {
               </div>
             </Card>
           ))}
-          <Button size="small" onClick={() => patch({ params: [...form.params, { name: "", labelDa: "", labelEn: "", kind: "text", optionsText: "", defaultValue: "" }] })}>
+          <Button
+            size="small"
+            onClick={() => patch({ params: [...form.params, { name: "", labelDa: "", labelEn: "", kind: "text", optionsText: "", defaultValue: "" }] })}
+          >
             {t("paramAdd")}
           </Button>
 
@@ -339,7 +402,13 @@ export function TasksTab() {
                   </Badge>
                   {info.source === "user" && (
                     <>
-                      <Button size="small" onClick={() => { setForm(specToForm(info.spec)); setMsg(undefined); }}>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          setForm(specToForm(info.spec));
+                          setMsg(undefined);
+                        }}
+                      >
                         {t("editTask")}
                       </Button>
                       <Button size="small" appearance="subtle" onClick={() => void del(info.spec.id)}>

@@ -132,15 +132,30 @@ describe("probe (#4)", () => {
     expect(r.json()).toEqual({ ok: true, models: ["mock-model", "other"] });
   });
   it("melder, når intet svarer, og respekterer politikken", async () => {
-    const dead = await app.inject({ method: "POST", url: "/api/probe", headers: H, payload: { endpoint: { id: "d", name: "D", baseUrl: "http://127.0.0.1:9/v1" } } });
+    const dead = await app.inject({
+      method: "POST",
+      url: "/api/probe",
+      headers: H,
+      payload: { endpoint: { id: "d", name: "D", baseUrl: "http://127.0.0.1:9/v1" } },
+    });
     expect(dead.json()).toMatchObject({ ok: false, reason: "absent" });
-    const remote = await app.inject({ method: "POST", url: "/api/probe", headers: H, payload: { endpoint: { id: "c", name: "Cloud", baseUrl: "https://api.example.com/v1" } } });
+    const remote = await app.inject({
+      method: "POST",
+      url: "/api/probe",
+      headers: H,
+      payload: { endpoint: { id: "c", name: "Cloud", baseUrl: "https://api.example.com/v1" } },
+    });
     expect(remote.json()).toMatchObject({ ok: false, reason: "policy" });
   });
   it("slår maskerede API-nøgler op", async () => {
     const settings = { endpoints: [{ id: "mock", name: "Mock", baseUrl: mockUrl, apiKey: "hemmelig" }], activeEndpoint: "mock" };
     await app.inject({ method: "PUT", url: "/api/settings", headers: H, payload: { settings } });
-    const r = await app.inject({ method: "POST", url: "/api/probe", headers: H, payload: { endpoint: { id: "mock", name: "Mock", baseUrl: mockUrl, apiKey: "********" } } });
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/probe",
+      headers: H,
+      payload: { endpoint: { id: "mock", name: "Mock", baseUrl: mockUrl, apiKey: "********" } },
+    });
     expect(r.json().ok).toBe(true);
     expect(lastAuth).toBe("Bearer hemmelig");
   });
@@ -152,7 +167,10 @@ describe("opgaver", () => {
     const r = await app.inject({ method: "POST", url: "/api/tasks/simplify", headers: H, payload: { context: { host: "word", text: "Kompliceret tekst." } } });
     const ev = events(r.payload);
     expect(ev[0]).toMatchObject({ type: "meta", model: "mock-model" });
-    const text = ev.filter((e) => e.type === "delta").map((e: any) => e.text).join("");
+    const text = ev
+      .filter((e) => e.type === "delta")
+      .map((e: any) => e.text)
+      .join("");
     expect(text).toBe("Enkel tekst.");
     expect(ev.at(-1)).toMatchObject({ type: "done", usage: { promptTokens: 10 } });
     expect(lastBody.stream).toBe(true);

@@ -69,7 +69,11 @@ describe("nye indbyggede opgaver (F6, F12)", () => {
   it("sales-copy findes til Word og PowerPoint", () => {
     const t = TASKS.find((x) => x.id === "sales-copy");
     expect(t?.hosts).toEqual(["word", "powerpoint"]);
-    const msgs = t!.buildMessages({ context: { ...ctx, text: "spec-sheet" }, params: { prompt: "espressomaskine", tone: "bold and direct", length: "about 100 words" }, history: [] });
+    const msgs = t!.buildMessages({
+      context: { ...ctx, text: "spec-sheet" },
+      params: { prompt: "espressomaskine", tone: "bold and direct", length: "about 100 words" },
+      history: [],
+    });
     expect(msgs[1].content).toContain("espressomaskine");
   });
   it("analyze-data findes kun til Excel og bruger markeringen som tabel", () => {

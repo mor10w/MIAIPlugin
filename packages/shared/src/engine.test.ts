@@ -37,7 +37,13 @@ beforeAll(async () => {
           res.end(
             JSON.stringify({
               choices: [
-                { finish_reason: "tool_calls", message: { content: "", tool_calls: [{ id: "call_1", type: "function", function: { name: "web_search", arguments: '{"query":"test query"}' } }] } },
+                {
+                  finish_reason: "tool_calls",
+                  message: {
+                    content: "",
+                    tool_calls: [{ id: "call_1", type: "function", function: { name: "web_search", arguments: '{"query":"test query"}' } }],
+                  },
+                },
               ],
             }),
           );
@@ -56,13 +62,21 @@ beforeAll(async () => {
 });
 afterAll(() => server.close());
 
-const settings = (ep: object = {}, extra: object = {}) => Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x", ...extra });
+const settings = (ep: object = {}, extra: object = {}) =>
+  Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x", ...extra });
 
 async function run(id: string, body: object, policy = Policy.parse({}), hint?: string, ep: object = {}) {
   const events: TaskEvent[] = [];
   const s = settings(ep);
   const req = TaskRequest.parse(body);
-  await executeTask(getTask(id)!, req, { settings: s, endpoint: s.endpoints[0], policy, emit: (e) => events.push(e), signal: new AbortController().signal, client: { unreachableHint: hint } });
+  await executeTask(getTask(id)!, req, {
+    settings: s,
+    endpoint: s.endpoints[0],
+    policy,
+    emit: (e) => events.push(e),
+    signal: new AbortController().signal,
+    client: { unreachableHint: hint },
+  });
   return events;
 }
 
@@ -70,7 +84,12 @@ describe("executeTask (direkte tilstand)", () => {
   it("vælger første model, filtrerer <think> og tåler ikke-streamende server", async () => {
     const ev = await run("simplify", { context: { host: "word", text: "Lang tekst" } });
     expect(ev[0]).toMatchObject({ type: "meta", model: "gemma3:4b" });
-    expect(ev.filter((e) => e.type === "delta").map((e: any) => e.text).join("")).toBe("Kort svar.");
+    expect(
+      ev
+        .filter((e) => e.type === "delta")
+        .map((e: any) => e.text)
+        .join(""),
+    ).toBe("Kort svar.");
   });
 
   it("sender ingen ekstra headers på GET (undgår CORS-preflight)", () => {
@@ -102,7 +121,10 @@ describe("executeTask (direkte tilstand)", () => {
 
   it("afbryder ved gentagelsessløjfe og markerer svaret", async () => {
     const ev = await run("chat", { context: { host: "word" }, params: { prompt: "LOOPTEST" } });
-    const text = ev.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
+    const text = ev
+      .filter((e) => e.type === "delta")
+      .map((e: { text?: string }) => e.text ?? "")
+      .join("");
     expect(text).not.toContain("gentage sig selv"); // ingen note i selve teksten
     expect(ev.find((e) => e.type === "done")).toMatchObject({ stopReason: "repetition" });
     expect(ev.filter((e) => e.type === "error").length).toBe(0);
@@ -127,19 +149,16 @@ describe("executeTask (direkte tilstand)", () => {
   });
 
   it("inkluderer arkoversigt og områder i Excel-chat (mod partielle svar som '30 for hele kolonnen')", async () => {
-    await run(
-      "chat",
-      {
-        context: {
-          host: "excel",
-          address: "Ark1!E9:E30",
-          table: "5\n6",
-          surroundings:
-            "Active sheet 'Ark1', used range A1:E30 (30 rows x 5 columns)\nHeaders (row 1): E=Beløb\nColumn stats (30 rows): E: 29 non-empty, numeric sum=1234 min=10 max=98",
-        },
-        params: { prompt: "Hvad summer kolonne E op til?" },
+    await run("chat", {
+      context: {
+        host: "excel",
+        address: "Ark1!E9:E30",
+        table: "5\n6",
+        surroundings:
+          "Active sheet 'Ark1', used range A1:E30 (30 rows x 5 columns)\nHeaders (row 1): E=Beløb\nColumn stats (30 rows): E: 29 non-empty, numeric sum=1234 min=10 max=98",
       },
-    );
+      params: { prompt: "Hvad summer kolonne E op til?" },
+    });
     const sys = lastBody.messages?.[0].content as string;
     expect(sys).toContain("Column stats (30 rows)"); // oversigten når til modellen
     expect(sys).toContain("Never present figures from the selection as if they covered the whole sheet");
@@ -150,27 +169,26 @@ describe("executeTask (direkte tilstand)", () => {
     const calls: string[] = [];
     const events: TaskEvent[] = [];
     const s = settings({}, { webSearch: true });
-    await executeTask(
-      getTask("chat")!,
-      TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }),
-      {
-        settings: s,
-        endpoint: s.endpoints[0],
-        policy: Policy.parse({}),
-        emit: (e) => events.push(e),
-        signal: new AbortController().signal,
-        tools: {
-          specs: [{ type: "function", function: { name: "web_search", description: "Søg på webbet", parameters: {} } }],
-          run: async (_name, args) => {
-            calls.push(args);
-            return "1. Titel\n   https://eksempel.dk\n   Snippet fra siden.";
-          },
+    await executeTask(getTask("chat")!, TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }), {
+      settings: s,
+      endpoint: s.endpoints[0],
+      policy: Policy.parse({}),
+      emit: (e) => events.push(e),
+      signal: new AbortController().signal,
+      tools: {
+        specs: [{ type: "function", function: { name: "web_search", description: "Søg på webbet", parameters: {} } }],
+        run: async (_name, args) => {
+          calls.push(args);
+          return "1. Titel\n   https://eksempel.dk\n   Snippet fra siden.";
         },
       },
-    );
+    });
     expect(calls).toHaveLength(1); // præcis ét værktøjskald, derefter endeligt svar
     expect(JSON.parse(calls[0])).toEqual({ query: "test query" });
-    const text = events.filter((e) => e.type === "delta").map((e: { text?: string }) => e.text ?? "").join("");
+    const text = events
+      .filter((e) => e.type === "delta")
+      .map((e: { text?: string }) => e.text ?? "")
+      .join("");
     expect(text).toContain("Endeligt svar baseret på søgning.");
     expect(events.some((e) => e.type === "search" && (e as { query: string }).query === "test query")).toBe(true);
     // Værktøjskaldet sendes tilbage med type: "function" (kræves af OpenAI-specifikationen, fx vLLM).
@@ -180,7 +198,10 @@ describe("executeTask (direkte tilstand)", () => {
 
   it("web-søgning er slået fra som standard og kan forbydes af politikken", async () => {
     const calls: string[] = [];
-    const tools = { specs: [{ type: "function" as const, function: { name: "web_search", description: "", parameters: {} } }], run: async () => (calls.push("x"), "resultat") };
+    const tools = {
+      specs: [{ type: "function" as const, function: { name: "web_search", description: "", parameters: {} } }],
+      run: async () => (calls.push("x"), "resultat"),
+    };
     const req = TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } });
     const base = { emit: () => {}, signal: new AbortController().signal, tools };
     const def = settings();
@@ -194,18 +215,14 @@ describe("executeTask (direkte tilstand)", () => {
   it("kører ikke værktøjer, når webSearch er slået fra", async () => {
     const calls: string[] = [];
     const s = Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base }], activeEndpoint: "x", webSearch: false });
-    await executeTask(
-      getTask("chat")!,
-      TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }),
-      {
-        settings: s,
-        endpoint: s.endpoints[0],
-        policy: Policy.parse({}),
-        emit: () => {},
-        signal: new AbortController().signal,
-        tools: { specs: [], run: async () => (calls.push("x"), "resultat") },
-      },
-    );
+    await executeTask(getTask("chat")!, TaskRequest.parse({ context: { host: "word" }, params: { prompt: "TOOLTEST" } }), {
+      settings: s,
+      endpoint: s.endpoints[0],
+      policy: Policy.parse({}),
+      emit: () => {},
+      signal: new AbortController().signal,
+      tools: { specs: [], run: async () => (calls.push("x"), "resultat") },
+    });
     expect(calls).toHaveLength(0); // eksekvereren må aldrig kaldes
   });
 });

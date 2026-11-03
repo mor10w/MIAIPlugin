@@ -23,7 +23,9 @@ const CERT_FILE = join(MIAI_DIR, "tls", "localhost.crt");
 function log(msg) {
   try {
     appendFileSync(join(MIAI_DIR, "MIAI.log"), `[${new Date().toISOString()}] ${msg}\n`);
-  } catch { /* log skal aldrig fælde appen */ }
+  } catch {
+    /* log skal aldrig fælde appen */
+  }
 }
 
 // Packaget: filer ligger i Resources/ (electron-builder extraResources). I dev: repoet.
@@ -78,8 +80,16 @@ function startBridge() {
 
   return new Promise((resolve) => {
     const t = setTimeout(resolve, 10_000);
-    bridgeProc.on("message", (m) => { if (m?.type === "listening") { clearTimeout(t); resolve(); } });
-    bridgeProc.on("exit", () => { clearTimeout(t); resolve(); });
+    bridgeProc.on("message", (m) => {
+      if (m?.type === "listening") {
+        clearTimeout(t);
+        resolve();
+      }
+    });
+    bridgeProc.on("exit", () => {
+      clearTimeout(t);
+      resolve();
+    });
   });
 }
 
@@ -205,7 +215,8 @@ if (!gotLock) {
   process.on("unhandledRejection", (r) => log(`unhandledRejection: ${r}`));
   process.on("uncaughtException", (e) => log(`uncaughtException: ${e.stack ?? e}`));
 
-  app.whenReady()
+  app
+    .whenReady()
     .then(async () => {
       log("whenReady");
       // Kun menu-bar – ingen dock-ikon.
@@ -234,7 +245,12 @@ if (!gotLock) {
         try {
           installInOffice();
           log("manifest opdateret i Office (ny port/token)");
-          dialog.showMessageBox({ type: "info", title: "MIAI", message: "MIAI er opdateret i Office.", detail: "Genstart Word, Excel og PowerPoint, så de bruger den nye forbindelse." });
+          dialog.showMessageBox({
+            type: "info",
+            title: "MIAI",
+            message: "MIAI er opdateret i Office.",
+            detail: "Genstart Word, Excel og PowerPoint, så de bruger den nye forbindelse.",
+          });
         } catch (err) {
           log(`kunne ikke opdatere manifest: ${err.message}`);
         }
@@ -242,7 +258,10 @@ if (!gotLock) {
       const needInstall = installState === "missing";
       log(`opsætning: certifikat betroet=${!needTrust}, installeret i Office=${!needInstall}`);
       if (needTrust || needInstall) {
-        const steps = [needTrust && "betro MIAI-certifikatet (bruges til den lokale HTTPS-forbindelse)", needInstall && "installere MIAI i Word, Excel og PowerPoint"].filter(Boolean);
+        const steps = [
+          needTrust && "betro MIAI-certifikatet (bruges til den lokale HTTPS-forbindelse)",
+          needInstall && "installere MIAI i Word, Excel og PowerPoint",
+        ].filter(Boolean);
         const r = await dialog.showMessageBox({
           type: "info",
           title: "Velkommen til MIAI",
@@ -256,7 +275,12 @@ if (!gotLock) {
           if (needInstall) {
             try {
               installInOffice();
-              dialog.showMessageBox({ type: "info", title: "MIAI", message: "MIAI er installeret i Office.", detail: "Genstart Word, Excel og PowerPoint. Du finder MIAI som 'AI-assistent' på fanen Hjem." });
+              dialog.showMessageBox({
+                type: "info",
+                title: "MIAI",
+                message: "MIAI er installeret i Office.",
+                detail: "Genstart Word, Excel og PowerPoint. Du finder MIAI som 'AI-assistent' på fanen Hjem.",
+              });
             } catch (err) {
               dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
             }

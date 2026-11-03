@@ -177,7 +177,10 @@ export const TASKS: TaskDefinition[] = [
   {
     id: "grammar",
     label: { da: "Ret stavning og grammatik", en: "Fix spelling & grammar" },
-    description: { da: "Finder fejl og foreslår rettelser, som kan indsættes som sporede ændringer.", en: "Finds errors and suggests fixes that can be inserted as tracked changes." },
+    description: {
+      da: "Finder fejl og foreslår rettelser, som kan indsættes som sporede ændringer.",
+      en: "Finds errors and suggests fixes that can be inserted as tracked changes.",
+    },
     hosts: TEXT_HOSTS,
     input: "selection",
     output: { kind: "json", schema: GrammarResult, schemaName: "grammar_edits" },
@@ -205,7 +208,11 @@ export const TASKS: TaskDefinition[] = [
     applyModes: ["replace", "trackChanges", "insertAfter"],
     temperature: 0.5,
     buildMessages: (req) => [
-      system(req, `Rewrite the document in a ${req.params.tone ?? "professional"} tone. Keep the meaning, facts and approximate length. Keep paragraph breaks.`, ONLY_RESULT),
+      system(
+        req,
+        `Rewrite the document in a ${req.params.tone ?? "professional"} tone. Keep the meaning, facts and approximate length. Keep paragraph breaks.`,
+        ONLY_RESULT,
+      ),
       user(doc(req.context.text)),
     ],
   },
@@ -263,7 +270,11 @@ export const TASKS: TaskDefinition[] = [
         ];
       }
       return [
-        system(req, `Translate the document into ${lang}. Preserve formatting such as line breaks and lists. Keep names, product names and code unchanged.`, ONLY_RESULT),
+        system(
+          req,
+          `Translate the document into ${lang}. Preserve formatting such as line breaks and lists. Keep names, product names and code unchanged.`,
+          ONLY_RESULT,
+        ),
         user(doc(req.context.text)),
       ];
     },
@@ -304,7 +315,12 @@ export const TASKS: TaskDefinition[] = [
     input: "prompt",
     output: { kind: "text", format: "markdown" },
     params: [
-      { name: "prompt", label: { da: "Emne eller idé", en: "Topic or idea" }, kind: "text", placeholder: { da: "Fx: 5 grunde til at køre AI lokalt", en: "E.g. 5 reasons to run AI locally" } },
+      {
+        name: "prompt",
+        label: { da: "Emne eller idé", en: "Topic or idea" },
+        kind: "text",
+        placeholder: { da: "Fx: 5 grunde til at køre AI lokalt", en: "E.g. 5 reasons to run AI locally" },
+      },
       { name: "tone", label: { da: "Tone", en: "Tone" }, kind: "select", options: TONE_OPTIONS, default: "professional" },
       {
         name: "length",
@@ -339,7 +355,12 @@ export const TASKS: TaskDefinition[] = [
     input: "prompt",
     output: { kind: "text", format: "plain" },
     params: [
-      { name: "prompt", label: { da: "Produkt eller budskab", en: "Product or message" }, kind: "text", placeholder: { da: "Fx: vores nye espressomaskine – hurtig, stille, let at rengøre", en: "E.g. Our new espresso machine – fast, quiet, easy to clean" } },
+      {
+        name: "prompt",
+        label: { da: "Produkt eller budskab", en: "Product or message" },
+        kind: "text",
+        placeholder: { da: "Fx: vores nye espressomaskine – hurtig, stille, let at rengøre", en: "E.g. Our new espresso machine – fast, quiet, easy to clean" },
+      },
       {
         name: "tone",
         label: { da: "Tone", en: "Tone" },
@@ -374,7 +395,10 @@ export const TASKS: TaskDefinition[] = [
         "If the product or message is written in a specific language, write the copy in that language.",
         ONLY_RESULT,
       ),
-      user(req.params.prompt ? `Product / message: ${req.params.prompt}` : undefined, req.context.text && `Source material (existing text, specs or notes):\n${doc(req.context.text)}`),
+      user(
+        req.params.prompt ? `Product / message: ${req.params.prompt}` : undefined,
+        req.context.text && `Source material (existing text, specs or notes):\n${doc(req.context.text)}`,
+      ),
     ],
   },
   {
@@ -385,8 +409,19 @@ export const TASKS: TaskDefinition[] = [
     input: "prompt",
     output: { kind: "text", format: "markdown" },
     params: [
-      { name: "prompt", label: { da: "Emne", en: "Topic" }, kind: "text", placeholder: { da: "Fx: Kvartalsrapport Q3 for ledelsen", en: "E.g. Q3 report for management" } },
-      { name: "slideCount", label: { da: "Antal slides", en: "Slides" }, kind: "select", options: ["5", "8", "10", "15"].map((v) => ({ value: v, label: { da: v, en: v } })), default: "8" },
+      {
+        name: "prompt",
+        label: { da: "Emne", en: "Topic" },
+        kind: "text",
+        placeholder: { da: "Fx: Kvartalsrapport Q3 for ledelsen", en: "E.g. Q3 report for management" },
+      },
+      {
+        name: "slideCount",
+        label: { da: "Antal slides", en: "Slides" },
+        kind: "select",
+        options: ["5", "8", "10", "15"].map((v) => ({ value: v, label: { da: v, en: v } })),
+        default: "8",
+      },
     ],
     applyModes: ["insertAfter", "replace"],
     temperature: 0.5,
@@ -408,8 +443,19 @@ export const TASKS: TaskDefinition[] = [
     input: "prompt",
     output: { kind: "json", schema: SlidesResult, schemaName: "slides" },
     params: [
-      { name: "prompt", label: { da: "Emne eller tekst", en: "Topic or text" }, kind: "text", placeholder: { da: "Indsæt tekst eller beskriv emnet", en: "Paste text or describe the topic" } },
-      { name: "slideCount", label: { da: "Antal slides", en: "Slides" }, kind: "select", options: ["3", "5", "8", "10"].map((v) => ({ value: v, label: { da: v, en: v } })), default: "5" },
+      {
+        name: "prompt",
+        label: { da: "Emne eller tekst", en: "Topic or text" },
+        kind: "text",
+        placeholder: { da: "Indsæt tekst eller beskriv emnet", en: "Paste text or describe the topic" },
+      },
+      {
+        name: "slideCount",
+        label: { da: "Antal slides", en: "Slides" },
+        kind: "select",
+        options: ["3", "5", "8", "10"].map((v) => ({ value: v, label: { da: v, en: v } })),
+        default: "5",
+      },
     ],
     applyModes: ["newSlides"],
     temperature: 0.4,
@@ -425,7 +471,10 @@ export const TASKS: TaskDefinition[] = [
   {
     id: "diagram",
     label: { da: "Lav diagram", en: "Create diagram" },
-    description: { da: "Omdanner den markerede tekst (fx en tabel) til et diagram, der kan indsættes visuelt.", en: "Turns the selected text (e.g. a table) into a diagram that can be inserted visually." },
+    description: {
+      da: "Omdanner den markerede tekst (fx en tabel) til et diagram, der kan indsættes visuelt.",
+      en: "Turns the selected text (e.g. a table) into a diagram that can be inserted visually.",
+    },
     hosts: ["word", "powerpoint"],
     input: "selectionOrDocument",
     output: { kind: "json", schema: DiagramResult, schemaName: "diagram" },
@@ -445,7 +494,10 @@ export const TASKS: TaskDefinition[] = [
   {
     id: "analyze-data",
     label: { da: "Analyser data", en: "Analyze data" },
-    description: { da: "Beskriver den markerede tabel og foreslår pivot-tabeller, diagrammer og formler.", en: "Describes the selected table and suggests pivot tables, charts and formulas." },
+    description: {
+      da: "Beskriver den markerede tabel og foreslår pivot-tabeller, diagrammer og formler.",
+      en: "Describes the selected table and suggests pivot tables, charts and formulas.",
+    },
     hosts: ["excel"],
     input: "selectionOrDocument",
     output: { kind: "text", format: "markdown" },
@@ -496,11 +548,21 @@ export const TASKS: TaskDefinition[] = [
   {
     id: "generate-formula",
     label: { da: "Lav formel ud fra beskrivelse", en: "Generate formula" },
-    description: { da: "Beskriv hvad du vil beregne, og få en formel i den markerede celle.", en: "Describe what to calculate and get a formula in the selected cell." },
+    description: {
+      da: "Beskriv hvad du vil beregne, og få en formel i den markerede celle.",
+      en: "Describe what to calculate and get a formula in the selected cell.",
+    },
     hosts: ["excel"],
     input: "prompt",
     output: { kind: "json", schema: FormulaResult, schemaName: "formula" },
-    params: [{ name: "prompt", label: { da: "Hvad skal beregnes?", en: "What to calculate?" }, kind: "text", placeholder: { da: "Fx: summen af kolonne B hvor kolonne A er 'Jylland'", en: "E.g. sum of column B where column A is 'North'" } }],
+    params: [
+      {
+        name: "prompt",
+        label: { da: "Hvad skal beregnes?", en: "What to calculate?" },
+        kind: "text",
+        placeholder: { da: "Fx: summen af kolonne B hvor kolonne A er 'Jylland'", en: "E.g. sum of column B where column A is 'North'" },
+      },
+    ],
     applyModes: ["formula"],
     temperature: 0,
     buildMessages: (req) => [

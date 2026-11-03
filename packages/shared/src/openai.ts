@@ -57,8 +57,7 @@ export interface ToolCallDelta {
 
 /** Besked til /chat/completions. Bredere end ChatMessage: tillader tool-kald og -resultater (ADR-0010). */
 export type ApiMessage =
-  | { role: "system" | "user" | "assistant"; content: string; tool_calls?: ToolCall[] }
-  | { role: "tool"; tool_call_id: string; content: string };
+  { role: "system" | "user" | "assistant"; content: string; tool_calls?: ToolCall[] } | { role: "tool"; tool_call_id: string; content: string };
 
 export interface StreamChunk {
   text?: string;
@@ -244,7 +243,11 @@ interface RawToolCallDelta extends RawToolCall {
 /** Samler værktøjskald ud af et svar (stream-delta eller komplet message). */
 function fullToolCalls(raw: RawToolCall[] | undefined): ToolCallDelta[] | undefined {
   if (!raw?.length) return undefined;
-  return raw.map((tc, i) => ({ index: (tc as RawToolCallDelta).index ?? i, id: tc.id, function: { name: tc.function?.name, arguments: tc.function?.arguments ?? "" } }));
+  return raw.map((tc, i) => ({
+    index: (tc as RawToolCallDelta).index ?? i,
+    id: tc.id,
+    function: { name: tc.function?.name, arguments: tc.function?.arguments ?? "" },
+  }));
 }
 
 function mapUsage(u: CompletionJson["usage"]): StreamChunk["usage"] {

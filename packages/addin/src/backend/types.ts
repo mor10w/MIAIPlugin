@@ -1,4 +1,17 @@
-import type { AuditEntry, Endpoint, HealthInfo, ProbeResult, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
+import type {
+  AuditEntry,
+  Endpoint,
+  HealthInfo,
+  ProbeResult,
+  ModelInfo,
+  Policy,
+  Settings,
+  SettingsView,
+  TaskEvent,
+  TaskRequest,
+  TaskView,
+  UserTaskFile,
+} from "@miai/shared";
 
 /**
  * Hvordan add-in'et når modellen (ADR-0007):

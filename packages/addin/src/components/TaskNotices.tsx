@@ -56,7 +56,9 @@ export function TaskNotices({ state, ctx, inputError }: { state: TaskState; ctx?
       )}
       {ctx?.truncated && (state.status === "running" || done) && (
         <MessageBar intent="warning">
-          <MessageBarBody>{t("docTruncated", { sent: nf.format(ctx.text.replace(/\n\[… afkortet\]$/, "").length), total: nf.format(ctx.originalChars ?? ctx.text.length) })}</MessageBarBody>
+          <MessageBarBody>
+            {t("docTruncated", { sent: nf.format(ctx.text.replace(/\n\[… afkortet\]$/, "").length), total: nf.format(ctx.originalChars ?? ctx.text.length) })}
+          </MessageBarBody>
         </MessageBar>
       )}
       {(inputError || state.error) && (

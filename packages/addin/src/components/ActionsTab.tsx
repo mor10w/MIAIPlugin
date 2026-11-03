@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, Caption1, Card, Dropdown, Field, Option, Spinner, Text, Textarea, makeStyles, tokens } from "@fluentui/react-components";
 import {
-  Button,
-  Caption1,
-  Card,
-  Dropdown,
-  Field,
-  Option,
-  Spinner,
-  Text,
-  Textarea,
-  makeStyles,
-  tokens,
-} from "@fluentui/react-components";
-import { diagramToSvg, formatForView, parseTsv, stripEmphasis, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskView } from "@miai/shared";
+  diagramToSvg,
+  formatForView,
+  parseTsv,
+  stripEmphasis,
+  type ApplyMode,
+  type DiagramResult,
+  type DocContext,
+  type FormulaResult,
+  type GrammarResult,
+  type SlidesResult,
+  type TaskView,
+} from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { extractGraphic } from "../svg";
 import { useBackend } from "../backend";
@@ -26,7 +26,16 @@ import { Markdown } from "./Markdown";
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: tokens.spacingHorizontalS },
-  taskBtn: { justifyContent: "flex-start", textAlign: "left", height: "auto", minHeight: "36px", whiteSpace: "normal", overflowWrap: "anywhere", hyphens: "auto", minWidth: 0 },
+  taskBtn: {
+    justifyContent: "flex-start",
+    textAlign: "left",
+    height: "auto",
+    minHeight: "36px",
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+    hyphens: "auto",
+    minWidth: 0,
+  },
   form: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" },
   result: { padding: tokens.spacingHorizontalM },
@@ -51,7 +60,10 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const [tasks, setTasks] = useState<TaskView[]>([]);
   useEffect(() => {
     // Chat har sin egen fane og vises ikke som handling.
-    api.tasks().then((all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host) && x.id !== "chat")), () => {});
+    api.tasks().then(
+      (all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host) && x.id !== "chat")),
+      () => {},
+    );
   }, [api, adapter.host]);
   const [taskId, setTaskId] = useState<string>();
   const task = tasks.find((x) => x.id === taskId);
@@ -113,7 +125,13 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     <div className={s.root}>
       <div className={s.grid}>
         {tasks.map((tk) => (
-          <Button key={tk.id} className={s.taskBtn} appearance={tk.id === taskId ? "primary" : "secondary"} onClick={() => select(tk)} title={tk.description[lang]}>
+          <Button
+            key={tk.id}
+            className={s.taskBtn}
+            appearance={tk.id === taskId ? "primary" : "secondary"}
+            onClick={() => select(tk)}
+            title={tk.description[lang]}
+          >
             {tk.label[lang]}
           </Button>
         ))}
@@ -141,7 +159,13 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
                 </Field>
               ) : (
                 <Field key={p.name} label={p.label[lang]}>
-                  <Textarea resize="vertical" rows={3} placeholder={p.placeholder?.[lang]} value={params[p.name] ?? ""} onChange={(_, d) => setParams((x) => ({ ...x, [p.name]: d.value }))} />
+                  <Textarea
+                    resize="vertical"
+                    rows={3}
+                    placeholder={p.placeholder?.[lang]}
+                    value={params[p.name] ?? ""}
+                    onChange={(_, d) => setParams((x) => ({ ...x, [p.name]: d.value }))}
+                  />
                 </Field>
               ),
             )}
@@ -167,7 +191,12 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
         <Card className={s.result}>
           <ResultView task={task} format={format} text={shownText} result={state.result} />
           {state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length) && (
-            <ApplyBar key={state.text + JSON.stringify(state.result)} modes={modes} apply={apply} copyText={task.output.kind === "text" ? shownText : undefined} />
+            <ApplyBar
+              key={state.text + JSON.stringify(state.result)}
+              modes={modes}
+              apply={apply}
+              copyText={task.output.kind === "text" ? shownText : undefined}
+            />
           )}
         </Card>
       )}

@@ -57,7 +57,10 @@ export const test = base.extend<{ open: Open }>({
       let query = "";
       if (opts.mode === "bridge") {
         const endpointExtra = opts.endpoint ?? {};
-        const bridge = await startBridge(model.url, { ...opts.settings, ...(Object.keys(endpointExtra).length ? { endpoints: [{ id: "mock", name: "Mock", baseUrl: model.url, ...endpointExtra }] } : {}) });
+        const bridge = await startBridge(model.url, {
+          ...opts.settings,
+          ...(Object.keys(endpointExtra).length ? { endpoints: [{ id: "mock", name: "Mock", baseUrl: model.url, ...endpointExtra }] } : {}),
+        });
         cleanup.push(bridge.stop);
         origin = bridge.origin;
         if (!opts.omitToken) query = `?token=${encodeURIComponent(bridge.token)}`;
@@ -77,7 +80,8 @@ export const test = base.extend<{ open: Open }>({
         page,
         model,
         calls: () => page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls),
-        find: async <T,>(kind: string) => (await page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls)).find((c) => c.kind === kind) as T | undefined,
+        find: async <T>(kind: string) =>
+          (await page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls)).find((c) => c.kind === kind) as T | undefined,
         tab: async (name) => page.getByRole("tab", { name }).click(),
         run: async (action) => {
           await page.getByRole("button", { name: action, exact: true }).click();

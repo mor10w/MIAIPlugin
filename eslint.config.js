@@ -10,8 +10,24 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
 
   // Miljøer: browser for task pane, Node for bridge, app, scripts og tests.
-  { files: ["packages/addin/src/**"], languageOptions: { globals: { ...globals.browser, Office: "readonly", Word: "readonly", Excel: "readonly", PowerPoint: "readonly", OfficeRuntime: "readonly" } } },
-  { files: ["packages/bridge/**", "packages/shared/**", "packages/app/**", "packages/addin/e2e/**", "scripts/**", "*.config.{js,ts}", "packages/*/vite.config.ts"], languageOptions: { globals: globals.node } },
+  {
+    files: ["packages/addin/src/**"],
+    languageOptions: {
+      globals: { ...globals.browser, Office: "readonly", Word: "readonly", Excel: "readonly", PowerPoint: "readonly", OfficeRuntime: "readonly" },
+    },
+  },
+  {
+    files: [
+      "packages/bridge/**",
+      "packages/shared/**",
+      "packages/app/**",
+      "packages/addin/e2e/**",
+      "scripts/**",
+      "*.config.{js,ts}",
+      "packages/*/vite.config.ts",
+    ],
+    languageOptions: { globals: globals.node },
+  },
 
   // Typebevidste regler for produktionskoden: et glemt await på Office.js eller fetch er en reel fejl.
   {
@@ -43,7 +59,8 @@ export default tseslint.config(
         "error",
         {
           selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
-          message: "Indhold fra modellen skal renses (DOMPurify/escaping). Begrund med: // eslint-disable-next-line no-restricted-syntax -- <hvorfor det er sikkert>",
+          message:
+            "Indhold fra modellen skal renses (DOMPurify/escaping). Begrund med: // eslint-disable-next-line no-restricted-syntax -- <hvorfor det er sikkert>",
         },
       ],
     },

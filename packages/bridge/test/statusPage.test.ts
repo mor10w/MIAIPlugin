@@ -14,7 +14,9 @@ async function server(withAddin = true) {
   const dir = mkdtempSync(join(tmpdir(), "miai-status-"));
   const store = new ConfigStore(dir, join(dir, "ingen-politik.json"));
   // Ingen model kører på port 9 → "svarer ikke". Navnet tester escaping.
-  store.update(Settings.parse({ endpoints: [{ id: "x", name: "<b>Min</b> Ollama", baseUrl: "http://127.0.0.1:9/v1", apiKey: "hemmelig-nøgle" }], activeEndpoint: "x" }));
+  store.update(
+    Settings.parse({ endpoints: [{ id: "x", name: "<b>Min</b> Ollama", baseUrl: "http://127.0.0.1:9/v1", apiKey: "hemmelig-nøgle" }], activeEndpoint: "x" }),
+  );
   const addinDir = join(dir, "dist");
   if (withAddin) {
     const { mkdirSync } = await import("node:fs");

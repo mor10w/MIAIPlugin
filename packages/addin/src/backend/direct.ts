@@ -194,7 +194,11 @@ export class DirectBackend implements Backend {
 
   private loadCustom(): UserTaskInfo[] {
     const out: UserTaskInfo[] = [];
-    for (const s of load(KEY_USER_TASKS, (r) => (Array.isArray(r) ? r : []), () => [])) {
+    for (const s of load(
+      KEY_USER_TASKS,
+      (r) => (Array.isArray(r) ? r : []),
+      () => [],
+    )) {
       const p = UserTaskSchema.safeParse(s);
       if (p.success) out.push({ spec: p.data, source: "user" });
     }
@@ -203,7 +207,11 @@ export class DirectBackend implements Backend {
 
   private loadAudit(): AuditEntry[] {
     const out: AuditEntry[] = [];
-    for (const e of load(KEY_AUDIT, (r) => (Array.isArray(r) ? r : []), () => [])) {
+    for (const e of load(
+      KEY_AUDIT,
+      (r) => (Array.isArray(r) ? r : []),
+      () => [],
+    )) {
       const p = AuditSchema.safeParse(e);
       if (p.success) out.push(p.data);
     }
@@ -245,7 +253,8 @@ export class DirectBackend implements Backend {
       if (!signal.aborted) {
         const e = errorEvent(err);
         onEvent(e);
-        if (settings.auditLog && e.type === "error") this.pushAudit({ ts: new Date().toISOString(), kind: "task", task: id, host: epHost(ep.baseUrl), status: "error", code: e.code });
+        if (settings.auditLog && e.type === "error")
+          this.pushAudit({ ts: new Date().toISOString(), kind: "task", task: id, host: epHost(ep.baseUrl), status: "error", code: e.code });
       } else throw err;
     }
   }

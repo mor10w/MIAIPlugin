@@ -23,7 +23,16 @@ test("oversæt et område: TSV-forhåndsvisning, skrives celle for celle, ingen 
 
   await tp.page.getByRole("button", { name: "Skriv i celler" }).click();
   await expect(tp.page.getByText("Indsat.")).toBeVisible();
-  expect(await tp.calls()).toContainEqual(expect.objectContaining({ kind: "values", values: [["Status", "Amount"], ["Done", "10"], ["Done", "5"]] }));
+  expect(await tp.calls()).toContainEqual(
+    expect.objectContaining({
+      kind: "values",
+      values: [
+        ["Status", "Amount"],
+        ["Done", "10"],
+        ["Done", "5"],
+      ],
+    }),
+  );
 
   // presence_penalty skader tabeller (gentagne værdier) og sendes derfor kun til fritekst.
   expect(tp.model.lastRequest).not.toHaveProperty("presence_penalty");

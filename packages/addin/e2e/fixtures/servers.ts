@@ -76,11 +76,26 @@ export class MockModel {
         "toolCall" in r
           ? [
               ...(r.text ? [{ choices: [{ delta: { content: r.text } }] }] : []),
-              { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", type: "function", function: { name: r.toolCall.name, arguments: JSON.stringify(r.toolCall.args) } }] }, finish_reason: "tool_calls" }] },
+              {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        { index: 0, id: "call_1", type: "function", function: { name: r.toolCall.name, arguments: JSON.stringify(r.toolCall.args) } },
+                      ],
+                    },
+                    finish_reason: "tool_calls",
+                  },
+                ],
+              },
             ]
           : [
-              ...r.stream.map((content, i) => ({ choices: [{ delta: { content }, finish_reason: i === r.stream.length - 1 ? (r.finishReason ?? "stop") : null }] })),
-              ...(r.promptTokens !== undefined && body.stream_options ? [{ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 10 } }] : []),
+              ...r.stream.map((content, i) => ({
+                choices: [{ delta: { content }, finish_reason: i === r.stream.length - 1 ? (r.finishReason ?? "stop") : null }],
+              })),
+              ...(r.promptTokens !== undefined && body.stream_options
+                ? [{ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 10 } }]
+                : []),
             ];
       for (const c of chunks) {
         res.write(`data: ${JSON.stringify(c)}\n\n`);
@@ -104,12 +119,40 @@ export function testCert(): { cert: Buffer; key: Buffer } {
   const cert = join(dir, "localhost.crt");
   const key = join(dir, "localhost.key");
   if (!existsSync(cert)) {
-    execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-sha256", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1", "-keyout", key, "-out", cert], { stdio: "ignore" });
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-days",
+        "2",
+        "-sha256",
+        "-subj",
+        "/CN=localhost",
+        "-addext",
+        "subjectAltName=DNS:localhost,IP:127.0.0.1",
+        "-keyout",
+        key,
+        "-out",
+        cert,
+      ],
+      { stdio: "ignore" },
+    );
   }
   return { cert: readFileSync(cert), key: readFileSync(key) };
 }
 
-const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".png": "image/png", ".svg": "image/svg+xml", ".json": "application/json" };
+const TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript",
+  ".css": "text/css",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".json": "application/json",
+};
 
 /** Hoster add-in'ets build statisk over HTTPS – som GitHub Pages (direkte tilstand). */
 export async function startStaticHost(): Promise<{ origin: string; stop: () => Promise<void> }> {
@@ -128,7 +171,10 @@ export async function startStaticHost(): Promise<{ origin: string; stop: () => P
 }
 
 /** Starter den rigtige MIAI Bridge (bygget) med en midlertidig konfiguration, der peger på mock-modellen. */
-export async function startBridge(modelUrl: string, settings: Record<string, unknown> = {}): Promise<{ origin: string; token: string; stop: () => Promise<void> }> {
+export async function startBridge(
+  modelUrl: string,
+  settings: Record<string, unknown> = {},
+): Promise<{ origin: string; token: string; stop: () => Promise<void> }> {
   const { ConfigStore } = await import("@miai/bridge/dist/config.js");
   const { buildServer } = await import("@miai/bridge/dist/server.js");
   const { Settings } = await import("@miai/shared");

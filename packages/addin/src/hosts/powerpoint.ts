@@ -1,4 +1,14 @@
-import { applyEdits, diagramBounds, layoutDiagram, routeEdges, type ApplyMode, type DiagramResult, type DocContext, type GrammarResult, type SlidesResult } from "@miai/shared";
+import {
+  applyEdits,
+  diagramBounds,
+  layoutDiagram,
+  routeEdges,
+  type ApplyMode,
+  type DiagramResult,
+  type DocContext,
+  type GrammarResult,
+  type SlidesResult,
+} from "@miai/shared";
 import { graphicToPng } from "../image";
 import { mdToPlain } from "../markdown";
 import { extractGraphic } from "../svg";
@@ -8,7 +18,9 @@ const has = (v: string) => Office.context.requirements.isSetSupported("PowerPoin
 
 function getSelectedText(): Promise<string> {
   return new Promise((resolve) =>
-    Office.context.document.getSelectedDataAsync(Office.CoercionType.Text, (r) => resolve(r.status === Office.AsyncResultStatus.Succeeded ? String(r.value ?? "") : "")),
+    Office.context.document.getSelectedDataAsync(Office.CoercionType.Text, (r) =>
+      resolve(r.status === Office.AsyncResultStatus.Succeeded ? String(r.value ?? "") : ""),
+    ),
   );
 }
 
@@ -177,7 +189,9 @@ export class PowerPointAdapter implements HostAdapter {
       }
     });
     const edges = routes.length;
-    return { message: `${result.nodes.length} figurer og ${edges} forbindelser er placeret på den valgte slide${has("1.8") ? " som én gruppe" : ""} – klik på dem for at redigere.` };
+    return {
+      message: `${result.nodes.length} figurer og ${edges} forbindelser er placeret på den valgte slide${has("1.8") ? " som én gruppe" : ""} – klik på dem for at redigere.`,
+    };
   }
 
   /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billedfyldt rektangel på den valgte slide. */

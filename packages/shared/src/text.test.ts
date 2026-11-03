@@ -24,7 +24,10 @@ describe("stripEmphasis", () => {
 
 describe("TSV", () => {
   it("parser og tilpasser", () => {
-    expect(fitGrid(parseTsv("a\tb\nc\n"), 2, 2)).toEqual([["a", "b"], ["c", ""]]);
+    expect(fitGrid(parseTsv("a\tb\nc\n"), 2, 2)).toEqual([
+      ["a", "b"],
+      ["c", ""],
+    ]);
   });
 });
 

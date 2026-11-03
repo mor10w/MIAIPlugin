@@ -1,5 +1,16 @@
 import { appendAudit, auditFile } from "./audit.js";
-import { effectiveSearch, errorEvent, executeTask, isUrlAllowed, type AuditEntry, type Policy, type SearchConfig, type ParsedTaskRequest, type TaskDefinition, type TaskEvent } from "@miai/shared";
+import {
+  effectiveSearch,
+  errorEvent,
+  executeTask,
+  isUrlAllowed,
+  type AuditEntry,
+  type Policy,
+  type SearchConfig,
+  type ParsedTaskRequest,
+  type TaskDefinition,
+  type TaskEvent,
+} from "@miai/shared";
 import { searchWeb } from "./search.js";
 import type { ConfigStore } from "./config.js";
 
@@ -17,14 +28,20 @@ function baseEntry(task: TaskDefinition, epHost: string): Pick<AuditEntry, "ts" 
 }
 
 /** Værktøjskald fra modellen (ADR-0010). Kun web_search leveres – ukendte navne afvises. */
-function makeToolExecutor(signal: AbortSignal, search: SearchConfig, policy: Policy, onSearch: (ok: boolean, durationMs: number, host: string) => Promise<void>) {
+function makeToolExecutor(
+  signal: AbortSignal,
+  search: SearchConfig,
+  policy: Policy,
+  onSearch: (ok: boolean, durationMs: number, host: string) => Promise<void>,
+) {
   return {
     specs: [
       {
         type: "function" as const,
         function: {
           name: "web_search",
-          description: "Search the web for current information, news, prices, versions or facts you are not sure about. Returns a few results with title, URL and snippet.",
+          description:
+            "Search the web for current information, news, prices, versions or facts you are not sure about. Returns a few results with title, URL and snippet.",
           parameters: {
             type: "object",
             properties: { query: { type: "string", description: "The search query, in the user's language or English" } },
@@ -63,9 +80,24 @@ export async function runTask({ task, req, store, emit, signal }: RunOptions): P
   try {
     // Søgninger er udgående kald til en ekstern tjeneste og logges derfor også (kun host og tid).
     const onSearch = async (ok: boolean, durationMs: number, searchHost: string) => {
-      if (settings.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "search", task: task.id, host: searchHost, status: ok ? "ok" : "error", durationMs });
+      if (settings.auditLog)
+        await appendAudit(auditFile(store.dir), {
+          ts: new Date().toISOString(),
+          kind: "search",
+          task: task.id,
+          host: searchHost,
+          status: ok ? "ok" : "error",
+          durationMs,
+        });
     };
-    const summary = await executeTask(task, req, { settings, endpoint: ep, policy: store.getPolicy(), emit, signal, tools: makeToolExecutor(signal, effectiveSearch(settings, store.getPolicy()), store.getPolicy(), onSearch) });
+    const summary = await executeTask(task, req, {
+      settings,
+      endpoint: ep,
+      policy: store.getPolicy(),
+      emit,
+      signal,
+      tools: makeToolExecutor(signal, effectiveSearch(settings, store.getPolicy()), store.getPolicy(), onSearch),
+    });
     if (settings.auditLog) {
       await appendAudit(auditFile(store.dir), {
         ...baseEntry(task, host),

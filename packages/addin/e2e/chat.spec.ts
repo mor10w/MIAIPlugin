@@ -4,7 +4,8 @@ import { chunks, expect, test } from "./fixtures/test";
 
 test("Mermaid i svaret vises som figur, teksten bevares, og kan indsættes som billede", async ({ open }) => {
   const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
-  const answer = "Her er processen:\n\n```mermaid\nflowchart LR\n  A[Indsamling af data] --> B[Analyse]\n  B --> C[Rapport til ledelsen]\n```\n\nSig til, hvis den skal justeres.";
+  const answer =
+    "Her er processen:\n\n```mermaid\nflowchart LR\n  A[Indsamling af data] --> B[Analyse]\n  B --> C[Rapport til ledelsen]\n```\n\nSig til, hvis den skal justeres.";
   tp.model.reply = () => ({ stream: chunks(answer) });
 
   await tp.tab("Chat");

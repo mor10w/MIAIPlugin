@@ -29,8 +29,9 @@ const da = {
   err_noModel: "Der er ingen model indlæst i inference-værktøjet.",
   err_policy: "Endpointen er ikke tilladt af politikken.",
   err_context: "Teksten er for lang til modellen.",
-  warnInputTruncated: "Modellen fik ikke hele teksten med – den er større end modellens kontekst. Resultatet bygger kun på en del. Markér mindre tekst, eller øg kontekstlængden i dit værktøj (Ollama: OLLAMA_CONTEXT_LENGTH) og angiv den under Indstillinger.",
-  warnOutputTruncated: "Svaret blev afkortet, fordi det ramte grænsen for svarlængde. Øg \"Maks. tokens i svar\" under Indstillinger.",
+  warnInputTruncated:
+    "Modellen fik ikke hele teksten med – den er større end modellens kontekst. Resultatet bygger kun på en del. Markér mindre tekst, eller øg kontekstlængden i dit værktøj (Ollama: OLLAMA_CONTEXT_LENGTH) og angiv den under Indstillinger.",
+  warnOutputTruncated: 'Svaret blev afkortet, fordi det ramte grænsen for svarlængde. Øg "Maks. tokens i svar" under Indstillinger.',
   docTruncated: "Kun de første {sent} af {total} tegn blev sendt til modellen.",
   chunkProgress: "Læser lang tekst: del {done} af {total}…",
   contextTokens: "Kontekstlængde (tokens, valgfri)",
@@ -56,7 +57,8 @@ const da = {
   noConnectionBanner: "Ingen forbindelse til en model endnu.",
   getStarted: "Kom i gang",
   tokenTitle: "MIAI skal geninstalleres i Office",
-  tokenHelp: "Forbindelsen til MIAI Bridge mangler adgangsnøglen, typisk efter en opdatering. Vælg \"Installer i Office\" i MIAI-menuen (eller sideload dit manifest igen), og genstart Word, Excel og PowerPoint.",
+  tokenHelp:
+    'Forbindelsen til MIAI Bridge mangler adgangsnøglen, typisk efter en opdatering. Vælg "Installer i Office" i MIAI-menuen (eller sideload dit manifest igen), og genstart Word, Excel og PowerPoint.',
   stoppedRepetition: "Svaret blev afbrudt, fordi modellen begyndte at gentage sig selv. Prøv igen, eller vælg en anden model.",
   copy: "Kopiér",
   copied: "Kopieret",
@@ -82,7 +84,8 @@ const da = {
   structuredOutput: "Struktureret output",
   stripThinking: "Skjul <think>-tankegang",
   presencePenalty: "Modvirk gentagelser (presence_penalty)",
-  presencePenaltyHint: "Hjælper modeller, der går i sløjfe (Qwen anbefaler 1,0–1,5). Bruges kun til fritekst – ikke til JSON, formler eller Excel-celler. For høj værdi kan give sprogblanding.",
+  presencePenaltyHint:
+    "Hjælper modeller, der går i sløjfe (Qwen anbefaler 1,0–1,5). Bruges kun til fritekst – ikke til JSON, formler eller Excel-celler. For høj værdi kan give sprogblanding.",
   penaltyOff: "Fra (serverens standard)",
   penaltyLight: "Let (0,5)",
   penaltyMedium: "Middel (1,0)",
@@ -94,7 +97,8 @@ const da = {
   defaultModel: "Standardmodel",
   firstAvailable: "(første tilgængelige)",
   taskModels: "Model pr. opgave",
-  taskModelsHint: "Vælg fx en lille, hurtig model til grammatik og oversættelse og en større til formler, diagrammer og dataanalyse. Opgaver uden valg bruger standardmodellen.",
+  taskModelsHint:
+    "Vælg fx en lille, hurtig model til grammatik og oversættelse og en større til formler, diagrammer og dataanalyse. Opgaver uden valg bruger standardmodellen.",
   useDefaultModel: "(standardmodel)",
   taskModelMissing: "Modellen findes ikke på den aktive endpoint – opgaven vil fejle, indtil du vælger en anden.",
   taskModelsNoModels: "Ingen modeller fundet. Test forbindelsen først.",
@@ -103,7 +107,8 @@ const da = {
   uiLanguage: "Sprog",
   auditLog: "Audit-log (metadata, ikke indhold)",
   webSearch: "Web-søgning",
-  webSearchHint: "Modellen kan søge online efter aktuelle oplysninger. Søgeordene dannes ud fra dit dokument og sendes til DuckDuckGo – slå kun til, hvis det er i orden.",
+  webSearchHint:
+    "Modellen kan søge online efter aktuelle oplysninger. Søgeordene dannes ud fra dit dokument og sendes til DuckDuckGo – slå kun til, hvis det er i orden.",
   webSearchForbidden: "Web-søgning er slået fra af din organisations politik.",
   searchProvider: "Søgetjeneste",
   searchLocked: "Fastsat af din organisation.",
@@ -160,7 +165,8 @@ const da = {
   paramAdd: "Tilføj parameter",
   systemPrompt: "Systemprompt (valgfri)",
   userTemplate: "Brugerskabelon",
-  templateHint: "{{selection}}, {{prompt}}, {{language}}, {{address}}, {{table}} og opgavens parametre kan bruges som placeholderer. Ukendte efterlates ubehandlede. {{selection}} pakkes i <document>-tags, så modellen behandler markeringen som data.",
+  templateHint:
+    "{{selection}}, {{prompt}}, {{language}}, {{address}}, {{table}} og opgavens parametre kan bruges som placeholderer. Ukendte efterlates ubehandlede. {{selection}} pakkes i <document>-tags, så modellen behandler markeringen som data.",
   // Audit-log og brugeropgaver-mappe
   customTasksDir: "Mappe med brugeropgaver",
   customTasksDirHint: "Kun bridge. Tom = <konfig>/tasks (fx ~/.config/miai/tasks). Kopier mappen for at dele opgaver med andre.",
@@ -206,8 +212,9 @@ const en: Dict = {
   err_noModel: "No model is loaded in the inference tool.",
   err_policy: "The endpoint is not allowed by the policy.",
   err_context: "The text is too long for the model.",
-  warnInputTruncated: "The model did not receive the whole text – it is larger than the model's context. The result is based on part of it only. Select less text, or increase the context length in your tool (Ollama: OLLAMA_CONTEXT_LENGTH) and set it under Settings.",
-  warnOutputTruncated: "The answer was cut off because it hit the reply length limit. Increase \"Max tokens in reply\" under Settings.",
+  warnInputTruncated:
+    "The model did not receive the whole text – it is larger than the model's context. The result is based on part of it only. Select less text, or increase the context length in your tool (Ollama: OLLAMA_CONTEXT_LENGTH) and set it under Settings.",
+  warnOutputTruncated: 'The answer was cut off because it hit the reply length limit. Increase "Max tokens in reply" under Settings.',
   docTruncated: "Only the first {sent} of {total} characters were sent to the model.",
   chunkProgress: "Reading long text: part {done} of {total}…",
   contextTokens: "Context length (tokens, optional)",
@@ -233,7 +240,8 @@ const en: Dict = {
   noConnectionBanner: "No connection to a model yet.",
   getStarted: "Get started",
   tokenTitle: "MIAI needs to be reinstalled in Office",
-  tokenHelp: "The connection to MIAI Bridge lacks its access key, typically after an update. Choose \"Install in Office\" in the MIAI menu (or sideload your manifest again) and restart Word, Excel and PowerPoint.",
+  tokenHelp:
+    'The connection to MIAI Bridge lacks its access key, typically after an update. Choose "Install in Office" in the MIAI menu (or sideload your manifest again) and restart Word, Excel and PowerPoint.',
   stoppedRepetition: "The reply was stopped because the model started repeating itself. Try again or pick another model.",
   copy: "Copy",
   copied: "Copied",
@@ -259,7 +267,8 @@ const en: Dict = {
   structuredOutput: "Structured output",
   stripThinking: "Hide <think> reasoning",
   presencePenalty: "Reduce repetition (presence_penalty)",
-  presencePenaltyHint: "Helps models that get stuck in loops (Qwen recommends 1.0–1.5). Only used for free text – not for JSON, formulas or Excel cells. Too high a value can cause language mixing.",
+  presencePenaltyHint:
+    "Helps models that get stuck in loops (Qwen recommends 1.0–1.5). Only used for free text – not for JSON, formulas or Excel cells. Too high a value can cause language mixing.",
   penaltyOff: "Off (server default)",
   penaltyLight: "Light (0.5)",
   penaltyMedium: "Medium (1.0)",
@@ -271,7 +280,8 @@ const en: Dict = {
   defaultModel: "Default model",
   firstAvailable: "(first available)",
   taskModels: "Model per task",
-  taskModelsHint: "E.g. pick a small, fast model for grammar and translation and a larger one for formulas, diagrams and data analysis. Tasks without a choice use the default model.",
+  taskModelsHint:
+    "E.g. pick a small, fast model for grammar and translation and a larger one for formulas, diagrams and data analysis. Tasks without a choice use the default model.",
   useDefaultModel: "(default model)",
   taskModelMissing: "This model is not available on the active endpoint – the task will fail until you pick another.",
   taskModelsNoModels: "No models found. Test the connection first.",
@@ -280,7 +290,8 @@ const en: Dict = {
   uiLanguage: "Language",
   auditLog: "Audit log (metadata, not content)",
   webSearch: "Web search",
-  webSearchHint: "The model can search the web for current information. Search terms are derived from your document and sent to DuckDuckGo – only enable this if that is acceptable.",
+  webSearchHint:
+    "The model can search the web for current information. Search terms are derived from your document and sent to DuckDuckGo – only enable this if that is acceptable.",
   webSearchForbidden: "Web search is disabled by your organisation's policy.",
   searchProvider: "Search service",
   searchLocked: "Set by your organisation.",
@@ -337,7 +348,8 @@ const en: Dict = {
   paramAdd: "Add parameter",
   systemPrompt: "System prompt (optional)",
   userTemplate: "User template",
-  templateHint: "{{selection}}, {{prompt}}, {{language}}, {{address}} and {{table}} plus the task's parameters can be used as placeholders. Unknown ones are left as-is. {{selection}} is wrapped in <document> tags so the model treats the selection as data.",
+  templateHint:
+    "{{selection}}, {{prompt}}, {{language}}, {{address}} and {{table}} plus the task's parameters can be used as placeholders. Unknown ones are left as-is. {{selection}} is wrapped in <document> tags so the model treats the selection as data.",
   // Audit log and custom tasks folder
   customTasksDir: "Custom tasks folder",
   customTasksDirHint: "Bridge only. Empty = <config>/tasks (e.g. ~/.config/miai/tasks). Copy the folder to share tasks with others.",

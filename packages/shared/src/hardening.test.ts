@@ -38,11 +38,14 @@ beforeAll(async () => {
       res.writeHead(200, { "content-type": "text/event-stream" });
       if (r.toolCall) {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: r.text ?? "" } }] })}\n\n`);
-        res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "web_search", arguments: '{"query":"x"}' } }] }, finish_reason: "tool_calls" }] })}\n\n`);
+        res.write(
+          `data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: "c1", function: { name: "web_search", arguments: '{"query":"x"}' } }] }, finish_reason: "tool_calls" }] })}\n\n`,
+        );
       } else {
         res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: r.text ?? "ok" }, finish_reason: r.finishReason ?? null }] })}\n\n`);
       }
-      if (r.promptTokens !== undefined && body.stream_options) res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 5 } })}\n\n`);
+      if (r.promptTokens !== undefined && body.stream_options)
+        res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: r.promptTokens, completion_tokens: 5 } })}\n\n`);
       res.end("data: [DONE]\n\n");
     });
   });
@@ -61,11 +64,19 @@ beforeEach(() => {
 async function run(id: string, body: object, ep: object = {}, extra: object = {}) {
   const s = Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x", ...extra });
   const events: TaskEvent[] = [];
-  await executeTask(getTask(id)!, TaskRequest.parse(body), { settings: s, endpoint: s.endpoints[0], policy: Policy.parse({}), emit: (e) => events.push(e), signal: new AbortController().signal, ...(extra as object) });
+  await executeTask(getTask(id)!, TaskRequest.parse(body), {
+    settings: s,
+    endpoint: s.endpoints[0],
+    policy: Policy.parse({}),
+    emit: (e) => events.push(e),
+    signal: new AbortController().signal,
+    ...(extra as object),
+  });
   return events;
 }
 const done = (ev: TaskEvent[]) => ev.find((e) => e.type === "done") as Extract<TaskEvent, { type: "done" }>;
-const longText = (paragraphs: number) => Array.from({ length: paragraphs }, (_, i) => `Afsnit ${i + 1}. ${"Indhold om projektets økonomi og tidsplan. ".repeat(20)}`).join("\n\n");
+const longText = (paragraphs: number) =>
+  Array.from({ length: paragraphs }, (_, i) => `Afsnit ${i + 1}. ${"Indhold om projektets økonomi og tidsplan. ".repeat(20)}`).join("\n\n");
 
 describe("kontekst-hjælpere", () => {
   it("deler ved afsnit og overholder maks. størrelse", () => {
@@ -147,7 +158,12 @@ describe("map-reduce for lange tekster", () => {
     expect(final).not.toContain("Afsnit 1."); // den samlede kørsel ser kun del-resuméerne
     const steps = ev.filter((e) => e.type === "progress" && e.step).map((e) => (e as { step: { done: number } }).step.done);
     expect(steps).toEqual([...Array(n + 1).keys()]);
-    expect(ev.filter((e) => e.type === "delta").map((e) => (e as { text: string }).text).join("")).toBe("Samlet resumé.");
+    expect(
+      ev
+        .filter((e) => e.type === "delta")
+        .map((e) => (e as { text: string }).text)
+        .join(""),
+    ).toBe("Samlet resumé.");
   });
 
   it("korte tekster sendes som før i én kørsel", async () => {
@@ -175,6 +191,11 @@ describe("værktøjsrunder og fejl", () => {
   });
 
   it("fejl-events har kode og HTTP-status", () => {
-    expect(errorEvent(new UpstreamError("Mock svarede 401: nope", "UPSTREAM_HTTP", 401))).toEqual({ type: "error", message: "Mock svarede 401: nope", code: "UPSTREAM_HTTP", status: 401 });
+    expect(errorEvent(new UpstreamError("Mock svarede 401: nope", "UPSTREAM_HTTP", 401))).toEqual({
+      type: "error",
+      message: "Mock svarede 401: nope",
+      code: "UPSTREAM_HTTP",
+      status: 401,
+    });
   });
 });

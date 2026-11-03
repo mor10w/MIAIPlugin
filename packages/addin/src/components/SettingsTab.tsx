@@ -18,7 +18,16 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { KNOWN_TOOLS, type AuditEntry, type Endpoint, type KnownTool, type Policy, type ProbeResult, type Settings, type StructuredOutputMode } from "@miai/shared";
+import {
+  KNOWN_TOOLS,
+  type AuditEntry,
+  type Endpoint,
+  type KnownTool,
+  type Policy,
+  type ProbeResult,
+  type Settings,
+  type StructuredOutputMode,
+} from "@miai/shared";
 import { useBackend } from "../backend";
 import { useI18n } from "../i18n";
 import { SetupGuide } from "./SetupGuide";
@@ -41,7 +50,12 @@ const useStyles = makeStyles({
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
   logCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   logWrap: { overflowX: "auto", maxHeight: "320px", overflowY: "auto" },
-  logTable: { borderCollapse: "collapse", fontSize: tokens.fontSizeBase200, width: "100%", "& td, & th": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap", textAlign: "left" } },
+  logTable: {
+    borderCollapse: "collapse",
+    fontSize: tokens.fontSizeBase200,
+    width: "100%",
+    "& td, & th": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap", textAlign: "left" },
+  },
 });
 
 function uniqueId(base: string, taken: string[]): string {
@@ -100,7 +114,14 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     );
   }, [api]);
 
-  if (!settings || !policy) return msg ? <MessageBar intent="error"><MessageBarBody>{msg.text}</MessageBarBody></MessageBar> : <Spinner />;
+  if (!settings || !policy)
+    return msg ? (
+      <MessageBar intent="error">
+        <MessageBarBody>{msg.text}</MessageBarBody>
+      </MessageBar>
+    ) : (
+      <Spinner />
+    );
 
   /** Viser også en værdi, der er sat manuelt i config.json og ikke er en af forudindstillingerne. */
   const penaltyLabel = (v: number | undefined) => {
@@ -108,12 +129,25 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     return preset ? t(preset.label) : String(v);
   };
   const locked = policy.locked || policySource === "machine";
-  const setEp = (id: string, patch: Partial<Endpoint>) => setSettings({ ...settings, endpoints: settings.endpoints.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+  const setEp = (id: string, patch: Partial<Endpoint>) =>
+    setSettings({ ...settings, endpoints: settings.endpoints.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
 
   const addEndpoint = () => {
     const p = PRESETS.find((x) => x.id === preset)!;
-    const id = uniqueId(p.id, settings.endpoints.map((e) => e.id));
-    const ep: Endpoint = { id, name: p.name, baseUrl: p.baseUrl, apiKey: "", structuredOutput: p.structuredOutput, stripThinking: true, extraBody: {}, timeoutMs: 120_000 };
+    const id = uniqueId(
+      p.id,
+      settings.endpoints.map((e) => e.id),
+    );
+    const ep: Endpoint = {
+      id,
+      name: p.name,
+      baseUrl: p.baseUrl,
+      apiKey: "",
+      structuredOutput: p.structuredOutput,
+      stripThinking: true,
+      extraBody: {},
+      timeoutMs: 120_000,
+    };
     setSettings({ ...settings, endpoints: [...settings.endpoints, ep] });
   };
 
@@ -121,7 +155,15 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
   const save = async (force = false, next: Settings = settings) => {
     setMsg(undefined);
     setUnverified(null);
-    const nextPolicy = locked ? undefined : { ...policy, allowedHosts: hostsText.split(/\s+/).map((h) => h.trim()).filter(Boolean) };
+    const nextPolicy = locked
+      ? undefined
+      : {
+          ...policy,
+          allowedHosts: hostsText
+            .split(/\s+/)
+            .map((h) => h.trim())
+            .filter(Boolean),
+        };
     if (!force) {
       const active = next.endpoints.find((e) => e.id === next.activeEndpoint);
       const probe = active ? await api.probe(active).catch((e): ProbeResult => ({ ok: false, reason: "absent", message: (e as Error).message })) : null;
@@ -145,7 +187,19 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
   /** Fra guiden: brug et fundet værktøj – eksisterende endpoint med samme adresse genbruges. */
   const useTool = async (tool: KnownTool, found: string[]) => {
     const existing = settings.endpoints.find((e) => e.baseUrl.replace(/\/+$/, "") === tool.baseUrl);
-    const ep: Endpoint = existing ?? { id: uniqueId(tool.id, settings.endpoints.map((e) => e.id)), name: tool.name, baseUrl: tool.baseUrl, apiKey: "", structuredOutput: tool.structuredOutput, stripThinking: true, extraBody: {}, timeoutMs: 120_000 };
+    const ep: Endpoint = existing ?? {
+      id: uniqueId(
+        tool.id,
+        settings.endpoints.map((e) => e.id),
+      ),
+      name: tool.name,
+      baseUrl: tool.baseUrl,
+      apiKey: "",
+      structuredOutput: tool.structuredOutput,
+      stripThinking: true,
+      extraBody: {},
+      timeoutMs: 120_000,
+    };
     const next: Settings = { ...settings, endpoints: existing ? settings.endpoints : [...settings.endpoints, ep], activeEndpoint: ep.id, defaultModel: "" };
     setSettings(next);
     setModels(found);
@@ -189,7 +243,11 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       {settings.endpoints.map((ep) => (
         <Card key={ep.id} className={s.card}>
           <div className={s.row}>
-            <Radio label={t("active")} checked={settings.activeEndpoint === ep.id} onChange={() => setSettings({ ...settings, activeEndpoint: ep.id, defaultModel: "" })} />
+            <Radio
+              label={t("active")}
+              checked={settings.activeEndpoint === ep.id}
+              onChange={() => setSettings({ ...settings, activeEndpoint: ep.id, defaultModel: "" })}
+            />
             {settings.endpoints.length > 1 && (
               <Button
                 size="small"
@@ -213,7 +271,11 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
             <Input type="password" value={ep.apiKey} onChange={(_, d) => setEp(ep.id, { apiKey: d.value })} />
           </Field>
           <Field label={t("structuredOutput")}>
-            <Dropdown value={ep.structuredOutput} selectedOptions={[ep.structuredOutput]} onOptionSelect={(_, d) => setEp(ep.id, { structuredOutput: d.optionValue as StructuredOutputMode })}>
+            <Dropdown
+              value={ep.structuredOutput}
+              selectedOptions={[ep.structuredOutput]}
+              onOptionSelect={(_, d) => setEp(ep.id, { structuredOutput: d.optionValue as StructuredOutputMode })}
+            >
               <Option value="json_schema">json_schema</Option>
               <Option value="json_object">json_object</Option>
               <Option value="none">none</Option>
@@ -280,14 +342,31 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       <TaskModels value={settings.taskModels} models={models} onChange={(taskModels) => setSettings({ ...settings, taskModels })} />
       <div className={s.row}>
         <Field label={t("temperature")}>
-          <Input type="number" min={0} max={2} step={0.1} value={String(settings.temperature)} onChange={(_, d) => setSettings({ ...settings, temperature: Number(d.value) })} />
+          <Input
+            type="number"
+            min={0}
+            max={2}
+            step={0.1}
+            value={String(settings.temperature)}
+            onChange={(_, d) => setSettings({ ...settings, temperature: Number(d.value) })}
+          />
         </Field>
         <Field label={t("maxTokens")}>
-          <Input type="number" min={16} step={256} value={String(settings.maxTokens)} onChange={(_, d) => setSettings({ ...settings, maxTokens: Number(d.value) })} />
+          <Input
+            type="number"
+            min={16}
+            step={256}
+            value={String(settings.maxTokens)}
+            onChange={(_, d) => setSettings({ ...settings, maxTokens: Number(d.value) })}
+          />
         </Field>
       </div>
       <Field label={t("uiLanguage")}>
-        <Dropdown value={settings.uiLanguage === "da" ? "Dansk" : "English"} selectedOptions={[settings.uiLanguage]} onOptionSelect={(_, d) => setSettings({ ...settings, uiLanguage: d.optionValue as "da" | "en" })}>
+        <Dropdown
+          value={settings.uiLanguage === "da" ? "Dansk" : "English"}
+          selectedOptions={[settings.uiLanguage]}
+          onOptionSelect={(_, d) => setSettings({ ...settings, uiLanguage: d.optionValue as "da" | "en" })}
+        >
           <Option value="da">Dansk</Option>
           <Option value="en">English</Option>
         </Dropdown>
@@ -342,7 +421,12 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
       {api.mode === "bridge" && (
         <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>
-          <Switch label={t("webSearch")} disabled={!policy.webSearch} checked={settings.webSearch && policy.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
+          <Switch
+            label={t("webSearch")}
+            disabled={!policy.webSearch}
+            checked={settings.webSearch && policy.webSearch}
+            onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })}
+          />
         </Field>
       )}
       {/* Søgetjeneste (#12): DuckDuckGo eller selvhostet SearXNG; kan låses af organisationens politik. */}
@@ -384,7 +468,8 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       {unverified && !unverified.ok && (
         <MessageBar intent="warning">
           <MessageBarBody>
-            {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")} <Caption1>{unverified.message}</Caption1>
+            {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")}{" "}
+            <Caption1>{unverified.message}</Caption1>
           </MessageBarBody>
           <MessageBarActions>
             <Button size="small" onClick={() => void save(true)}>

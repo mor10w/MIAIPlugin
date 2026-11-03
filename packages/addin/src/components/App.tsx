@@ -1,5 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Caption1, FluentProvider, MessageBar, MessageBarActions, MessageBarBody, MessageBarTitle, Tab, TabList, Text, Tooltip, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
+import {
+  Badge,
+  Button,
+  Caption1,
+  FluentProvider,
+  MessageBar,
+  MessageBarActions,
+  MessageBarBody,
+  MessageBarTitle,
+  Tab,
+  TabList,
+  Text,
+  Tooltip,
+  makeStyles,
+  tokens,
+  webDarkTheme,
+  webLightTheme,
+} from "@fluentui/react-components";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
@@ -50,13 +67,20 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   );
 
   useEffect(() => {
-    api.settings().then((v) => setLang(v.settings.uiLanguage), () => {});
+    api.settings().then(
+      (v) => setLang(v.settings.uiLanguage),
+      () => {},
+    );
     void check();
     const id = setInterval(() => void check(), 15_000);
     return () => clearInterval(id);
   }, [api, check]);
 
-  const badge = { ok: { color: "success", text: t("connected") }, warn: { color: "warning", text: t("notConnected") }, down: { color: "danger", text: t("bridgeDown") } }[status.kind] as {
+  const badge = {
+    ok: { color: "success", text: t("connected") },
+    warn: { color: "warning", text: t("notConnected") },
+    down: { color: "danger", text: t("bridgeDown") },
+  }[status.kind] as {
     color: "success" | "warning" | "danger";
     text: string;
   };
@@ -66,47 +90,47 @@ export function App({ adapter }: { adapter: HostAdapter }) {
       {/* Bemærk: FluentProvider kopierer sin className til portaler (tooltips m.m.), så layout skal ligge på en indre div. */}
       <FluentProvider theme={isDarkOffice() ? webDarkTheme : webLightTheme} style={{ height: "100%" }}>
         <div className={s.shell}>
-        <div className={s.header}>
-          <Text weight="semibold">
-            MIAI <Caption1>· {api.mode === "bridge" ? "bridge" : t("modeDirect")}</Caption1>
-          </Text>
-          <Tooltip content={status.detail ?? badge.text} relationship="description">
-            <Badge appearance="tint" color={badge.color}>
-              {badge.text}
-            </Badge>
-          </Tooltip>
-        </div>
-        <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as typeof tab)} size="small">
-          <Tab value="actions">{t("tabActions")}</Tab>
-          <Tab value="tasks">{t("tabTasks")}</Tab>
-          <Tab value="chat">{t("tabChat")}</Tab>
-          <Tab value="settings">{t("tabSettings")}</Tab>
-        </TabList>
-        <div className={s.body}>
-          {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
-          {status.token && (
-            <MessageBar intent="error" className={s.banner}>
-              <MessageBarBody>
-                <MessageBarTitle>{t("tokenTitle")}</MessageBarTitle>
-                {t("tokenHelp")}
-              </MessageBarBody>
-            </MessageBar>
-          )}
-          {checked && status.kind !== "ok" && !status.token && tab !== "settings" && (
-            <MessageBar intent="warning" className={s.banner}>
-              <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
-              <MessageBarActions>
-                <Button size="small" appearance="primary" onClick={() => setTab("settings")}>
-                  {t("getStarted")}
-                </Button>
-              </MessageBarActions>
-            </MessageBar>
-          )}
-          {tab === "actions" && <ActionsTab adapter={adapter} />}
-          {tab === "tasks" && <TasksTab />}
-          {tab === "chat" && <ChatTab adapter={adapter} />}
-          {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
-        </div>
+          <div className={s.header}>
+            <Text weight="semibold">
+              MIAI <Caption1>· {api.mode === "bridge" ? "bridge" : t("modeDirect")}</Caption1>
+            </Text>
+            <Tooltip content={status.detail ?? badge.text} relationship="description">
+              <Badge appearance="tint" color={badge.color}>
+                {badge.text}
+              </Badge>
+            </Tooltip>
+          </div>
+          <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as typeof tab)} size="small">
+            <Tab value="actions">{t("tabActions")}</Tab>
+            <Tab value="tasks">{t("tabTasks")}</Tab>
+            <Tab value="chat">{t("tabChat")}</Tab>
+            <Tab value="settings">{t("tabSettings")}</Tab>
+          </TabList>
+          <div className={s.body}>
+            {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
+            {status.token && (
+              <MessageBar intent="error" className={s.banner}>
+                <MessageBarBody>
+                  <MessageBarTitle>{t("tokenTitle")}</MessageBarTitle>
+                  {t("tokenHelp")}
+                </MessageBarBody>
+              </MessageBar>
+            )}
+            {checked && status.kind !== "ok" && !status.token && tab !== "settings" && (
+              <MessageBar intent="warning" className={s.banner}>
+                <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
+                <MessageBarActions>
+                  <Button size="small" appearance="primary" onClick={() => setTab("settings")}>
+                    {t("getStarted")}
+                  </Button>
+                </MessageBarActions>
+              </MessageBar>
+            )}
+            {tab === "actions" && <ActionsTab adapter={adapter} />}
+            {tab === "tasks" && <TasksTab />}
+            {tab === "chat" && <ChatTab adapter={adapter} />}
+            {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
+          </div>
         </div>
       </FluentProvider>
     </I18n.Provider>

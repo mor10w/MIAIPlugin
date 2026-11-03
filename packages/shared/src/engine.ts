@@ -1,7 +1,17 @@
 import { z } from "zod";
 import { isDegenerating } from "./degenerate.js";
 import { extractJson } from "./json.js";
-import { listModelEntries, listModels, streamChat, UpstreamError, type ModelEntry, type ApiMessage, type ClientOptions, type ToolCall, type ToolSpec } from "./openai.js";
+import {
+  listModelEntries,
+  listModels,
+  streamChat,
+  UpstreamError,
+  type ModelEntry,
+  type ApiMessage,
+  type ClientOptions,
+  type ToolCall,
+  type ToolSpec,
+} from "./openai.js";
 import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
@@ -25,7 +35,8 @@ const SEARCH_AWARENESS =
 /** Map-trinnet ved opdeling af lange tekster (#3). */
 const MAP_INSTRUCTION =
   "This is one part of a longer document. Summarize this part concisely: keep key facts, numbers, names, decisions and conclusions. Do not add an introduction. Answer in the same language as the text.";
-const REDUCE_NOTE = "The document was too long to read at once. The material below consists of summaries of its consecutive parts, in order. Treat it as the whole document.";
+const REDUCE_NOTE =
+  "The document was too long to read at once. The material below consists of summaries of its consecutive parts, in order. Treat it as the whole document.";
 
 /** Sidste runde (maks. antal søgninger nået): modellen skal svare med det, den har fundet. */
 const FINAL_ANSWER_NUDGE = "You have used all your searches. Stop searching now and give the final answer to the user based on what you found.";
@@ -148,7 +159,12 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     };
   };
 
-  const run = async (msgs: ApiMessage[], responseFormat: Record<string, unknown> | undefined, onText: (t: string) => void, useTools = true): Promise<{ text: string; toolCalls?: ToolCall[] }> => {
+  const run = async (
+    msgs: ApiMessage[],
+    responseFormat: Record<string, unknown> | undefined,
+    onText: (t: string) => void,
+    useTools = true,
+  ): Promise<{ text: string; toolCalls?: ToolCall[] }> => {
     const filter = ep.stripThinking ? new ThinkFilter() : undefined;
     let full = "";
     let begun = false;
@@ -177,7 +193,11 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     let finishReason: string | null | undefined;
     // Værktøjskald bygges op over stream-chunks (arguments ankommer som fragmenter).
     const tcParts = new Map<number, { id: string; name: string; args: string }>();
-    for await (const chunk of streamChat(ep, { model, messages: msgs, temperature, maxTokens, presencePenalty, responseFormat, signal, tools: useTools ? tools?.specs : undefined }, client)) {
+    for await (const chunk of streamChat(
+      ep,
+      { model, messages: msgs, temperature, maxTokens, presencePenalty, responseFormat, signal, tools: useTools ? tools?.specs : undefined },
+      client,
+    )) {
       if (chunk.text) push(chunk.text);
       addUsage(chunk.usage);
       if (chunk.usage) reqUsage = chunk.usage;
@@ -288,7 +308,8 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
       output = (await run(retry, responseFormat, progress, false)).text;
       parsed = tryParse(schema, output);
     }
-    if (!parsed.ok) throw new UpstreamError(`Modellen returnerede ikke et gyldigt struktureret svar (${parsed.error}). Prøv en større model.`, "UPSTREAM_PROTOCOL");
+    if (!parsed.ok)
+      throw new UpstreamError(`Modellen returnerede ikke et gyldigt struktureret svar (${parsed.error}). Prøv en større model.`, "UPSTREAM_PROTOCOL");
     emit({ type: "result", data: parsed.data });
   }
 

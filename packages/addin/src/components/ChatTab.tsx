@@ -13,7 +13,14 @@ import { Markdown } from "./Markdown";
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS },
   log: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
-  user: { alignSelf: "flex-end", background: tokens.colorBrandBackground2, padding: tokens.spacingHorizontalS, borderRadius: tokens.borderRadiusMedium, maxWidth: "90%", whiteSpace: "pre-wrap" },
+  user: {
+    alignSelf: "flex-end",
+    background: tokens.colorBrandBackground2,
+    padding: tokens.spacingHorizontalS,
+    borderRadius: tokens.borderRadiusMedium,
+    maxWidth: "90%",
+    whiteSpace: "pre-wrap",
+  },
   bot: { background: tokens.colorNeutralBackground2, padding: tokens.spacingHorizontalS, borderRadius: tokens.borderRadiusMedium },
   searching: { fontSize: tokens.fontSizeBase200, color: tokens.colorBrandForeground1, marginBottom: tokens.spacingVerticalXS },
   input: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
@@ -44,7 +51,9 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
     setDraft("");
     const history = messages;
     setMessages([...history, { role: "user", content: prompt }]);
-    const ctx = useContext ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current) : { host: adapter.host, text: "", isWholeDocument: false };
+    const ctx = useContext
+      ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
+      : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
     setLastCtx(useContext ? ctx : null);
     const final = await start("chat", { context: ctx, params: { prompt }, history: history.slice(-20) });
@@ -67,11 +76,15 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
           ) : (
             <div key={i} className={s.bot}>
               <Markdown text={m.content} />
-              {i === lastAssistant && state.status !== "running" && <ApplyBar
+              {i === lastAssistant && state.status !== "running" && (
+                <ApplyBar
                   modes={modesFor(m.content)}
-                  apply={(mode) => (mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current))}
+                  apply={(mode) =>
+                    mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current)
+                  }
                   copyText={m.content}
-                />}
+                />
+              )}
             </div>
           ),
         )}
@@ -110,8 +123,19 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
       <div className={s.footer}>
         <Checkbox label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(!!d.checked)} />
         <div className={s.footerRight}>
-          {lastCtx?.address && useContext ? <Caption1>{t("contextSent")} {lastCtx.address}</Caption1> : null}
-          <Button size="small" appearance="subtle" onClick={() => { setMessages([]); setLastCtx(null); }}>
+          {lastCtx?.address && useContext ? (
+            <Caption1>
+              {t("contextSent")} {lastCtx.address}
+            </Caption1>
+          ) : null}
+          <Button
+            size="small"
+            appearance="subtle"
+            onClick={() => {
+              setMessages([]);
+              setLastCtx(null);
+            }}
+          >
             {t("newChat")}
           </Button>
         </div>

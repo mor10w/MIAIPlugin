@@ -1,4 +1,17 @@
-import type { AuditEntry, Endpoint, HealthInfo, ProbeResult, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
+import type {
+  AuditEntry,
+  Endpoint,
+  HealthInfo,
+  ProbeResult,
+  ModelInfo,
+  Policy,
+  Settings,
+  SettingsView,
+  TaskEvent,
+  TaskRequest,
+  TaskView,
+  UserTaskFile,
+} from "@miai/shared";
 import type { Backend, UserTaskInfo } from "./types";
 
 // Task pane serveres af bridgen, så API'et ligger på samme origin.

@@ -68,7 +68,9 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
       if (req.method === "OPTIONS") return reply.code(403).send();
       if (req.headers["x-miai"] !== "1") return reply.code(403).send({ error: "Manglende X-MIAI-header" });
       if (token && !tokenMatches(token, req.headers["x-miai-token"])) {
-        return reply.code(401).send({ error: "Manglende eller forkert adgangstoken. Geninstallér MIAI i Office (manifestet indeholder tokenet).", code: "TOKEN" });
+        return reply
+          .code(401)
+          .send({ error: "Manglende eller forkert adgangstoken. Geninstallér MIAI i Office (manifestet indeholder tokenet).", code: "TOKEN" });
       }
     }
   });
@@ -97,18 +99,21 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
   // Statusside (#15): "/" åbnes typisk i en almindelig browser; selve UI'et er /taskpane.html i Office.
   const addinBuilt = !!addinDir && existsSync(addinDir);
   app.get("/", async (req, reply) =>
-    reply.type("text/html; charset=utf-8").header("cache-control", "no-store").send(
-      renderStatusPage({
-        version: VERSION,
-        health: await health(),
-        settings: store.getSettings(),
-        policy: store.getPolicy(),
-        policySource: store.policySource,
-        addinBuilt,
-        configFile: store.file,
-        lang: pickLang(req.headers["accept-language"]),
-      }),
-    ),
+    reply
+      .type("text/html; charset=utf-8")
+      .header("cache-control", "no-store")
+      .send(
+        renderStatusPage({
+          version: VERSION,
+          health: await health(),
+          settings: store.getSettings(),
+          policy: store.getPolicy(),
+          policySource: store.policySource,
+          addinBuilt,
+          configFile: store.file,
+          lang: pickLang(req.headers["accept-language"]),
+        }),
+      ),
   );
 
   app.get("/api/tasks", async () => {
@@ -130,7 +135,8 @@ export async function buildServer({ store, port, addinDir, https, token, fastify
     const started = Date.now();
     try {
       const models = await cachedModels(ep, AbortSignal.timeout(5_000));
-      if (s.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "ok", durationMs: Date.now() - started });
+      if (s.auditLog)
+        await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "ok", durationMs: Date.now() - started });
       return models.map((id): ModelInfo => ({ id, endpoint: ep.id }));
     } catch (err) {
       if (s.auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "models", host, status: "error" });

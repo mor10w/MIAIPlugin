@@ -69,7 +69,13 @@ describe("SearXNG", () => {
     const loopback = Policy.parse({});
     expect(checkSettings(s({ provider: "searxng" }), loopback, isUrlAllowed)).toContain("Angiv adressen");
     expect(checkSettings(s({ provider: "searxng", url: "https://search.firma.local" }), loopback, isUrlAllowed)).toContain("ikke tilladt");
-    expect(checkSettings(s({ provider: "searxng", url: "https://search.firma.local" }), Policy.parse({ allowedHosts: ["127.0.0.1", "search.firma.local"] }), isUrlAllowed)).toBeUndefined();
+    expect(
+      checkSettings(
+        s({ provider: "searxng", url: "https://search.firma.local" }),
+        Policy.parse({ allowedHosts: ["127.0.0.1", "search.firma.local"] }),
+        isUrlAllowed,
+      ),
+    ).toBeUndefined();
   });
 
   it("organisationens politik kan låse søgetjenesten", () => {
@@ -82,7 +88,8 @@ describe("SearXNG", () => {
 
 describe("DuckDuckGo: ændret markup opdages", () => {
   it("resultater, som parseren ikke kan læse, skelnes fra 'ingen resultater'", () => {
-    const changed = '<div class="results"><div class="result results_links"><h2 class="result__title"><a class="new-link-class" href="x">Titel</a></h2></div></div>';
+    const changed =
+      '<div class="results"><div class="result results_links"><h2 class="result__title"><a class="new-link-class" href="x">Titel</a></h2></div></div>';
     expect(parseDdgHtml(changed)).toEqual([]);
     expect(looksLikeUnparsedResults(changed)).toBe(true);
   });

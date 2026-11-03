@@ -182,9 +182,7 @@ describe("brugerdefinerede opgaver", () => {
 describe("audit-log", () => {
   it("logger opgavekørsel og model-henting (metadata, ikke indhold)", async () => {
     const store = new ConfigStore(dir, join(dir, "no-policy.json"));
-    store.update(
-      Settings.parse({ endpoints: [{ id: "mock", name: "Mock", baseUrl: mockUrl }], activeEndpoint: "mock", auditLog: true }),
-    );
+    store.update(Settings.parse({ endpoints: [{ id: "mock", name: "Mock", baseUrl: mockUrl }], activeEndpoint: "mock", auditLog: true }));
     app = await buildServer({ store, port: PORT });
     nextReply = ["ok"];
     const mockHost = new URL(mockUrl).host;
@@ -203,7 +201,9 @@ describe("audit-log", () => {
 
   it("logger fejl som status=error med kode", async () => {
     const dead = new ConfigStore(dir, join(dir, "no-policy.json"));
-    dead.update(Settings.parse({ endpoints: [{ id: "dead", name: "Død", baseUrl: "http://127.0.0.1:9/v1" }], activeEndpoint: "dead", defaultModel: "m", auditLog: true }));
+    dead.update(
+      Settings.parse({ endpoints: [{ id: "dead", name: "Død", baseUrl: "http://127.0.0.1:9/v1" }], activeEndpoint: "dead", defaultModel: "m", auditLog: true }),
+    );
     const deadApp = await buildServer({ store: dead, port: PORT });
     const r = await deadApp.inject({ method: "POST", url: "/api/tasks/simplify", headers: H, payload: { context: { host: "word", text: "x" } } });
     expect(events(r.payload).at(-1)).toMatchObject({ type: "error" });

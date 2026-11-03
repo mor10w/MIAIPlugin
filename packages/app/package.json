@@ -34,14 +34,30 @@
     "mac": {
       "category": "public.category-productivity",
       "target": [
-        { "target": "dmg", "arch": ["arm64"] },
-        { "target": "zip", "arch": ["arm64"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
       ],
       "icon": "build/icon.icns",
       "identity": null,
       "extraResources": [
-        { "from": "../addin/dist", "to": "addin" },
-        { "from": "../addin/manifest.xml", "to": "manifest.xml" }
+        {
+          "from": "../addin/dist",
+          "to": "addin"
+        },
+        {
+          "from": "../addin/manifest.xml",
+          "to": "manifest.xml"
+        }
       ]
     },
     "dmg": {

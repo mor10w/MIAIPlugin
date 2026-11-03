@@ -87,7 +87,11 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   // --- Word -------------------------------------------------------------------
   if (o.host === "Word") {
     const picture = (base64: string, loc: string) => record({ kind: "picture", bytes: base64.length, loc });
-    const paragraph = () => strict("Word.Paragraph", { insertInlinePictureFromBase64: picture, insertHtml: (html: string, loc: string) => record({ kind: "insertHtml", html, loc }) });
+    const paragraph = () =>
+      strict("Word.Paragraph", {
+        insertInlinePictureFromBase64: picture,
+        insertHtml: (html: string, loc: string) => record({ kind: "insertHtml", html, loc }),
+      });
     const range: Record<string, unknown> = strict("Word.Range", {
       text: selection,
       load() {},
@@ -126,7 +130,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     const sheet = o.excel?.sheet ?? "Ark1";
     const grid = o.excel?.values ?? [[""]];
     const col = (i: number) => String.fromCharCode(65 + i);
-    const addr = (r0: number, c0: number, rows: number, cols: number) => `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
+    const addr = (r0: number, c0: number, rows: number, cols: number) =>
+      `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
     function rng(r0: number, c0: number, rows: number, cols: number): unknown {
       const slice = () => grid.slice(r0, r0 + rows).map((r) => r.slice(c0, c0 + cols));
       const target = {
@@ -178,7 +183,15 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   if (o.host === "PowerPoint") {
     const textFrame = () => ({ textRange: { text: "", font: {} }, wordWrap: false });
     const shape = (kind: string, type: string, opts: Record<string, number>) => {
-      const s = { kind, type, ...opts, textFrame: textFrame(), lineFormat: { visible: true }, fill: { setImage: (b64: string) => record({ kind: "fillImage", bytes: b64.length }) }, name: "" };
+      const s = {
+        kind,
+        type,
+        ...opts,
+        textFrame: textFrame(),
+        lineFormat: { visible: true },
+        fill: { setImage: (b64: string) => record({ kind: "fillImage", bytes: b64.length }) },
+        name: "",
+      };
       record(s);
       return s;
     };

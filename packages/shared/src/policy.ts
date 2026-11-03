@@ -9,7 +9,10 @@ export function isUrlAllowed(url: string, policy: Policy): boolean {
     return false;
   }
   return policy.allowedHosts.some((pattern) => {
-    const p = pattern.toLowerCase().trim().replace(/^\[|\]$/g, "");
+    const p = pattern
+      .toLowerCase()
+      .trim()
+      .replace(/^\[|\]$/g, "");
     if (p === "*") return true;
     if (p.startsWith("*.")) return host.endsWith(p.slice(1)) && host.length > p.length - 1;
     return host === p;

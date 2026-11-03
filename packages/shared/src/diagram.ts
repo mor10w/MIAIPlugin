@@ -8,8 +8,14 @@ import { z } from "zod";
  */
 export const DiagramResult = z.object({
   title: z.string().max(120).optional(),
-  nodes: z.array(z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(80) })).min(1).max(24),
-  edges: z.array(z.object({ from: z.string().min(1).max(40), to: z.string().min(1).max(40) })).max(60).optional(),
+  nodes: z
+    .array(z.object({ id: z.string().min(1).max(40), label: z.string().min(1).max(80) }))
+    .min(1)
+    .max(24),
+  edges: z
+    .array(z.object({ from: z.string().min(1).max(40), to: z.string().min(1).max(40) }))
+    .max(60)
+    .optional(),
 });
 
 export type DiagramResult = z.infer<typeof DiagramResult>;
@@ -180,7 +186,17 @@ export function routeEdges(d: DiagramResult, L: DiagramLayout = layoutDiagram(d)
     if (b.colX > a.colX) {
       // Fremad: knæk i mellemrummet lige foran målets søjle og ind i målets venstre side.
       const mx = b.colX - X_GAP / 2;
-      routes.push({ from: e.from, to: e.to, points: [{ x: x1, y: y1 }, { x: mx, y: y1 }, { x: mx, y: y2 }, { x: b.x, y: y2 }], back: false });
+      routes.push({
+        from: e.from,
+        to: e.to,
+        points: [
+          { x: x1, y: y1 },
+          { x: mx, y: y1 },
+          { x: mx, y: y2 },
+          { x: b.x, y: y2 },
+        ],
+        back: false,
+      });
     } else {
       // Returkant (cyklus): ud til højre, ned i sin egen bane under diagrammet, tilbage og op
       // i mellemrummet foran målet, og ind i målets venstre side. Alle lodrette segmenter ligger
@@ -193,7 +209,14 @@ export function routeEdges(d: DiagramResult, L: DiagramLayout = layoutDiagram(d)
       routes.push({
         from: e.from,
         to: e.to,
-        points: [{ x: x1, y: y1 }, { x: out, y: y1 }, { x: out, y: ly }, { x: into, y: ly }, { x: into, y: y2 }, { x: b.x, y: y2 }],
+        points: [
+          { x: x1, y: y1 },
+          { x: out, y: y1 },
+          { x: out, y: ly },
+          { x: into, y: ly },
+          { x: into, y: y2 },
+          { x: b.x, y: y2 },
+        ],
         back: true,
       });
     }
@@ -231,7 +254,9 @@ export function diagramToSvg(d: DiagramResult): string {
 
   // Kanter først, så knuderne tegnes ovenpå.
   for (const r of routes) {
-    parts.push(`<polyline points="${r.points.map((p) => `${p.x},${p.y}`).join(" ")}" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/>`);
+    parts.push(
+      `<polyline points="${r.points.map((p) => `${p.x},${p.y}`).join(" ")}" fill="none" stroke="#6b7280" stroke-width="1.5" stroke-linejoin="round"/>`,
+    );
     const end = r.points[r.points.length - 1];
     parts.push(`<polygon points="${end.x},${end.y} ${end.x - ARROW},${end.y - ARROW / 2} ${end.x - ARROW},${end.y + ARROW / 2}" fill="#6b7280"/>`);
   }

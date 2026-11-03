@@ -8,7 +8,8 @@ const document = (pages: number) => Array.from({ length: pages }, (_, i) => page
 test("opsummering af et dokument på 50+ sider deles op og samles", async ({ open }) => {
   const doc = document(60); // ca. 170.000 tegn
   const tp = await open({ host: "Word", selection: doc, endpoint: { contextTokens: 8_192 } });
-  tp.model.reply = (b) => (b.messages[0].content.includes("one part of a longer document") ? { stream: ["Del-resumé."] } : { stream: chunks("Samlet resumé af hele dokumentet.") });
+  tp.model.reply = (b) =>
+    b.messages[0].content.includes("one part of a longer document") ? { stream: ["Del-resumé."] } : { stream: chunks("Samlet resumé af hele dokumentet.") };
 
   await tp.run("Opsummér");
   await expect(tp.page.getByText("Samlet resumé af hele dokumentet.")).toBeVisible({ timeout: 20_000 });

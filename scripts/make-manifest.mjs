@@ -35,7 +35,10 @@ if (variant) {
   writeFileSync(out, render(variant, base));
   console.log(`✓ ${variant} → ${out}`);
 } else {
-  for (const [name, file] of [["bridge", "manifest.xml"], ["dev", "manifest.dev.xml"]]) {
+  for (const [name, file] of [
+    ["bridge", "manifest.xml"],
+    ["dev", "manifest.dev.xml"],
+  ]) {
     writeFileSync(new URL(`packages/addin/${file}`, root), render(name));
     console.log(`✓ ${name} → packages/addin/${file}`);
   }

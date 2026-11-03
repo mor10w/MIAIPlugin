@@ -3,7 +3,7 @@ import { extractGraphic, extractSvgBlock, sanitizeSvg } from "./svg.js";
 
 describe("extractSvgBlock", () => {
   it("finder ```svg-blok uden gærde", () => {
-    const text = "Her er figuren:\n```svg\n<svg viewBox=\"0 0 100 50\"><rect/></svg>\n```\nhåb";
+    const text = 'Her er figuren:\n```svg\n<svg viewBox="0 0 100 50"><rect/></svg>\n```\nhåb';
     expect(extractSvgBlock(text)).toBe('<svg viewBox="0 0 100 50"><rect/></svg>');
   });
 
@@ -18,12 +18,12 @@ describe("extractSvgBlock", () => {
 
 describe("sanitizeSvg", () => {
   it("fjerner <script>-elementer", () => {
-    const svg = '<svg><rect/><script>alert(1)</script></svg>';
+    const svg = "<svg><rect/><script>alert(1)</script></svg>";
     expect(sanitizeSvg(svg)).not.toContain("alert");
   });
 
   it("fjerner event-håndlere (dbl- og enkel citation)", () => {
-    const svg = '<svg><rect onclick="evil()"/><circle onmouseover=\'x()\'/></svg>';
+    const svg = "<svg><rect onclick=\"evil()\"/><circle onmouseover='x()'/></svg>";
     const clean = sanitizeSvg(svg);
     expect(clean).not.toContain("onclick");
     expect(clean).not.toContain("onmouseover");
@@ -51,7 +51,7 @@ describe("sanitizeSvg", () => {
 
 describe("extractGraphic", () => {
   const mermaid = "```mermaid\ngraph TD; A-->B;\n```";
-  const svg = '```svg\n<svg></svg>\n```';
+  const svg = "```svg\n<svg></svg>\n```";
 
   it("foretrækker den tidligste blok (mermaid først)", () => {
     expect(extractGraphic(`før\n${mermaid}\nmellem\n${svg}`)).toEqual({ kind: "mermaid", code: "graph TD; A-->B;" });
