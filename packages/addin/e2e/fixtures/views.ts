@@ -61,7 +61,8 @@ export const VIEWS: Record<string, (tp: Taskpane) => Promise<void>> = {
       }),
     });
     await tp.run("Agent: redigér dokumentet");
-    await expect(tp.page.getByRole("button", { name: "Udfør 3 handlinger" })).toBeVisible();
+    // Antallet afhænger af testens markering (a11y og visuel bruger forskellig tekst).
+    await expect(tp.page.getByRole("button", { name: /^Udfør \d+ handling/ })).toBeVisible();
   },
   chat: async (tp) => {
     tp.model.reply = () => ({ stream: chunks(ANSWER, 12) });
