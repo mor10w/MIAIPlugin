@@ -83,6 +83,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const theme = useOfficeTheme();
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
   const [tab, setTab] = useState<TabId>("actions");
+  /** Prompt fra chatten → udfyldes i agent-opgaven, når brugeren vælger "Gør det med agenten". */
+  const [agentRequest, setAgentRequest] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "warn" });
   /** Først når første statustjek er færdigt, vises "Kom i gang" (ellers blinker banneret ved start). */
   const [checked, setChecked] = useState(false);
@@ -179,9 +181,17 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 </MessageBarActions>
               </MessageBar>
             )}
-            {tab === "actions" && <ActionsTab adapter={adapter} />}
+            {tab === "actions" && <ActionsTab adapter={adapter} agentRequest={agentRequest} onAgentRequestConsumed={() => setAgentRequest(null)} />}
             {tab === "tasks" && <TasksTab />}
-            {tab === "chat" && <ChatTab adapter={adapter} />}
+            {tab === "chat" && (
+              <ChatTab
+                adapter={adapter}
+                onUseAgent={(p) => {
+                  setAgentRequest(p);
+                  setTab("actions");
+                }}
+              />
+            )}
             {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
           </main>
         </div>

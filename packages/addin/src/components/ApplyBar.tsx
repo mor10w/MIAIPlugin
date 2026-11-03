@@ -1,23 +1,36 @@
 import { useState } from "react";
-import { Button, MessageBar, MessageBarBody, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Caption1, MessageBar, MessageBarBody, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowUndo16Regular, Checkmark16Regular, Copy16Regular } from "@fluentui/react-icons";
 import type { ApplyMode } from "@miai/shared";
 import type { ApplyOutcome } from "../hosts/types";
 import { useI18n } from "../i18n";
 
 const useStyles = makeStyles({
+  /** Tydeligt "zone"-område, så brugeren ser at her indsættes der i dokumentet. */
+  zone: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXS,
+    padding: tokens.spacingHorizontalS,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke1}`,
+  },
+  label: { fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground2 },
   bar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
-  msg: { marginTop: tokens.spacingVerticalS },
+  msg: { marginTop: tokens.spacingVerticalXS },
 });
 
 interface Props {
   modes: ApplyMode[];
   apply: (mode: ApplyMode) => Promise<ApplyOutcome>;
   copyText?: string;
+  /** Vises over knapperne (fx "Indsæt i dokumentet"). */
+  label?: string;
 }
 
 /** Knapper til at indsætte et resultat i dokumentet, med beskeder og fortryd. */
-export function ApplyBar({ modes, apply, copyText }: Props) {
+export function ApplyBar({ modes, apply, copyText, label }: Props) {
   const { t } = useI18n();
   const s = useStyles();
   const [busy, setBusy] = useState(false);
@@ -50,7 +63,8 @@ export function ApplyBar({ modes, apply, copyText }: Props) {
   };
 
   return (
-    <>
+    <div className={s.zone}>
+      {label && <Caption1 className={s.label}>{label}</Caption1>}
       <div className={s.bar}>
         {modes.map((m, i) => (
           <Button key={m} size="small" appearance={i === 0 ? "primary" : "secondary"} disabled={busy} onClick={() => run(m)}>
@@ -83,6 +97,6 @@ export function ApplyBar({ modes, apply, copyText }: Props) {
           <MessageBarBody>{outcome.error ?? outcome.message}</MessageBarBody>
         </MessageBar>
       )}
-    </>
+    </div>
   );
 }

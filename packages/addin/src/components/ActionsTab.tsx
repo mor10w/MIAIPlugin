@@ -127,7 +127,7 @@ const useStyles = makeStyles({
   mono: { fontFamily: tokens.fontFamilyMonospace, wordBreak: "break-all" },
 });
 
-export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
+export function ActionsTab({ adapter, agentRequest, onAgentRequestConsumed }: { adapter: HostAdapter; agentRequest?: string | null; onAgentRequestConsumed?: () => void }) {
   const { t, lang } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
@@ -142,6 +142,21 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
       () => setTasks([]),
     );
   }, [api, adapter.host]);
+  // Chat → Agent-handover: overtag prompten fra chatten og udfyld agent-opgaven med den.
+  useEffect(() => {
+    if (!agentRequest || !tasks) return;
+    const tk = tasks.find((x) => x.id === "agent");
+    if (!tk) {
+      onAgentRequestConsumed?.(); // værten har ingen agent-opgave – aflever alligevel
+      return;
+    }
+    setTaskId(tk.id);
+    const defaults = Object.fromEntries(tk.params.filter((p) => p.default).map((p) => [p.name, p.default!]));
+    setParams({ ...defaults, prompt: agentRequest });
+    setInputError(undefined);
+    reset();
+    onAgentRequestConsumed?.();
+  }, [agentRequest, tasks]); // eslint-disable-line react-hooks/exhaustive-deps -- engangs-handover pr. anmodning
   const [taskId, setTaskId] = useState<string>();
   const [query, setQuery] = useState("");
   const task = tasks?.find((x) => x.id === taskId);

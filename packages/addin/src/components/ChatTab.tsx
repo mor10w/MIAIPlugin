@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Caption1, Switch, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
-import { ChatAdd20Regular, ChatSparkle20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
+import { Button, Caption1, Switch, Text, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { ChatAdd20Regular, ChatSparkle20Regular, Flash20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
 import type { ApplyMode, ChatMessage, DocContext, SourceRef } from "@miai/shared";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
@@ -12,6 +12,10 @@ import { ApplyBar } from "./ApplyBar";
 import { EmptyState, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
 import { SourceList } from "./SourceList";
+import { looksLikeEditRequest } from "../editIntent";
+
+/** Nøgle for førstegangs-hintet om apply-knapperne (gemmes, når brugeren har trykket en). */
+const HINT_KEY = "miai.chatApplyHint.v1";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS, minHeight: 0 },
@@ -64,9 +68,20 @@ const useStyles = makeStyles({
   footer: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
   switch: { flex: 1, minWidth: 0 },
   muted: { color: tokens.colorNeutralForeground3 },
+  /** Zone med apply-knapper + agent-forslag under det seneste chat-svar. */
+  applyZone: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
+  agentSuggest: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorBrandBackground2,
+  },
 });
 
-export function ChatTab({ adapter }: { adapter: HostAdapter }) {
+export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAgent?: (prompt: string) => void }) {
   const { t } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
@@ -89,6 +104,17 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const { state, start, stop } = useTask();
   const logRef = useRef<HTMLDivElement>(null);
   const running = state.status === "running";
+  /** Seneste brugermelding – afgør, om chatten foreslår agent-tilstanden. */
+  const [lastUserPrompt, setLastUserPrompt] = useState("");
+  /** Førstegangs-hint om apply-knapperne: vises, indtil brugeren har trykket en. */
+  const [hintSeen, setHintSeen] = useState(() => {
+    try { return localStorage.getItem(HINT_KEY) === "1"; } catch { return true; }
+  });
+  const markHintSeen = () => {
+    if (hintSeen) return;
+    try { localStorage.setItem(HINT_KEY, "1"); } catch { /* hint må gerne vise igen */ }
+    setHintSeen(true);
+  };
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -100,6 +126,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
     setDraft("");
     const history = messages.map(({ role, content }) => ({ role, content }));
     setMessages([...messages, { role: "user", content: prompt }]);
+    setLastUserPrompt(prompt);
     const ctx = useContext
       ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
       : { host: adapter.host, text: "", isWholeDocument: false };
@@ -155,13 +182,30 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
               <Markdown text={m.content} />
               {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
               {i === lastAssistant && !running && (
-                <ApplyBar
-                  modes={modesFor(m.content)}
-                  apply={(mode) =>
-                    mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current)
-                  }
-                  copyText={m.content}
-                />
+                <div className={s.applyZone}>
+                  {!hintSeen && <Caption1 className={s.muted}>{t("chatApplyHint")}</Caption1>}
+                  <ApplyBar
+                    label={t("applyLabel")}
+                    modes={modesFor(m.content)}
+                    apply={(mode) => {
+                      markHintSeen();
+                      return mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current);
+                    }}
+                    copyText={m.content}
+                  />
+                  {onUseAgent && (adapter.host === "word" || adapter.host === "excel") && lastUserPrompt && looksLikeEditRequest(lastUserPrompt) && (
+                    <div className={s.agentSuggest}>
+                      <span>
+                        <Text weight="semibold">{t("agentSuggestTitle")}</Text>
+                        <br />
+                        <Caption1 className={s.muted}>{t("agentSuggestText")}</Caption1>
+                      </span>
+                      <Button size="small" appearance="primary" icon={<Flash20Regular />} onClick={() => onUseAgent(lastUserPrompt)}>
+                        {t("agentSuggestCta")}
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ),
