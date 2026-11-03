@@ -66,8 +66,8 @@ async function walk(dir: string, out: string[], limit: number): Promise<boolean>
 
 export class KnowledgeIndex {
   private store_: KnowledgeStore | undefined;
-  /** Hvorfor indekset ikke kan bruges (fx ingen node:sqlite i denne runtime). */
-  readonly unavailable: string | undefined;
+  /** Hvorfor indekset ikke kan bruges (fx ingen node:sqlite i denne runtime). Sat ved første forsøg på at åbne det. */
+  unavailable: string | undefined;
   private status: KnowledgeStatus;
   private running: Promise<void> | undefined;
   private again = false;
@@ -78,30 +78,48 @@ export class KnowledgeIndex {
 
   constructor(
     private readonly store: ConfigStore,
-    dbFile = join(store.dir, "knowledge.db"),
+    private readonly dbFile = join(store.dir, "knowledge.db"),
   ) {
-    try {
-      this.store_ = new KnowledgeStore(dbFile);
-    } catch (err) {
-      this.unavailable = `Vidensindekset kan ikke åbnes: ${(err as Error).message}. Kræver Node.js 22.13 eller nyere.`;
-    }
     this.status = { state: "idle", done: 0, total: 0, documents: 0, chunks: 0, failed: [], skippedFolders: [], embeddingModel: "" };
   }
 
+  /**
+   * Databasen åbnes (og knowledge.db oprettes) først, når funktionen bruges – brugere, der ikke
+   * har slået den til, får ingen fil, og en runtime uden node:sqlite påvirker kun denne funktion.
+   */
   get db(): KnowledgeStore {
     if (this.closed) throw new Error("Vidensindekset er lukket.");
+    if (!this.store_ && !this.unavailable) {
+      try {
+        this.store_ = new KnowledgeStore(this.dbFile);
+      } catch (err) {
+        this.unavailable = `Vidensindekset kan ikke åbnes: ${(err as Error).message}. Kræver Node.js 22.13 eller nyere.`;
+      }
+    }
     if (!this.store_) throw new Error(this.unavailable);
     return this.store_;
   }
 
-  private get enabled(): boolean {
-    if (this.unavailable) return false;
+  private get turnedOn(): boolean {
     const k = this.store.getSettings().knowledge;
-    return k.enabled && this.store.getPolicy().knowledge && k.folders.length > 0;
+    return k.enabled && this.store.getPolicy().knowledge;
+  }
+
+  private get enabled(): boolean {
+    return this.turnedOn && this.store.getSettings().knowledge.folders.length > 0 && !this.unavailable;
   }
 
   getStatus(): KnowledgeStatus {
     const k = this.store.getSettings().knowledge;
+    // Slået fra og aldrig åbnet: ingen grund til at oprette databasen for at vise "slået fra".
+    if (!this.turnedOn && !this.store_) return { ...this.status, state: "disabled", documents: 0, chunks: 0, failed: [], embeddingModel: k.embeddingModel };
+    if (!this.unavailable) {
+      try {
+        void this.db;
+      } catch {
+        // unavailable er nu sat.
+      }
+    }
     if (this.unavailable) return { ...this.status, state: k.enabled ? "error" : "disabled", error: this.unavailable, embeddingModel: k.embeddingModel };
     const s = this.db.stats();
     return {

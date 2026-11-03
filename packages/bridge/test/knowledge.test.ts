@@ -328,3 +328,17 @@ describe("stier", () => {
     expect(expandHome("/abs/sti")).toBe("/abs/sti");
   });
 });
+
+describe("ingen fil uden brug", () => {
+  it("knowledge.db oprettes ikke, før funktionen er slået til (Windows kan ikke slette åbne filer)", async () => {
+    const { existsSync } = await import("node:fs");
+    const d = mkdtempSync(join(tmpdir(), "miai-knowledge-off-"));
+    const st = new ConfigStore(d, join(d, "ingen-politik.json"), new MemorySecrets());
+    const app = await buildServer({ store: st, port: 1 });
+    const res = await app.inject({ method: "GET", url: "/api/knowledge", headers: { host: "localhost:1", "x-miai": "1" } });
+    expect(res.json()).toMatchObject({ state: "disabled", documents: 0 });
+    expect(existsSync(join(d, "knowledge.db"))).toBe(false);
+    await app.close();
+    rmSync(d, { recursive: true });
+  });
+});
