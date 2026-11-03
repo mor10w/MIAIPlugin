@@ -70,21 +70,6 @@ function segDist(px, py, ax, ay, bx, by) {
   return Math.hypot(px - cx, py - cy);
 }
 
-/**
- * MIAI's "M"-glyph som tykke linjestykker i enhedsbokse (0..1).
- * Returnerer true, hvis punktet er inde i glyphen.
- */
-function inM(px, py) {
-  const t = 0.13; // stregtykkelse i enhedsenheder
-  const A = [0.26, 0.78], B = [0.26, 0.3], C = [0.5, 0.64], D = [0.74, 0.3], E = [0.74, 0.78];
-  return (
-    segDist(px, py, ...A, ...B) < t / 2 || // venstre stam
-    segDist(px, py, ...B, ...C) < t / 2 || // venstre diagonal
-    segDist(px, py, ...C, ...D) < t / 2 || // højre diagonal
-    segDist(px, py, ...D, ...E) < t / 2 // højre stam
-  );
-}
-
 function lerp(a, b, t) { return a + (b - a) * t; }
 
 /**
@@ -145,17 +130,27 @@ function smooth(d, aa) {
 /** Menu-bar-ikon: transparent baggrund, sort M (template-ikon). */
 function drawTray(size) {
   const buf = Buffer.alloc(size * size * 4);
+  // M'en tegnes i 58% af canvasen med antialiasede kanter, så den passer
+  // til de øvrige menu-bar-ikoner.
+  const scale = 0.58;
+  const off = (1 - scale) / 2; // centrerer glyphen
+  const pxPerUnit = scale * size; // enhedsboks -> pixels
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const i = (y * size + x) * 4;
-      const px = (x + 0.5) / size;
-      const py = (y + 0.5) / size;
-      // Krymp glyphen lidt, så den hænger i menuen.
-      const c = inM(px * 0.86 + 0.07, py * 0.86 + 0.07) ? 1 : 0;
+      const u = ((x + 0.5) / size - off) / scale; // koordinater i enhedsboks
+      const v = ((y + 0.5) / size - off) / scale;
+      const d = Math.min(
+        segDist(u, v, 0.26, 0.78, 0.26, 0.3),
+        segDist(u, v, 0.26, 0.3, 0.5, 0.64),
+        segDist(u, v, 0.5, 0.64, 0.74, 0.3),
+        segDist(u, v, 0.74, 0.3, 0.74, 0.78),
+      );
+      const c = smooth((0.13 / 2) * pxPerUnit - d * pxPerUnit, 1);
       buf[i] = 0;
       buf[i + 1] = 0;
       buf[i + 2] = 0;
-      buf[i + 3] = c * 255;
+      buf[i + 3] = Math.round(255 * c);
     }
   }
   return buf;
