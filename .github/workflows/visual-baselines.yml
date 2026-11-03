@@ -21,7 +21,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx -w @miai/addin playwright install --with-deps chromium
-      - run: npm run test:e2e -- visual.spec.ts --update-snapshots
+      - run: npx -w @miai/addin playwright test -c e2e/playwright.config.ts visual.spec.ts --update-snapshots=all
       - name: Commit nye baselines
         run: |
           git config user.name "github-actions[bot]"
