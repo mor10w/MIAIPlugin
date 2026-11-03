@@ -19,6 +19,21 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # Kodekvalitet (#14): ESLint (inkl. typebevidste regler) og Prettier.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Typebevidste regler kræver de byggede typer fra @miai/shared.
+      - run: npm run build -w @miai/shared
+      - run: npm run lint
+      - run: npm run format:check
+
   # Browsertests af task pane (#10): Chromium + simuleret Office.js + mock-model.
   e2e:
     runs-on: ubuntu-latest

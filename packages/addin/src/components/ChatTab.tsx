@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Caption1, Checkbox, MessageBar, MessageBarBody, Textarea, makeStyles, tokens } from "@fluentui/react-components";
+import { Button, Caption1, Checkbox, Textarea, makeStyles, tokens } from "@fluentui/react-components";
 import { Send20Regular } from "@fluentui/react-icons";
 import type { ApplyMode, ChatMessage, DocContext } from "@miai/shared";
 import type { HostAdapter } from "../hosts";

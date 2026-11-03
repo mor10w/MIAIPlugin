@@ -52,7 +52,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   useEffect(() => {
     api.settings().then((v) => setLang(v.settings.uiLanguage), () => {});
     void check();
-    const id = setInterval(check, 15_000);
+    const id = setInterval(() => void check(), 15_000);
     return () => clearInterval(id);
   }, [api, check]);
 

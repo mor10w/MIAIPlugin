@@ -3,7 +3,7 @@ import { BackendContext, createBackend } from "./backend";
 import { App } from "./components/App";
 import { createAdapter } from "./hosts";
 
-Office.onReady(async (info) => {
+void Office.onReady(async (info) => {
   const root = createRoot(document.getElementById("root")!);
   const adapter = createAdapter(info.host);
   if (!adapter) {

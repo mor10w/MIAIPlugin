@@ -94,5 +94,6 @@ export function Markdown({ text }: { text: string }) {
     };
   }, [text]);
 
+  // eslint-disable-next-line no-restricted-syntax -- mdToSafeHtml renser modellens Markdown med DOMPurify.
   return <div ref={ref} className={s.md} dangerouslySetInnerHTML={{ __html: mdToSafeHtml(text) }} />;
 }

@@ -25,12 +25,21 @@
     "icons": "node scripts/make-icons.mjs",
     "dev:bridge": "npm run build -w @miai/shared && concurrently -n addin,bridge \"npm run watch -w @miai/addin\" \"npm run dev -w @miai/bridge\"",
     "manifests": "node scripts/make-manifest.mjs",
-    "test:e2e": "npm run test:e2e -w @miai/addin"
+    "test:e2e": "npm run test:e2e -w @miai/addin",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "concurrently": "^10.0.0",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "office-addin-dev-certs": "^3.0.0",
-    "typescript": "~5.9.0"
+    "prettier": "^3.9.10",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.72.1"
   },
   "allowScripts": {
     "electron-winstaller@5.4.0": true,

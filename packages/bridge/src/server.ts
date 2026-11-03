@@ -22,7 +22,7 @@ import {
 import { z } from "zod";
 import { appendAudit, auditFile, readAuditTail } from "./audit.js";
 import { PolicyError, type ConfigStore } from "./config.js";
-import { invalidateUserTasks, loadUserTasks, machineTasksDir, mergedCatalog, userTasksDir } from "./userTasks.js";
+import { invalidateUserTasks, loadUserTasks, mergedCatalog, userTasksDir } from "./userTasks.js";
 import { tokenMatches } from "./identity.js";
 import { runTask } from "./runner.js";
 import { pickLang, renderStatusPage } from "./statusPage.js";

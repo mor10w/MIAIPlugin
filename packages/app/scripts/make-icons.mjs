@@ -3,7 +3,7 @@
 //   build/MIAI.iconset/    app-ikoner (16–1024 px)
 //   build/icon.icns        via `iconutil` (kun macOS)
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { deflateSync } from "node:zlib";
@@ -100,7 +100,6 @@ function drawAppIcon(size) {
       const py = y / size;
       // Glyph: afstand til glyph-kant i pixels.
       const inset = 0; // glyph tegnes direkte i enhedsbokse
-      let cGlyph = 0;
       const t = size * 0.13 / 2 + aa / 2;
       const d = Math.min(
         segDist(px, py, 0.26 + inset, 0.78, 0.26 + inset, 0.3),
@@ -108,7 +107,7 @@ function drawAppIcon(size) {
         segDist(px, py, 0.5, 0.64, 0.74 + inset, 0.3),
         segDist(px, py, 0.74 + inset, 0.3, 0.74 + inset, 0.78),
       );
-      cGlyph = smooth(t - d * size, aa); // 1 inde i glyphen
+      const cGlyph = smooth(t - d * size, aa); // 1 inde i glyphen
       const w = cGlyph * cBg;
       const rCh = lerp(top[0], 255, w);
       const gCh = lerp(lerp(top[1], bottom[1], g), 255, w);

@@ -5,8 +5,6 @@ import {
   Card,
   Dropdown,
   Field,
-  MessageBar,
-  MessageBarBody,
   Option,
   Spinner,
   Text,
@@ -200,7 +198,7 @@ function ResultView({ task, format, text, result }: { task: TaskView; format?: s
   }
   if (task.id === "diagram") {
     const r = result as DiagramResult;
-    // diagramToSvg escaper alle labels, så indholdet er sikkert at indsætte.
+    // eslint-disable-next-line no-restricted-syntax -- diagramToSvg escaper alle labels; SVG'en bygges af os, ikke af modellen.
     return <div className={s.diagram} dangerouslySetInnerHTML={{ __html: diagramToSvg(r) }} />;
   }
   if (task.id === "text-to-slides") {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Badge, Button, Caption1, Card, Checkbox, Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner, Subtitle2, Textarea, makeStyles, tokens } from "@fluentui/react-components";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Badge, Button, Card, Checkbox, Dropdown, Field, Input, MessageBar, MessageBarBody, Option, Spinner, Subtitle2, Textarea, makeStyles, tokens } from "@fluentui/react-components";
 import { UserTaskFile as UserTaskSchema, localize, type UserTaskFile } from "@miai/shared";
 import { useBackend } from "../backend";
 import type { UserTaskInfo } from "../backend/types";
@@ -129,15 +129,14 @@ export function TasksTab() {
   const [msg, setMsg] = useState<{ intent: "success" | "error"; text: string }>();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const refresh = () => api.userTasks().then(setTasks, (e) => setMsg({ intent: "error", text: (e as Error).message }));
+  const refresh = useCallback(() => api.userTasks().then(setTasks, (e) => setMsg({ intent: "error", text: (e as Error).message })), [api]);
   useEffect(() => {
     void refresh();
-  }, [api]);
+  }, [refresh]);
 
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f!, ...p }));
   const patchParam = (i: number, p: Partial<ParamEdit>) => setForm((f) => ({ ...f!, params: f!.params.map((x, j) => (j === i ? { ...x, ...p } : x)) }));
 
-  const applyLabel: Record<FileApplyMode, string> = { replace: t("apply_replace"), trackChanges: t("apply_trackChanges"), insertAfter: t("apply_insertAfter"), comment: t("apply_comment"), cells: t("apply_cells") };
   const appLabel = { word: t("appWord"), excel: t("appExcel"), powerpoint: t("appPowerPoint") };
 
   const save = async () => {
