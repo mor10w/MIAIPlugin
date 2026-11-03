@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ChatMessage, HostKind, ParsedTaskRequest } from "./types.js";
+import type { ChatMessage, DocContext, HostKind, ParsedTaskRequest } from "./types.js";
 import { DiagramResult } from "./diagram.js";
 
 export type ApplyMode =
@@ -13,6 +13,13 @@ export type ApplyMode =
   | "diagram"; // indsæt diagram (billede i Word, figurer i PowerPoint)
 
 export type Localized = { da: string; en: string };
+
+export type TextFormat = "plain" | "markdown" | "tsv";
+
+/** Input er et markeret Excel-område med værdier (bruges som TSV i prompten). */
+export function isExcelRange(ctx: DocContext): boolean {
+  return ctx.host === "excel" && !!ctx.table;
+}
 
 export interface ParamOption {
   value: string;
@@ -29,7 +36,12 @@ export interface ParamDef {
 }
 
 export type TaskOutput =
-  | { kind: "text"; format: "plain" | "markdown" | "tsv" }
+  | {
+      kind: "text";
+      format: TextFormat;
+      /** Svaret er TSV, når input er et markeret Excel-område (fx oversættelse celle for celle). */
+      tsvForExcelRanges?: boolean;
+    }
   | { kind: "json"; schema: z.ZodType; schemaName: string };
 
 /**
@@ -216,13 +228,13 @@ export const TASKS: TaskDefinition[] = [
     description: { da: "Oversætter markeringen til det valgte sprog.", en: "Translates the selection into the chosen language." },
     hosts: ALL_HOSTS,
     input: "selection",
-    output: { kind: "text", format: "plain" },
+    output: { kind: "text", format: "plain", tsvForExcelRanges: true },
     params: [{ name: "targetLanguage", label: { da: "Til sprog", en: "Target language" }, kind: "select", options: LANG_OPTIONS, default: "English" }],
     applyModes: ["replace", "insertAfter", "cells", "comment"],
     temperature: 0.2,
     buildMessages: (req) => {
       const lang = req.params.targetLanguage ?? "English";
-      if (req.context.host === "excel" && req.context.table) {
+      if (isExcelRange(req.context)) {
         return [
           system(
             req,
@@ -230,7 +242,7 @@ export const TASKS: TaskDefinition[] = [
             "Keep exactly the same number of rows and columns. Separate columns with a single TAB and rows with a newline. Leave numbers, dates, codes and empty cells unchanged.",
             ONLY_RESULT,
           ),
-          user(doc(req.context.table)),
+          user(doc(req.context.table ?? "")),
         ];
       }
       return [
@@ -437,6 +449,17 @@ export const TASKS: TaskDefinition[] = [
     },
   },
 ];
+
+/**
+ * Det faktiske tekstformat for en opgave i en given kontekst. Bruges af motoren (sløjfe-vagt,
+ * presence_penalty) og af add-in'et (visning og indsættelse), så de altid er enige med prompten.
+ * Returnerer undefined for JSON-opgaver.
+ */
+export function textFormat(task: TaskDefinition, ctx: DocContext): TextFormat | undefined {
+  if (task.output.kind !== "text") return undefined;
+  if (task.output.tsvForExcelRanges && isExcelRange(ctx)) return "tsv";
+  return task.output.format;
+}
 
 export function getTask(id: string): TaskDefinition | undefined {
   return TASKS.find((t) => t.id === id);

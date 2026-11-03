@@ -14,7 +14,7 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { diagramToSvg, stripEmphasis, tasksForHost, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
+import { diagramToSvg, parseTsv, stripEmphasis, tasksForHost, textFormat, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
 import { useTask } from "../useTask";
@@ -31,6 +31,12 @@ const useStyles = makeStyles({
   edit: { padding: `${tokens.spacingVerticalXS} 0`, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
   del: { textDecoration: "line-through", color: tokens.colorPaletteRedForeground1 },
   ins: { color: tokens.colorPaletteGreenForeground1, fontWeight: tokens.fontWeightSemibold },
+  tsvWrap: { overflowX: "auto" },
+  tsv: {
+    borderCollapse: "collapse",
+    fontSize: tokens.fontSizeBase200,
+    "& td": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap" },
+  },
   diagram: { "& svg": { maxWidth: "100%", height: "auto", display: "block" } },
   mono: { fontFamily: tokens.fontFamilyMonospace, wordBreak: "break-all" },
 });
@@ -65,14 +71,19 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     }
   };
 
-  const modes: ApplyMode[] = task ? task.applyModes.filter((m) => adapter.supports(m)) : [];
-  // Ren tekst-opgaver: fjern Markdown-fremhævning, som små modeller ofte tilføjer.
-  const shownText = task?.output.kind === "text" && task.output.format === "plain" ? stripEmphasis(state.text) : state.text;
+  // Det faktiske format afhænger af konteksten (fx TSV ved oversættelse af et Excel-område).
+  const format = task && ctxRef.current ? textFormat(task, ctxRef.current) : undefined;
+  const supported: ApplyMode[] = task ? task.applyModes.filter((m) => adapter.supports(m)) : [];
+  // Et TSV-svar hører hjemme i cellerne; "Erstat" ville skrive det hele i én celle.
+  const modes: ApplyMode[] = format === "tsv" ? supported.filter((m) => m === "cells" || m === "comment") : supported.filter((m) => m !== "cells");
+
+  // Ren tekst: fjern Markdown-fremhævning, som små modeller ofte tilføjer.
+  const shownText = format === "plain" ? stripEmphasis(state.text) : state.text;
 
   const apply = async (mode: ApplyMode) => {
     const ctx = ctxRef.current!;
     if (!task) throw new Error("Ingen opgave");
-    if (task.output.kind === "text") return adapter.applyText(shownText, task.output.format, mode, ctx);
+    if (format) return adapter.applyText(shownText, format, mode, ctx);
     if (task.id === "grammar") return adapter.applyGrammar!(state.result as GrammarResult, mode, ctx);
     if (task.id === "text-to-slides") return adapter.applySlides!(state.result as SlidesResult);
     if (task.id === "diagram") return adapter.applyDiagram!(state.result as DiagramResult, ctx);
@@ -140,7 +151,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
 
       {task && (state.text || state.result !== undefined) && (
         <Card className={s.result}>
-          <ResultView task={task} text={shownText} result={state.result} />
+          <ResultView task={task} format={format} text={shownText} result={state.result} />
           {state.stopReason === "repetition" && (
             <MessageBar intent="warning">
               <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
@@ -155,10 +166,11 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   );
 }
 
-function ResultView({ task, text, result }: { task: TaskDefinition; text: string; result: unknown }) {
+function ResultView({ task, format, text, result }: { task: TaskDefinition; format?: string; text: string; result: unknown }) {
   const s = useStyles();
   const { t } = useI18n();
-  if (task.output.kind === "text") return task.output.format === "markdown" ? <Markdown text={text} /> : <Text style={{ whiteSpace: "pre-wrap" }}>{text}</Text>;
+  if (format === "tsv") return <TsvPreview text={text} />;
+  if (format) return format === "markdown" ? <Markdown text={text} /> : <Text style={{ whiteSpace: "pre-wrap" }}>{text}</Text>;
   if (!result) return null;
   if (task.id === "grammar") {
     const r = result as GrammarResult;
@@ -207,4 +219,25 @@ function ResultView({ task, text, result }: { task: TaskDefinition; text: string
     );
   }
   return <pre>{JSON.stringify(result, null, 2)}</pre>;
+}
+
+/** Viser et TSV-svar som tabel, så brugeren kan se, hvordan det lander i cellerne. */
+function TsvPreview({ text }: { text: string }) {
+  const s = useStyles();
+  const rows = parseTsv(text);
+  return (
+    <div className={s.tsvWrap}>
+      <table className={s.tsv}>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }

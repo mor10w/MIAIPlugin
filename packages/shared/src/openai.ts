@@ -28,6 +28,7 @@ export interface ChatParams {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  presencePenalty?: number;
   responseFormat?: Record<string, unknown>;
   signal?: AbortSignal;
 }
@@ -107,6 +108,7 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   };
   if (p.temperature !== undefined) body.temperature = p.temperature;
   if (p.maxTokens !== undefined) body.max_tokens = p.maxTokens;
+  if (p.presencePenalty !== undefined) body.presence_penalty = p.presencePenalty;
   if (p.responseFormat) body.response_format = p.responseFormat;
 
   const res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);

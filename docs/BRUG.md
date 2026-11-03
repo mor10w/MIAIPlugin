@@ -173,7 +173,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 | Indsæt efter markeringen | ✅ | | ✅ |
 | Indsæt diagram | ✅ (billede) | | ✅ (figurer) |
 | Som kommentar | ✅ (WordApi 1.4) | ✅ (ExcelApi 1.10) | |
-| Skriv i celler | | ✅ (oversættelse) | |
+| Skriv i celler | | ✅ (oversættelse af et markeret område – vises som tabel inden indsættelse) | |
 | Indsæt formel (+ Fortryd) | | ✅ (formelgenerering) | |
 | Opret slides | | | ✅ (PowerPointApi 1.4) |
 | Kopiér | ✅ | ✅ | ✅ |
@@ -184,7 +184,7 @@ Knapper, som din Office-version ikke understøtter, skjules.
 
 - **Modellens størrelde** afgør kvaliteten. `qwen3:4b` er et pænt udgangspunkt; brug en større model (7B+) til artikler og oversættelser, hvis maskinen rækker.
 - **Reasoning-modeller** (fx Qwen3) sender `<think>`-blokke med – indstillingen *Skjul <think>-tankegang* er slået til som standard, så tankegangen ikke ender i dokumentet.
-- **Gentagelsessløjfer**: små, kvantiserede modeller kan gå i stå og gentage den samme frase. MIAI afbryder svaret, når slutningen gentager sig selv mange gange i træk, og viser en advarsel. Teksten forurenes ikke med en note. Vagten gælder kun fritekst; Excel-celler (TSV) og strukturerede svar (JSON) har legitime gentagelser og valideres på anden vis. Sker det ofte, så prøv en større model, eller sæt `presence_penalty` (fx 1.0–1.5, som Qwen anbefaler) i endpointens `extraBody` i konfigurationen.
+- **Gentagelsessløjfer**: små, kvantiserede modeller kan gå i stå og gentage den samme frase. MIAI afbryder svaret, når slutningen gentager sig selv mange gange i træk, og viser en advarsel. Teksten forurenes ikke med en note. Vagten gælder kun fritekst; Excel-celler (TSV) og strukturerede svar (JSON) har legitime gentagelser og valideres på anden vis. Sker det ofte, så vælg **Modvirk gentagelser** under Indstillinger for endpointen. Det sender `presence_penalty` til modellen; Qwen anbefaler 1,0–1,5 til kvantiserede modeller. Den bruges kun til fritekst, ikke til JSON, formler eller Excel-celler. En for høj værdi kan give sprogblanding. Alternativt kan du prøve en større model.
 - **Struktureret output**: opgaver som grammatik, slides, formler og diagrammer kræver JSON. Værktøjer uden støtte (fx KoboldCpp) sættes til `none`, og validering med genforsøg tager over – det virker, men er mere sårbart for små modeller.
 - **Dokumenttekst behandles som data**, aldrig som instruktioner, så markeringer med fx "ignorer ovenstående" ikke styrer modellen.
 - **Indstillinger i direkte tilstand** ligger i add-in'ets `localStorage` på maskinen. Nogle webview-bygninger rydder den; i så fald gendannes standardindstillingerne.

@@ -69,6 +69,12 @@ export const Endpoint = z.object({
   apiKey: z.string().max(500).default(""),
   structuredOutput: StructuredOutputMode.default("json_schema"),
   stripThinking: z.boolean().default(true),
+  /**
+   * OpenAI `presence_penalty` (0–2) mod gentagelsessløjfer – Qwen anbefaler 1.0–1.5 for
+   * kvantiserede modeller. Udeladt = sendes ikke (serverens standard). Bruges kun til
+   * fritekst-opgaver; JSON og Excel-celler har legitime gentagelser.
+   */
+  presencePenalty: z.number().min(0).max(2).optional(),
   /** Ekstra felter, der flettes ind i hver chat/completions-forespørgsel (fx { "num_ctx": 8192 }). */
   extraBody: z.record(z.string(), z.unknown()).default({}),
   timeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),

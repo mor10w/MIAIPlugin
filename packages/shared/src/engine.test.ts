@@ -8,6 +8,7 @@ import { Policy, Settings, TaskRequest, type TaskEvent } from "./types.js";
 let server: Server;
 let base: string;
 const seen: { method: string; headers: Record<string, unknown> }[] = [];
+let lastBody: Record<string, unknown> = {};
 
 beforeAll(async () => {
   server = createServer((req, res) => {
@@ -17,6 +18,7 @@ beforeAll(async () => {
     let body = "";
     req.on("data", (c) => (body += c));
     req.on("end", () => {
+      if (body) lastBody = JSON.parse(body);
       // Server der ignorerer stream=true og svarer med ét JSON-objekt.
       res.setHeader("content-type", "application/json");
       // LOOPTEST: simulerer en model, der er faldet i gentagelsessløjfe.
@@ -29,11 +31,11 @@ beforeAll(async () => {
 });
 afterAll(() => server.close());
 
-const settings = () => Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base }], activeEndpoint: "x" });
+const settings = (ep: object = {}) => Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: base, ...ep }], activeEndpoint: "x" });
 
-async function run(id: string, body: object, policy = Policy.parse({}), hint?: string) {
+async function run(id: string, body: object, policy = Policy.parse({}), hint?: string, ep: object = {}) {
   const events: TaskEvent[] = [];
-  const s = settings();
+  const s = settings(ep);
   const req = TaskRequest.parse(body);
   await executeTask(getTask(id)!, req, { settings: s, endpoint: s.endpoints[0], policy, emit: (e) => events.push(e), signal: new AbortController().signal, client: { unreachableHint: hint } });
   return events;
@@ -79,5 +81,23 @@ describe("executeTask (direkte tilstand)", () => {
     expect(text).not.toContain("gentage sig selv"); // ingen note i selve teksten
     expect(ev.find((e) => e.type === "done")).toMatchObject({ stopReason: "repetition" });
     expect(ev.filter((e) => e.type === "error").length).toBe(0);
+  });
+
+  it("sender presence_penalty til fritekst, når den er sat", async () => {
+    await run("chat", { context: { host: "word" }, params: { prompt: "hej" } }, undefined, undefined, { presencePenalty: 1.5 });
+    expect(lastBody.presence_penalty).toBe(1.5);
+  });
+
+  it("udelader presence_penalty for JSON-opgaver og Excel-celler (TSV)", async () => {
+    const ep = { presencePenalty: 1.5, structuredOutput: "none" };
+    await run("generate-formula", { context: { host: "excel", address: "A1" }, params: { prompt: "sum" } }, undefined, undefined, ep).catch(() => {});
+    expect(lastBody).not.toHaveProperty("presence_penalty");
+    await run("translate", { context: { host: "excel", text: "Ja", table: "Ja\nJa" } }, undefined, undefined, ep);
+    expect(lastBody).not.toHaveProperty("presence_penalty");
+  });
+
+  it("sender ikke presence_penalty, når den ikke er sat", async () => {
+    await run("chat", { context: { host: "word" }, params: { prompt: "hej" } });
+    expect(lastBody).not.toHaveProperty("presence_penalty");
   });
 });

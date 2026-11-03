@@ -3,7 +3,7 @@ import { isDegenerating } from "./degenerate.js";
 import { extractJson } from "./json.js";
 import { listModels, streamChat, UpstreamError, type ClientOptions } from "./openai.js";
 import { isUrlAllowed } from "./policy.js";
-import type { TaskDefinition } from "./tasks.js";
+import { textFormat, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
 import type { ChatMessage, Endpoint, ParsedTaskRequest, Policy, Settings, TaskEvent } from "./types.js";
 
@@ -81,7 +81,11 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   let stopReason: "repetition" | undefined;
   // Sløjfe-vagten gælder kun fritekst. TSV (Excel-celler) og JSON har legitime gentagelser
   // og valideres på anden vis.
-  const guardLoops = task.output.kind === "text" && task.output.format !== "tsv";
+  const format = textFormat(task, req.context);
+  const guardLoops = format === "plain" || format === "markdown";
+  // presence_penalty følger samme afgrænsning: den straffer gentagne tokens, hvilket hjælper
+  // mod sløjfer i fritekst, men skader JSON (gentagne nøgler) og tabeller (gentagne værdier).
+  const presencePenalty = guardLoops && ep.presencePenalty ? ep.presencePenalty : undefined;
 
   const run = async (msgs: ChatMessage[], responseFormat: Record<string, unknown> | undefined, onText: (t: string) => void) => {
     const filter = ep.stripThinking ? new ThinkFilter() : undefined;
@@ -98,7 +102,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
       full += t;
       onText(t);
     };
-    for await (const chunk of streamChat(ep, { model, messages: msgs, temperature, maxTokens: settings.maxTokens, responseFormat, signal }, client)) {
+    for await (const chunk of streamChat(ep, { model, messages: msgs, temperature, maxTokens: settings.maxTokens, presencePenalty, responseFormat, signal }, client)) {
       if (chunk.text) push(chunk.text);
       if (chunk.usage) usage = chunk.usage;
       // Afbryd tidligt, hvis modellen er faldet i en gentagelsessløjfe. Brugeren får besked

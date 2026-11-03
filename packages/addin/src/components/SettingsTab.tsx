@@ -33,6 +33,14 @@ const PRESETS: { id: string; name: string; baseUrl: string; structuredOutput: St
   { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" },
 ];
 
+/** presence_penalty-forudindstillinger. "" = sendes ikke (serverens standard). */
+const PENALTY_PRESETS = [
+  { value: "", label: "penaltyOff" },
+  { value: "0.5", label: "penaltyLight" },
+  { value: "1", label: "penaltyMedium" },
+  { value: "1.5", label: "penaltyStrong" },
+] as const;
+
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
@@ -73,6 +81,11 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
 
   if (!settings || !policy) return msg ? <MessageBar intent="error"><MessageBarBody>{msg.text}</MessageBarBody></MessageBar> : <Spinner />;
 
+  /** Viser også en værdi, der er sat manuelt i config.json og ikke er en af forudindstillingerne. */
+  const penaltyLabel = (v: number | undefined) => {
+    const preset = PENALTY_PRESETS.find((p) => (p.value ? Number(p.value) : undefined) === v);
+    return preset ? t(preset.label) : String(v);
+  };
   const locked = policy.locked || policySource === "machine";
   const setEp = (id: string, patch: Partial<Endpoint>) => setSettings({ ...settings, endpoints: settings.endpoints.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
 
@@ -149,6 +162,19 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
               <Option value="json_schema">json_schema</Option>
               <Option value="json_object">json_object</Option>
               <Option value="none">none</Option>
+            </Dropdown>
+          </Field>
+          <Field label={t("presencePenalty")} hint={t("presencePenaltyHint")}>
+            <Dropdown
+              value={penaltyLabel(ep.presencePenalty)}
+              selectedOptions={[String(ep.presencePenalty ?? "")]}
+              onOptionSelect={(_, d) => setEp(ep.id, { presencePenalty: d.optionValue ? Number(d.optionValue) : undefined })}
+            >
+              {PENALTY_PRESETS.map((p) => (
+                <Option key={p.value} value={p.value} text={penaltyLabel(p.value ? Number(p.value) : undefined)}>
+                  {penaltyLabel(p.value ? Number(p.value) : undefined)}
+                </Option>
+              ))}
             </Dropdown>
           </Field>
           <Switch label={t("stripThinking")} checked={ep.stripThinking} onChange={(_, d) => setEp(ep.id, { stripThinking: d.checked })} />

@@ -159,6 +159,15 @@ describe("opgaver", () => {
     expect(lastBody.messages.at(-1).content).toContain("not valid");
   });
 
+  it("gemmer presencePenalty og sender den til fritekst", async () => {
+    const settings = { endpoints: [{ id: "mock", name: "Mock", baseUrl: mockUrl, presencePenalty: 1 }], activeEndpoint: "mock" };
+    expect((await app.inject({ method: "PUT", url: "/api/settings", headers: H, payload: { settings } })).statusCode).toBe(200);
+    expect((await app.inject({ url: "/api/settings", headers: H })).json().settings.endpoints[0].presencePenalty).toBe(1);
+    nextReply = ["ok"];
+    await app.inject({ method: "POST", url: "/api/tasks/simplify", headers: H, payload: { context: { host: "word", text: "x" } } });
+    expect(lastBody.presence_penalty).toBe(1);
+  });
+
   it("kræver input", async () => {
     const r = await app.inject({ method: "POST", url: "/api/tasks/explain-formula", headers: H, payload: { context: { host: "excel" } } });
     expect(r.statusCode).toBe(400);
