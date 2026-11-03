@@ -97,12 +97,13 @@ Kontrasten måles automatisk i [`theme.test.ts`](../../packages/addin/src/theme.
 ## Tests
 - `theme.test.ts`: kontrast for paletten.
 - `e2e/a11y.spec.ts`: axe på hovedvisningerne i begge temaer, live temaskift, og ingen vandret scroll ved 320 og 450 px.
-- `e2e/visual.spec.ts`: skærmbillede-sammenligning af hovedvisningerne i lyst og mørkt tema. Testene bruger en fast skrifttype (Inter), så billederne er ens på udviklermaskiner og i CI.
+- `e2e/visual.spec.ts`: skærmbillede-sammenligning af hovedvisningerne i lyst og mørkt tema. Testene bruger en fast skrifttype (Inter), men kantudglatning afhænger stadig af maskinen, så referencebillederne er dem, CI's Linux-runner laver.
 
-  Efter en bevidst designændring opdateres referencebillederne med:
+  Efter en bevidst designændring opdateres referencebillederne i CI: Actions → **Visuelle baselines** → *Run workflow*, eller:
   ```bash
-  npx -w @miai/addin playwright test -c e2e/playwright.config.ts visual --update-snapshots
+  gh workflow run visual-baselines.yml
   ```
+  Workflowet committer de nye billeder til main. Lokalt kan de genereres med `npx -w @miai/addin playwright test -c e2e/playwright.config.ts visual --update-snapshots` til egen sammenligning, men de bør ikke committes.
 - Dokumentationsbillederne i `efter/` laves med:
   ```bash
   MIAI_SCREENSHOTS=$PWD/docs/ui/efter npx -w @miai/addin playwright test -c e2e/playwright.config.ts screenshots
