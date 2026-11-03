@@ -1,5 +1,5 @@
-import type { HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest } from "@miai/shared";
-import type { Backend } from "./types";
+import type { AuditEntry, HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
+import type { Backend, UserTaskInfo } from "./types";
 
 // Task pane serveres af bridgen, så API'et ligger på samme origin.
 const H = { "content-type": "application/json", "x-miai": "1" };
@@ -24,6 +24,22 @@ export class BridgeBackend implements Backend {
   }
   async saveSettings(settings: Settings, policy?: Policy) {
     await fetch("/api/settings", { method: "PUT", headers: H, body: JSON.stringify({ settings, policy }) }).then((r) => json(r));
+  }
+
+  tasks() {
+    return fetch("/api/tasks", { headers: H }).then((r) => json<TaskView[]>(r));
+  }
+  userTasks() {
+    return fetch("/api/user-tasks", { headers: H }).then((r) => json<UserTaskInfo[]>(r));
+  }
+  async saveUserTask(spec: UserTaskFile) {
+    await fetch(`/api/user-tasks/${encodeURIComponent(spec.id)}`, { method: "PUT", headers: H, body: JSON.stringify(spec) }).then((r) => json(r));
+  }
+  async deleteUserTask(id: string) {
+    await fetch(`/api/user-tasks/${encodeURIComponent(id)}`, { method: "DELETE", headers: H }).then((r) => json(r));
+  }
+  audit() {
+    return fetch("/api/audit", { headers: H }).then((r) => json<AuditEntry[]>(r));
   }
 
   async runTask(id: string, body: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void> {

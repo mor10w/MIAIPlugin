@@ -6,6 +6,7 @@ import { I18n, makeT, type Lang } from "../i18n";
 import { ActionsTab } from "./ActionsTab";
 import { ChatTab } from "./ChatTab";
 import { SettingsTab } from "./SettingsTab";
+import { TasksTab } from "./TasksTab";
 
 const useStyles = makeStyles({
   shell: { height: "100%", display: "flex", flexDirection: "column", background: tokens.colorNeutralBackground1 },
@@ -26,7 +27,7 @@ function isDarkOffice(): boolean {
 export function App({ adapter }: { adapter: HostAdapter }) {
   const s = useStyles();
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
-  const [tab, setTab] = useState<"actions" | "chat" | "settings">("actions");
+  const [tab, setTab] = useState<"actions" | "tasks" | "chat" | "settings">("actions");
   const [status, setStatus] = useState<Status>({ kind: "warn" });
   const i18n = useMemo(() => ({ lang, t: makeT(lang) }), [lang]);
   const { t } = i18n;
@@ -66,11 +67,13 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         </div>
         <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as typeof tab)} size="small">
           <Tab value="actions">{t("tabActions")}</Tab>
+          <Tab value="tasks">{t("tabTasks")}</Tab>
           <Tab value="chat">{t("tabChat")}</Tab>
           <Tab value="settings">{t("tabSettings")}</Tab>
         </TabList>
         <div className={s.body}>
           {tab === "actions" && <ActionsTab adapter={adapter} />}
+          {tab === "tasks" && <TasksTab />}
           {tab === "chat" && <ChatTab adapter={adapter} />}
           {tab === "settings" && <SettingsTab onLanguage={setLang} />}
         </div>

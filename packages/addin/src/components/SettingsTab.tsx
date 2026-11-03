@@ -17,7 +17,7 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import type { Endpoint, Policy, Settings, StructuredOutputMode } from "@miai/shared";
+import type { AuditEntry, Endpoint, Policy, Settings, StructuredOutputMode } from "@miai/shared";
 import { corsHint, useBackend } from "../backend";
 import { useI18n } from "../i18n";
 
@@ -45,6 +45,9 @@ const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
+  logCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
+  logWrap: { overflowX: "auto", maxHeight: "320px", overflowY: "auto" },
+  logTable: { borderCollapse: "collapse", fontSize: tokens.fontSizeBase200, width: "100%", "& td, & th": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap", textAlign: "left" } },
 });
 
 function uniqueId(base: string, taken: string[]): string {
@@ -54,7 +57,7 @@ function uniqueId(base: string, taken: string[]): string {
 }
 
 export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const s = useStyles();
   const api = useBackend();
   const [settings, setSettings] = useState<Settings>();
@@ -65,6 +68,20 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
   const [msg, setMsg] = useState<{ intent: "success" | "error" | "info"; text: string }>();
   const [testing, setTesting] = useState(false);
   const [preset, setPreset] = useState(PRESETS[1].id);
+  const [showAudit, setShowAudit] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>();
+
+  /** Henter loggen, når visningen åbnes. Posterne vises nyeste først. */
+  const toggleAudit = async () => {
+    if (showAudit) return setShowAudit(false);
+    try {
+      const entries = await api.audit();
+      setAuditEntries([...entries].reverse());
+      setShowAudit(true);
+    } catch (e) {
+      setMsg({ intent: "error", text: (e as Error).message });
+    }
+  };
 
   useEffect(() => {
     api
@@ -227,6 +244,52 @@ export function SettingsTab({ onLanguage }: { onLanguage: (l: "da" | "en") => vo
         </Dropdown>
       </Field>
       <Switch label={t("auditLog")} checked={settings.auditLog} onChange={(_, d) => setSettings({ ...settings, auditLog: d.checked })} />
+      {api.mode === "bridge" && (
+        <Field label={t("customTasksDir")} hint={t("customTasksDirHint")}>
+          <Input value={settings.customTasksDir} onChange={(_, d) => setSettings({ ...settings, customTasksDir: d.value })} />
+        </Field>
+      )}
+      <div className={s.row}>
+        <Button onClick={() => void toggleAudit()}>{showAudit ? t("hideAudit") : t("viewAudit")}</Button>
+      </div>
+      {showAudit && (
+        <Card className={s.logCard}>
+          {!auditEntries ? (
+            <Spinner />
+          ) : auditEntries.length === 0 ? (
+            t("auditEmpty")
+          ) : (
+            <div className={s.logWrap}>
+              <table className={s.logTable}>
+                <thead>
+                  <tr>
+                    <th>{t("auditTime")}</th>
+                    <th>{t("auditTask")}</th>
+                    <th>host</th>
+                    <th>{t("model")}</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEntries.map((e, i) => (
+                    <tr key={i}>
+                      <td>{new Date(e.ts).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}</td>
+                      <td>{e.kind === "task" ? e.task : "models"}</td>
+                      <td>{e.host}</td>
+                      <td>{e.model ?? "—"}</td>
+                      <td>
+                        {e.status === "ok"
+                          ? `${t("statusOk")}${e.durationMs !== undefined ? ` · ${(Math.round(e.durationMs / 10) / 100).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}s` : ""}`
+                          : `${t("statusError")}${e.code ? ` (${e.code})` : ""}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
       <Field hint={t("webSearchHint")}>
         <Switch label={t("webSearch")} checked={settings.webSearch} onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })} />
       </Field>

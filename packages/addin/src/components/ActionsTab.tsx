@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Button,
   Caption1,
@@ -14,9 +14,10 @@ import {
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
-import { diagramToSvg, parseTsv, stripEmphasis, tasksForHost, textFormat, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskDefinition } from "@miai/shared";
+import { diagramToSvg, formatForView, parseTsv, stripEmphasis, type ApplyMode, type DiagramResult, type DocContext, type FormulaResult, type GrammarResult, type SlidesResult, type TaskView } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { extractGraphic } from "../svg";
+import { useBackend } from "../backend";
 import { useI18n } from "../i18n";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
@@ -45,7 +46,12 @@ const useStyles = makeStyles({
 export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const { t, lang } = useI18n();
   const s = useStyles();
-  const tasks = useMemo(() => tasksForHost(adapter.host), [adapter.host]);
+  const api = useBackend();
+  // Det samlede katalog (indbygget + brugerdefineret, F14) filtreres på den aktive app.
+  const [tasks, setTasks] = useState<TaskView[]>([]);
+  useEffect(() => {
+    api.tasks().then((all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host))), () => {});
+  }, [api, adapter.host]);
   const [taskId, setTaskId] = useState<string>();
   const task = tasks.find((x) => x.id === taskId);
   const [params, setParams] = useState<Record<string, string>>({});
@@ -53,7 +59,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const ctxRef = useRef<DocContext | null>(null);
   const { state, start, stop, reset } = useTask();
 
-  const select = (tk: TaskDefinition) => {
+  const select = (tk: TaskView) => {
     setTaskId(tk.id);
     setParams(Object.fromEntries(tk.params.filter((p) => p.default).map((p) => [p.name, p.default!])));
     setInputError(undefined);
@@ -73,7 +79,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   };
 
   // Det faktiske format afhænger af konteksten (fx TSV ved oversættelse af et Excel-område).
-  const format = task && ctxRef.current ? textFormat(task, ctxRef.current) : undefined;
+  const format = task && ctxRef.current ? formatForView(task, ctxRef.current) : undefined;
   const supported: ApplyMode[] = task ? task.applyModes.filter((m) => adapter.supports(m)) : [];
 
   // Ren tekst: fjern Markdown-fremhævning, som små modeller ofte tilføjer.
@@ -171,7 +177,7 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   );
 }
 
-function ResultView({ task, format, text, result }: { task: TaskDefinition; format?: string; text: string; result: unknown }) {
+function ResultView({ task, format, text, result }: { task: TaskView; format?: string; text: string; result: unknown }) {
   const s = useStyles();
   const { t } = useI18n();
   if (format === "tsv") return <TsvPreview text={text} />;

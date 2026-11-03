@@ -9,21 +9,35 @@ import {
   executeTask,
   getTask,
   isUrlAllowed,
+  MAX_LOCAL_AUDIT_ENTRIES,
   Policy,
   Settings,
+  TASKS,
   TaskRequest,
+  toTaskDefinition,
+  toTaskView,
+  UserTaskFile as UserTaskSchema,
   validateInput,
+  AuditEntry as AuditSchema,
+  type AuditEntry,
   type ClientOptions,
   type HealthInfo,
   type ModelInfo,
   type SettingsView,
+  type TaskDefinition,
   type TaskEvent,
+  type TaskView,
+  type UserTaskFile,
 } from "@miai/shared";
-import type { Backend } from "./types";
+import type { Backend, UserTaskInfo } from "./types";
 
 const VERSION = "0.1.0";
 const KEY_SETTINGS = "miai.settings.v1";
 const KEY_POLICY = "miai.policy.v1";
+/** Brugerdefinerede opgaver (F14): browseren kan ikke læse mapper, så filerne gemmes i localStorage. */
+const KEY_USER_TASKS = "miai.userTasks.v1";
+/** Audit-loggen som ringbuffer (kun metadata). */
+const KEY_AUDIT = "miai.audit.v1";
 
 /**
  * localStorage pr. add-in-origin. Kan være utilgængelig eller blive ryddet (fx privat tilstand,
@@ -95,8 +109,16 @@ export class DirectBackend implements Backend {
     const s = this.settingsNow;
     const ep = s.endpoints.find((e) => e.id === (endpointId ?? s.activeEndpoint)) ?? activeEndpoint(s);
     if (!isUrlAllowed(ep.baseUrl, this.policyNow)) throw new Error("Endpoint er ikke tilladt af politikken.");
-    const models = await cachedModels(ep, timeout(5_000), this.client);
-    return models.map((id) => ({ id, endpoint: ep.id }));
+    const host = epHost(ep.baseUrl);
+    const started = Date.now();
+    try {
+      const models = await cachedModels(ep, timeout(5_000), this.client);
+      this.pushAudit({ ts: new Date().toISOString(), kind: "models", host, status: "ok", durationMs: Date.now() - started });
+      return models.map((id) => ({ id, endpoint: ep.id }));
+    } catch (err) {
+      this.pushAudit({ ts: new Date().toISOString(), kind: "models", host, status: "error" });
+      throw err;
+    }
   }
 
   async settings(): Promise<SettingsView> {
@@ -114,18 +136,112 @@ export class DirectBackend implements Backend {
     clearModelCache();
   }
 
+  async tasks(): Promise<TaskView[]> {
+    const views = TASKS.map((t) => toTaskView(t));
+    for (const c of this.loadCustom()) views.push(toTaskView(toTaskDefinition(c.spec), true));
+    return views;
+  }
+
+  async userTasks(): Promise<UserTaskInfo[]> {
+    return this.loadCustom();
+  }
+
+  async saveUserTask(spec: UserTaskFile): Promise<void> {
+    const parsed = UserTaskSchema.parse(spec);
+    // I direkte tilstand er der ingen maskin-mappe, så kollision med en indbygget id
+    // kan ikke overstyres – brugeren skal vælge et andet id. (Bridgen tillader det.)
+    if (getTask(parsed.id)) throw new Error(`Id'en '${parsed.id}' er reserveret af en indbygget opgave.`);
+    const all = this.loadCustom().map((c) => c.spec);
+    const i = all.findIndex((x) => x.id === parsed.id);
+    if (i >= 0) all[i] = parsed;
+    else all.push(parsed);
+    store.set(KEY_USER_TASKS, JSON.stringify(all));
+  }
+
+  async deleteUserTask(id: string): Promise<void> {
+    const all = this.loadCustom().map((c) => c.spec);
+    const rest = all.filter((x) => x.id !== id);
+    if (rest.length === all.length) throw new Error("Opgaven findes ikke.");
+    store.set(KEY_USER_TASKS, JSON.stringify(rest));
+  }
+
+  async audit(): Promise<AuditEntry[]> {
+    return this.loadAudit();
+  }
+
+  /** Indbygget opgave, evt. suppleret med brugerdefinerede fra localStorage. */
+  private resolveTask(id: string): TaskDefinition | undefined {
+    const builtin = getTask(id);
+    if (builtin) return builtin;
+    const spec = this.loadCustom().find((c) => c.spec.id === id)?.spec;
+    return spec ? toTaskDefinition(spec) : undefined;
+  }
+
+  private loadCustom(): UserTaskInfo[] {
+    const out: UserTaskInfo[] = [];
+    for (const s of load(KEY_USER_TASKS, (r) => (Array.isArray(r) ? r : []), () => [])) {
+      const p = UserTaskSchema.safeParse(s);
+      if (p.success) out.push({ spec: p.data, source: "user" });
+    }
+    return out;
+  }
+
+  private loadAudit(): AuditEntry[] {
+    const out: AuditEntry[] = [];
+    for (const e of load(KEY_AUDIT, (r) => (Array.isArray(r) ? r : []), () => [])) {
+      const p = AuditSchema.safeParse(e);
+      if (p.success) out.push(p.data);
+    }
+    return out;
+  }
+
+  /** Append til ringbufferen. Skriver intet, hvis audit-loggen er slået fra. */
+  private pushAudit(entry: AuditEntry): void {
+    if (!this.settingsNow.auditLog) return;
+    const all = [...this.loadAudit(), entry].slice(-MAX_LOCAL_AUDIT_ENTRIES);
+    store.set(KEY_AUDIT, JSON.stringify(all));
+  }
+
   async runTask(id: string, body: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void> {
-    const task = getTask(id);
+    const task = this.resolveTask(id);
     if (!task) throw new Error(`Ukendt opgave '${id}'`);
     const req = TaskRequest.parse(body);
     validateInput(task, req);
     const settings = this.settingsNow;
+    const ep = activeEndpoint(settings);
     try {
-      await executeTask(task, req, { settings, endpoint: activeEndpoint(settings), policy: this.policyNow, emit: onEvent, signal, client: this.client });
+      const summary = await executeTask(task, req, { settings, endpoint: ep, policy: this.policyNow, emit: onEvent, signal, client: this.client });
+      if (settings.auditLog) {
+        this.pushAudit({
+          ts: new Date().toISOString(),
+          kind: "task",
+          task: id,
+          host: epHost(ep.baseUrl),
+          model: summary.model,
+          status: "ok",
+          durationMs: summary.durationMs,
+          inputChars: summary.inputChars,
+          outputChars: summary.output.length,
+          promptTokens: summary.usage?.promptTokens,
+          completionTokens: summary.usage?.completionTokens,
+        });
+      }
     } catch (err) {
-      if (!signal.aborted) onEvent(errorEvent(err));
-      else throw err;
+      if (!signal.aborted) {
+        const e = errorEvent(err);
+        onEvent(e);
+        if (settings.auditLog && e.type === "error") this.pushAudit({ ts: new Date().toISOString(), kind: "task", task: id, host: epHost(ep.baseUrl), status: "error", code: e.code });
+      } else throw err;
     }
+  }
+}
+
+/** Host inkl. port ud fra basis-URL'en – uden at bryde kørslen ved ulæselig URL. */
+function epHost(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).host;
+  } catch {
+    return baseUrl;
   }
 }
 

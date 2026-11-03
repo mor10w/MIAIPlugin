@@ -1,4 +1,4 @@
-import type { HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest } from "@miai/shared";
+import type { AuditEntry, HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, TaskRequest, TaskView, UserTaskFile } from "@miai/shared";
 
 /**
  * Hvordan add-in'et når modellen (ADR-0007):
@@ -7,12 +7,26 @@ import type { HealthInfo, ModelInfo, Policy, Settings, SettingsView, TaskEvent, 
  */
 export type BackendMode = "direct" | "bridge";
 
+/** Brugerdefineret opgave (F14) og dens oprindelse. */
+export interface UserTaskInfo {
+  spec: UserTaskFile;
+  /** user = brugers mappe (redigerbar); machine = organisationen (read-only). */
+  source: "user" | "machine";
+}
+
 export interface Backend {
   readonly mode: BackendMode;
   health(): Promise<HealthInfo>;
   models(endpointId?: string): Promise<ModelInfo[]>;
   settings(): Promise<SettingsView>;
   saveSettings(settings: Settings, policy?: Policy): Promise<void>;
+  /** Det samlede opgavekatalog (indbygget + brugerdefineret); UI'et filtrerer på host. */
+  tasks(): Promise<TaskView[]>;
+  userTasks(): Promise<UserTaskInfo[]>;
+  saveUserTask(spec: UserTaskFile): Promise<void>;
+  deleteUserTask(id: string): Promise<void>;
+  /** Seneste audit-logposter (kun metadata). */
+  audit(): Promise<AuditEntry[]>;
   /** Kører en opgave; kalder onEvent for hver hændelse. Kaster kun ved transportfejl. */
   runTask(id: string, req: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void>;
 }

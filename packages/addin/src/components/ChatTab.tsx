@@ -17,6 +17,7 @@ const useStyles = makeStyles({
   input: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
   grow: { flex: 1 },
   footer: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  footerRight: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" },
 });
 
 export function ChatTab({ adapter }: { adapter: HostAdapter }) {
@@ -25,6 +26,8 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
+  /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
+  const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
   const ctxRef = useRef<DocContext>({ host: adapter.host, text: "", isWholeDocument: false });
   const { state, start, stop } = useTask();
   const logRef = useRef<HTMLDivElement>(null);
@@ -41,6 +44,7 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
     setMessages([...history, { role: "user", content: prompt }]);
     const ctx = useContext ? await adapter.getContext({ wholeDocumentFallback: true }).catch(() => ctxRef.current) : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
+    setLastCtx(useContext ? ctx : null);
     const final = await start("chat", { context: ctx, params: { prompt }, history: history.slice(-20) });
     if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text }]);
   };
@@ -106,9 +110,12 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
       </div>
       <div className={s.footer}>
         <Checkbox label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(!!d.checked)} />
-        <Button size="small" appearance="subtle" onClick={() => setMessages([])}>
-          {t("newChat")}
-        </Button>
+        <div className={s.footerRight}>
+          {lastCtx?.address && useContext ? <Caption1>{t("contextSent")} {lastCtx.address}</Caption1> : null}
+          <Button size="small" appearance="subtle" onClick={() => { setMessages([]); setLastCtx(null); }}>
+            {t("newChat")}
+          </Button>
+        </div>
       </div>
       {state.model && <Caption1>{state.model}</Caption1>}
     </div>
