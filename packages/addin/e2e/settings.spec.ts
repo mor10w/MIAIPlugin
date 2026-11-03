@@ -7,6 +7,7 @@ test("model pr. opgave (#13): valgt model bruges kun til den opgave", async ({ o
   tp.model.reply = () => ({ stream: chunks("Kort tekst.") });
 
   await tp.tab("Indstillinger");
+  await tp.section("Modeller");
   await tp.page.getByRole("button", { name: /Model pr\. opgave/ }).click();
   await tp.page.getByRole("combobox", { name: "Forenkl" }).click();
   await tp.page.getByRole("option", { name: "qwen3:32b" }).click();
@@ -27,6 +28,7 @@ test("model pr. opgave (#13): valgt model bruges kun til den opgave", async ({ o
 test("model pr. opgave: advarsel, når modellen ikke findes på endpointen", async ({ open }) => {
   const tp = await open({ host: "Word", settings: { taskModels: { simplify: "fjernet-model" } } });
   await tp.tab("Indstillinger");
-  // Sektionen er åben, når der er valg.
+  await tp.section("Modeller");
+  // Listen over model pr. opgave er åben, når der er valg.
   await expect(tp.page.getByText(/Modellen findes ikke på den aktive endpoint/)).toBeVisible();
 });

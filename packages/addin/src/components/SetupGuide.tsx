@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     flexDirection: "column",
     gap: tokens.spacingVerticalXS,
     paddingTop: tokens.spacingVerticalS,
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
+    borderTop: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
   },
   row: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, flexWrap: "wrap" },
   code: {
@@ -24,7 +24,7 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200,
     background: tokens.colorNeutralBackground3,
     borderRadius: tokens.borderRadiusMedium,
-    padding: `2px ${tokens.spacingHorizontalXS}`,
+    padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
     overflowWrap: "anywhere",
   },
   grow: { flex: 1 },

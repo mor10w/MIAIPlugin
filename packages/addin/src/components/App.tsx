@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Badge,
   Button,
   Caption1,
   FluentProvider,
@@ -13,40 +12,77 @@ import {
   Text,
   Tooltip,
   makeStyles,
+  mergeClasses,
   tokens,
-  webDarkTheme,
-  webLightTheme,
 } from "@fluentui/react-components";
+import { Chat20Regular, Flash20Regular, PuzzlePiece20Regular, Settings20Regular, type FluentIcon } from "@fluentui/react-icons";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
+import { statusColors, ui, useOfficeTheme } from "../theme";
 import { ActionsTab } from "./ActionsTab";
 import { ChatTab } from "./ChatTab";
+import { useKitStyles } from "./kit";
 import { SettingsTab } from "./SettingsTab";
 import { TasksTab } from "./TasksTab";
 
 const useStyles = makeStyles({
-  shell: { height: "100%", display: "flex", flexDirection: "column", background: tokens.colorNeutralBackground1 },
-  header: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}` },
-  body: { flex: 1, overflowY: "auto", padding: tokens.spacingHorizontalM },
+  shell: { height: "100%", display: "flex", flexDirection: "column", backgroundColor: tokens.colorNeutralBackground2, color: tokens.colorNeutralForeground1 },
+  top: { backgroundColor: tokens.colorNeutralBackground1, borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}` },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: tokens.spacingHorizontalS,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM} 0`,
+  },
+  brand: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, minWidth: 0 },
+  brandText: { display: "flex", flexDirection: "column", lineHeight: tokens.lineHeightBase200 },
+  mode: { color: tokens.colorNeutralForeground3 },
+  status: { display: "inline-flex", alignItems: "center", gap: tokens.spacingHorizontalXS, color: tokens.colorNeutralForeground2, minWidth: 0 },
+  dot: { width: ui.dot, height: ui.dot, borderRadius: tokens.borderRadiusCircular, flexShrink: 0 },
+  tabs: { padding: `0 ${tokens.spacingHorizontalXS}` },
+  /**
+   * Smalt panel: kun den valgte fane viser tekst, de andre kun ikon (navnet står i aria-label og
+   * tooltip). Allersmallest vises kun ikoner.
+   */
+  tabTextOther: { [ui.mqNarrow]: { display: "none" } },
+  tabTextSelected: { [ui.mqTiny]: { display: "none" } },
+  body: { flex: 1, overflowY: "auto", overflowX: "hidden", padding: tokens.spacingHorizontalM, minWidth: 0 },
   banner: { marginBottom: tokens.spacingVerticalM },
 });
 
 /** token = bridgen afviser, fordi adgangstokenet mangler (gammelt manifest, #11). */
 type Status = { kind: "ok" | "warn" | "down"; detail?: string; token?: boolean };
+type TabId = "actions" | "tasks" | "chat" | "settings";
 
-function isDarkOffice(): boolean {
-  const bg = Office.context.officeTheme?.bodyBackgroundColor;
-  if (!bg || !/^#?[0-9a-f]{6}$/i.test(bg)) return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-  const n = parseInt(bg.replace("#", ""), 16);
-  const lum = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
-  return lum < 128;
+/** MIAI's mærke: en firtakket gnist i et afrundet felt i brandfarven (kun tokens – følger temaet). */
+function LogoMark() {
+  return (
+    <svg width={ui.iconTile} height={ui.iconTile} viewBox="0 0 32 32" aria-hidden focusable="false">
+      <rect width="32" height="32" rx="9" style={{ fill: tokens.colorBrandBackground }} />
+      <path
+        d="M16 6c.7 4.6 2.4 7.3 7.7 8.6.6.2.6 1 0 1.2-5.3 1.3-7 4-7.7 8.6-.1.7-1 .7-1.1 0-.7-4.6-2.4-7.3-7.7-8.6-.6-.2-.6-1 0-1.2 5.3-1.3 7-4 7.7-8.6.1-.7 1-.7 1.1 0Z"
+        style={{ fill: tokens.colorNeutralForegroundOnBrand }}
+      />
+      <circle cx="24" cy="8.5" r="1.8" style={{ fill: tokens.colorNeutralForegroundOnBrand, opacity: 0.85 }} />
+    </svg>
+  );
 }
+
+const TABS: { id: TabId; icon: FluentIcon; label: "tabActions" | "tabTasks" | "tabChat" | "tabSettings" }[] = [
+  { id: "actions", icon: Flash20Regular, label: "tabActions" },
+  { id: "tasks", icon: PuzzlePiece20Regular, label: "tabTasks" },
+  { id: "chat", icon: Chat20Regular, label: "tabChat" },
+  { id: "settings", icon: Settings20Regular, label: "tabSettings" },
+];
 
 export function App({ adapter }: { adapter: HostAdapter }) {
   const s = useStyles();
+  const kit = useKitStyles();
+  const theme = useOfficeTheme();
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
-  const [tab, setTab] = useState<"actions" | "tasks" | "chat" | "settings">("actions");
+  const [tab, setTab] = useState<TabId>("actions");
   const [status, setStatus] = useState<Status>({ kind: "warn" });
   /** Først når første statustjek er færdigt, vises "Kom i gang" (ellers blinker banneret ved start). */
   const [checked, setChecked] = useState(false);
@@ -76,38 +112,54 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     return () => clearInterval(id);
   }, [api, check]);
 
-  const badge = {
-    ok: { color: "success", text: t("connected") },
-    warn: { color: "warning", text: t("notConnected") },
-    down: { color: "danger", text: t("bridgeDown") },
-  }[status.kind] as {
-    color: "success" | "warning" | "danger";
-    text: string;
-  };
+  const statusText = { ok: t("connected"), warn: t("notConnected"), down: t("bridgeDown") }[status.kind];
 
   return (
     <I18n.Provider value={i18n}>
       {/* Bemærk: FluentProvider kopierer sin className til portaler (tooltips m.m.), så layout skal ligge på en indre div. */}
-      <FluentProvider theme={isDarkOffice() ? webDarkTheme : webLightTheme} style={{ height: "100%" }}>
+      <FluentProvider theme={theme} style={{ height: "100%" }}>
         <div className={s.shell}>
-          <div className={s.header}>
-            <Text weight="semibold">
-              MIAI <Caption1>· {api.mode === "bridge" ? "bridge" : t("modeDirect")}</Caption1>
-            </Text>
-            <Tooltip content={status.detail ?? badge.text} relationship="description">
-              <Badge appearance="tint" color={badge.color}>
-                {badge.text}
-              </Badge>
-            </Tooltip>
+          <div className={s.top}>
+            <header className={s.header}>
+              <div className={s.brand}>
+                <LogoMark />
+                <div className={s.brandText}>
+                  <Text weight="semibold">MIAI</Text>
+                  <Caption1 className={s.mode}>{api.mode === "bridge" ? t("modeBridge") : t("modeDirect")}</Caption1>
+                </div>
+              </div>
+              <Tooltip content={status.detail ?? statusText} relationship="description">
+                <Button
+                  appearance="transparent"
+                  size="small"
+                  className={s.status}
+                  onClick={() => status.kind !== "ok" && setTab("settings")}
+                  aria-label={`${t("statusLabel")}: ${statusText}`}
+                >
+                  <span className={s.dot} style={{ backgroundColor: statusColors[status.kind] }} aria-hidden />
+                  <Caption1>{statusText}</Caption1>
+                </Button>
+              </Tooltip>
+            </header>
+            <TabList className={s.tabs} selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as TabId)} size="small">
+              {TABS.map(({ id, icon: Icon, label }) => {
+                const item = (
+                  <Tab key={id} value={id} icon={<Icon />} aria-label={t(label)}>
+                    <span className={id === tab ? s.tabTextSelected : s.tabTextOther}>{t(label)}</span>
+                  </Tab>
+                );
+                // Den valgte fane viser selv sin tekst; de andre kan være ikon-only i et smalt panel.
+                return id === tab ? (
+                  item
+                ) : (
+                  <Tooltip key={id} content={t(label)} relationship="description" positioning="below">
+                    {item}
+                  </Tooltip>
+                );
+              })}
+            </TabList>
           </div>
-          <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value as typeof tab)} size="small">
-            <Tab value="actions">{t("tabActions")}</Tab>
-            <Tab value="tasks">{t("tabTasks")}</Tab>
-            <Tab value="chat">{t("tabChat")}</Tab>
-            <Tab value="settings">{t("tabSettings")}</Tab>
-          </TabList>
-          <div className={s.body}>
-            {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
+          <main className={s.body}>
             {status.token && (
               <MessageBar intent="error" className={s.banner}>
                 <MessageBarBody>
@@ -116,8 +168,9 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 </MessageBarBody>
               </MessageBar>
             )}
+            {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
             {checked && status.kind !== "ok" && !status.token && tab !== "settings" && (
-              <MessageBar intent="warning" className={s.banner}>
+              <MessageBar intent="warning" className={mergeClasses(s.banner, kit.appear)}>
                 <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
                 <MessageBarActions>
                   <Button size="small" appearance="primary" onClick={() => setTab("settings")}>
@@ -130,7 +183,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             {tab === "tasks" && <TasksTab />}
             {tab === "chat" && <ChatTab adapter={adapter} />}
             {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
-          </div>
+          </main>
         </div>
       </FluentProvider>
     </I18n.Provider>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Button, Caption1, Checkbox, Textarea, makeStyles, tokens } from "@fluentui/react-components";
-import { Send20Regular } from "@fluentui/react-icons";
+import { Button, Caption1, Switch, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
+import { ChatAdd20Regular, ChatSparkle20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
 import type { ApplyMode, ChatMessage, DocContext } from "@miai/shared";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
@@ -8,31 +8,67 @@ import { TaskNotices } from "./TaskNotices";
 import { extractGraphic } from "../svg";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
+import { EmptyState, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
 
 const useStyles = makeStyles({
-  root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS },
-  log: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
+  root: { display: "flex", flexDirection: "column", height: "100%", gap: tokens.spacingVerticalS, minHeight: 0 },
+  log: {
+    flex: 1,
+    overflowY: "auto",
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalM,
+    minHeight: 0,
+    paddingBottom: tokens.spacingVerticalS,
+  },
   user: {
     alignSelf: "flex-end",
-    background: tokens.colorBrandBackground2,
-    padding: tokens.spacingHorizontalS,
-    borderRadius: tokens.borderRadiusMedium,
-    maxWidth: "90%",
+    maxWidth: "88%",
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    borderRadius: `${tokens.borderRadiusXLarge} ${tokens.borderRadiusXLarge} ${tokens.borderRadiusSmall} ${tokens.borderRadiusXLarge}`,
+    backgroundColor: tokens.colorBrandBackground,
+    color: tokens.colorNeutralForegroundOnBrand,
     whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
   },
-  bot: { background: tokens.colorNeutralBackground2, padding: tokens.spacingHorizontalS, borderRadius: tokens.borderRadiusMedium },
-  searching: { fontSize: tokens.fontSizeBase200, color: tokens.colorBrandForeground1, marginBottom: tokens.spacingVerticalXS },
-  input: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
-  grow: { flex: 1 },
-  footer: { display: "flex", justifyContent: "space-between", alignItems: "center" },
-  footerRight: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" },
+  bot: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
+    padding: tokens.spacingHorizontalM,
+    borderRadius: `${tokens.borderRadiusXLarge} ${tokens.borderRadiusXLarge} ${tokens.borderRadiusXLarge} ${tokens.borderRadiusSmall}`,
+    backgroundColor: tokens.colorNeutralBackground1,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    boxShadow: tokens.shadow2,
+  },
+  botHead: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, color: tokens.colorNeutralForeground3 },
+  searching: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalXS, color: tokens.colorBrandForeground1 },
+  suggestions: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS, width: "100%" },
+  suggestion: { justifyContent: "flex-start", textAlign: "left", fontWeight: tokens.fontWeightRegular },
+  composer: {
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalXS,
+    padding: tokens.spacingHorizontalS,
+    borderRadius: tokens.borderRadiusXLarge,
+    backgroundColor: tokens.colorNeutralBackground1,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke1}`,
+    boxShadow: tokens.shadow4,
+    ":focus-within": { border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandStroke1}` },
+  },
+  inputRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
+  grow: { flex: 1, minWidth: 0 },
+  footer: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS },
+  switch: { flex: 1, minWidth: 0 },
+  muted: { color: tokens.colorNeutralForeground3 },
 });
 
 export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const { t } = useI18n();
   const s = useStyles();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const kit = useKitStyles();
+  const [messages, setMessages] = useState<(ChatMessage & { model?: string })[]>([]);
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
   /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
@@ -40,24 +76,25 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const ctxRef = useRef<DocContext>({ host: adapter.host, text: "", isWholeDocument: false });
   const { state, start, stop } = useTask();
   const logRef = useRef<HTMLDivElement>(null);
+  const running = state.status === "running";
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [messages, state.text]);
 
-  const send = async () => {
-    const prompt = draft.trim();
-    if (!prompt || state.status === "running") return;
+  const send = async (text = draft) => {
+    const prompt = text.trim();
+    if (!prompt || running) return;
     setDraft("");
-    const history = messages;
-    setMessages([...history, { role: "user", content: prompt }]);
+    const history = messages.map(({ role, content }) => ({ role, content }));
+    setMessages([...messages, { role: "user", content: prompt }]);
     const ctx = useContext
       ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
       : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
     setLastCtx(useContext ? ctx : null);
     const final = await start("chat", { context: ctx, params: { prompt }, history: history.slice(-20) });
-    if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text }]);
+    if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text, model: final.model }]);
   };
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));
@@ -65,18 +102,45 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
   const modesFor = (content: string): ApplyMode[] => (adapter.supports("image") && extractGraphic(content) ? ["image", ...modes] : modes);
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
 
+  const suggestions =
+    adapter.host === "excel"
+      ? [t("suggestExcel1"), t("suggestExcel2"), t("suggestExcel3")]
+      : adapter.host === "powerpoint"
+        ? [t("suggestPpt1"), t("suggestPpt2"), t("suggestPpt3")]
+        : [t("suggestWord1"), t("suggestWord2"), t("suggestWord3")];
+
   return (
     <div className={s.root}>
-      <div className={s.log} ref={logRef}>
+      <div className={s.log} ref={logRef} role="log" aria-live="polite">
+        {messages.length === 0 && !running && (
+          <EmptyState
+            icon={ChatSparkle20Regular}
+            title={t("chatEmptyTitle")}
+            text={t("chatEmptyText")}
+            action={
+              <div className={s.suggestions}>
+                {suggestions.map((q) => (
+                  <Button key={q} appearance="secondary" className={s.suggestion} onClick={() => void send(q)}>
+                    {q}
+                  </Button>
+                ))}
+              </div>
+            }
+          />
+        )}
         {messages.map((m, i) =>
           m.role === "user" ? (
-            <div key={i} className={s.user}>
+            <div key={i} className={mergeClasses(s.user, kit.appear)}>
               {m.content}
             </div>
           ) : (
-            <div key={i} className={s.bot}>
+            <div key={i} className={mergeClasses(s.bot, kit.appear)}>
+              <div className={s.botHead}>
+                <Sparkle16Regular aria-hidden />
+                <Caption1>{m.model ?? "MIAI"}</Caption1>
+              </div>
               <Markdown text={m.content} />
-              {i === lastAssistant && state.status !== "running" && (
+              {i === lastAssistant && !running && (
                 <ApplyBar
                   modes={modesFor(m.content)}
                   apply={(mode) =>
@@ -88,59 +152,69 @@ export function ChatTab({ adapter }: { adapter: HostAdapter }) {
             </div>
           ),
         )}
-        {state.status === "running" && (
-          <div className={s.bot}>
+        {running && (
+          <div className={mergeClasses(s.bot, kit.appear)}>
+            <div className={s.botHead}>
+              <Sparkle16Regular aria-hidden />
+              <Caption1>{state.model ?? "MIAI"}</Caption1>
+            </div>
             {state.searchQuery && (
-              <div className={s.searching}>
+              <Caption1 className={s.searching}>
+                <Globe16Regular aria-hidden />
                 {t("searching")}: {state.searchQuery}…
-              </div>
+              </Caption1>
             )}
-            <Markdown text={state.text || (state.searchQuery ? " " : "…")} />
+            {state.text ? <Markdown text={state.text} /> : <TextSkeleton lines={2} label={t("working")} />}
           </div>
         )}
         <TaskNotices state={state} ctx={lastCtx} />
       </div>
-      <div className={s.input}>
-        <Textarea
-          className={s.grow}
-          resize="vertical"
-          placeholder={t("chatPlaceholder")}
-          value={draft}
-          onChange={(_, d) => setDraft(d.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
-            }
-          }}
-        />
-        {state.status === "running" ? (
-          <Button onClick={stop}>{t("stop")}</Button>
-        ) : (
-          <Button appearance="primary" icon={<Send20Regular />} onClick={send} aria-label={t("send")} />
-        )}
-      </div>
-      <div className={s.footer}>
-        <Checkbox label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(!!d.checked)} />
-        <div className={s.footerRight}>
+
+      <div className={s.composer}>
+        <div className={s.inputRow}>
+          <Textarea
+            className={s.grow}
+            appearance="filled-lighter"
+            resize="vertical"
+            placeholder={t("chatPlaceholder")}
+            aria-label={t("chatPlaceholder")}
+            value={draft}
+            onChange={(_, d) => setDraft(d.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+          />
+          {running ? (
+            <Button icon={<Stop20Regular />} onClick={stop} aria-label={t("stop")} />
+          ) : (
+            <Button appearance="primary" icon={<Send20Filled />} onClick={() => void send()} aria-label={t("send")} disabled={!draft.trim()} />
+          )}
+        </div>
+        <div className={s.footer}>
+          <Switch className={s.switch} label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(d.checked)} />
           {lastCtx?.address && useContext ? (
-            <Caption1>
+            <Caption1 className={s.muted}>
               {t("contextSent")} {lastCtx.address}
             </Caption1>
           ) : null}
-          <Button
-            size="small"
-            appearance="subtle"
-            onClick={() => {
-              setMessages([]);
-              setLastCtx(null);
-            }}
-          >
-            {t("newChat")}
-          </Button>
+          {messages.length > 0 && (
+            <Tooltip content={t("newChat")} relationship="label">
+              <Button
+                size="small"
+                appearance="subtle"
+                icon={<ChatAdd20Regular />}
+                onClick={() => {
+                  setMessages([]);
+                  setLastCtx(null);
+                }}
+              />
+            </Tooltip>
+          )}
         </div>
       </div>
-      {state.model && <Caption1>{state.model}</Caption1>}
     </div>
   );
 }

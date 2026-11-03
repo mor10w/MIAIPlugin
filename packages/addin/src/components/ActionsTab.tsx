@@ -1,5 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { Button, Caption1, Card, Dropdown, Field, Option, Spinner, Text, Textarea, makeStyles, tokens } from "@fluentui/react-components";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Body1,
+  Button,
+  Caption1,
+  Card,
+  Divider,
+  Dropdown,
+  Field,
+  Option,
+  SearchBox,
+  Spinner,
+  Subtitle2,
+  Text,
+  Textarea,
+  makeStyles,
+  mergeClasses,
+  tokens,
+  useId,
+} from "@fluentui/react-components";
+import { ArrowLeft20Regular, ChevronRight20Regular, Play20Filled, SearchInfo20Regular, Stop20Regular } from "@fluentui/react-icons";
 import {
   diagramToSvg,
   formatForView,
@@ -18,35 +37,87 @@ import { extractGraphic } from "../svg";
 import { useBackend } from "../backend";
 import { MAX_CHUNKED_CHARS } from "../hosts/types";
 import { useI18n } from "../i18n";
+import { CATEGORY_ORDER, taskMeta } from "../taskMeta";
+import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
 import { ApplyBar } from "./ApplyBar";
+import { EmptyState, IconTile, SectionLabel, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
 
+/** Søgefeltet vises, når der er flere opgaver end dette. */
+const SEARCH_THRESHOLD = 8;
+
 const useStyles = makeStyles({
-  root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
-  grid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: tokens.spacingHorizontalS },
-  taskBtn: {
+  root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
+  list: { display: "flex", flexDirection: "column", padding: tokens.spacingVerticalXS, gap: 0 },
+  /**
+   * Hele rækken er klikbar via knappens ::after-lag ("stretched link"), men knappen indeholder kun
+   * titlen – så navnet svarer til den synlige etiket (WCAG 2.5.3), og beskrivelsen er en beskrivelse.
+   */
+  row: {
+    position: "relative",
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalM,
+    minWidth: 0,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
+    borderRadius: tokens.borderRadiusLarge,
+    cursor: "pointer",
+    ":hover": { backgroundColor: tokens.colorSubtleBackgroundHover },
+    ":active": { backgroundColor: tokens.colorSubtleBackgroundPressed },
+    ":focus-within": { outline: `${tokens.strokeWidthThick} solid ${tokens.colorStrokeFocus2}`, outlineOffset: `calc(-1 * ${tokens.strokeWidthThick})` },
+  },
+  rowText: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 },
+  rowButton: {
     justifyContent: "flex-start",
     textAlign: "left",
-    height: "auto",
-    minHeight: "36px",
-    whiteSpace: "normal",
-    overflowWrap: "anywhere",
-    hyphens: "auto",
     minWidth: 0,
+    height: "auto",
+    padding: 0,
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
+    ":hover": { color: tokens.colorNeutralForeground1 },
+    ":focus-visible": { outline: "none" },
+    "::after": { content: '""', position: "absolute", inset: 0, borderRadius: tokens.borderRadiusLarge },
   },
-  form: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
-  row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center" },
-  result: { padding: tokens.spacingHorizontalM },
-  edit: { padding: `${tokens.spacingVerticalXS} 0`, borderBottom: `1px solid ${tokens.colorNeutralStroke2}` },
+  rowDesc: {
+    color: tokens.colorNeutralForeground3,
+    overflow: "hidden",
+    display: "-webkit-box",
+    WebkitLineClamp: "2",
+    WebkitBoxOrient: "vertical",
+  },
+  chevron: { color: tokens.colorNeutralForeground3, flexShrink: 0 },
+  card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM, padding: tokens.spacingHorizontalM },
+  taskHead: { display: "flex", gap: tokens.spacingHorizontalM, alignItems: "flex-start" },
+  taskHeadText: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXXS, minWidth: 0 },
+  muted: { color: tokens.colorNeutralForeground3 },
+  back: { alignSelf: "flex-start" },
+  runRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
+  grow: { flex: 1 },
+  resultHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: tokens.spacingHorizontalS },
+  resultBody: {
+    maxHeight: ui.resultMaxHeight,
+    overflowY: "auto",
+    padding: tokens.spacingHorizontalM,
+    borderRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground2,
+    overflowWrap: "anywhere",
+  },
+  plain: { whiteSpace: "pre-wrap" },
+  edit: { padding: `${tokens.spacingVerticalXS} 0`, borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}` },
   del: { textDecoration: "line-through", color: tokens.colorPaletteRedForeground1 },
   ins: { color: tokens.colorPaletteGreenForeground1, fontWeight: tokens.fontWeightSemibold },
   tsvWrap: { overflowX: "auto" },
   tsv: {
     borderCollapse: "collapse",
     fontSize: tokens.fontSizeBase200,
-    "& td": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap" },
+    "& td": {
+      border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+      padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
+      whiteSpace: "nowrap",
+    },
   },
   diagram: { "& svg": { maxWidth: "100%", height: "auto", display: "block" } },
   mono: { fontFamily: tokens.fontFamilyMonospace, wordBreak: "break-all" },
@@ -55,18 +126,21 @@ const useStyles = makeStyles({
 export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const { t, lang } = useI18n();
   const s = useStyles();
+  const kit = useKitStyles();
+  const idBase = useId("action");
   const api = useBackend();
   // Det samlede katalog (indbygget + brugerdefineret, F14) filtreres på den aktive app.
-  const [tasks, setTasks] = useState<TaskView[]>([]);
+  const [tasks, setTasks] = useState<TaskView[]>();
   useEffect(() => {
     // Chat har sin egen fane og vises ikke som handling.
     api.tasks().then(
       (all) => setTasks(all.filter((x) => x.hosts.includes(adapter.host) && x.id !== "chat")),
-      () => {},
+      () => setTasks([]),
     );
   }, [api, adapter.host]);
   const [taskId, setTaskId] = useState<string>();
-  const task = tasks.find((x) => x.id === taskId);
+  const [query, setQuery] = useState("");
+  const task = tasks?.find((x) => x.id === taskId);
   const [params, setParams] = useState<Record<string, string>>({});
   const [inputError, setInputError] = useState<string>();
   const ctxRef = useRef<DocContext | null>(null);
@@ -75,6 +149,13 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const select = (tk: TaskView) => {
     setTaskId(tk.id);
     setParams(Object.fromEntries(tk.params.filter((p) => p.default).map((p) => [p.name, p.default!])));
+    setInputError(undefined);
+    reset();
+  };
+
+  const back = () => {
+    stop();
+    setTaskId(undefined);
     setInputError(undefined);
     reset();
   };
@@ -121,82 +202,145 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     throw new Error("Ukendt resultattype");
   };
 
-  return (
-    <div className={s.root}>
-      <div className={s.grid}>
-        {tasks.map((tk) => (
-          <Button
-            key={tk.id}
-            className={s.taskBtn}
-            appearance={tk.id === taskId ? "primary" : "secondary"}
-            onClick={() => select(tk)}
-            title={tk.description[lang]}
-          >
-            {tk.label[lang]}
-          </Button>
-        ))}
-      </div>
+  // --- Liste over handlinger, grupperet efter kategori ------------------------------------
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const visible = (tasks ?? []).filter((tk) => !q || `${tk.label[lang]} ${tk.description[lang]}`.toLowerCase().includes(q));
+    return CATEGORY_ORDER.map((cat) => ({ cat, items: visible.filter((tk) => taskMeta(tk).category === cat) })).filter((g) => g.items.length);
+  }, [tasks, query, lang]);
 
-      {task && (
-        <div className={s.form}>
-          <Caption1>{task.description[lang]}</Caption1>
-          {task.params
-            .filter((p) => p.name !== "language")
-            .map((p) =>
-              p.kind === "select" ? (
-                <Field key={p.name} label={p.label[lang]}>
-                  <Dropdown
-                    value={p.options?.find((o) => o.value === params[p.name])?.label[lang] ?? ""}
-                    selectedOptions={params[p.name] ? [params[p.name]] : []}
-                    onOptionSelect={(_, d) => setParams((x) => ({ ...x, [p.name]: d.optionValue ?? "" }))}
-                  >
-                    {p.options?.map((o) => (
-                      <Option key={o.value} value={o.value}>
-                        {o.label[lang]}
-                      </Option>
-                    ))}
-                  </Dropdown>
-                </Field>
-              ) : (
-                <Field key={p.name} label={p.label[lang]}>
-                  <Textarea
-                    resize="vertical"
-                    rows={3}
-                    placeholder={p.placeholder?.[lang]}
-                    value={params[p.name] ?? ""}
-                    onChange={(_, d) => setParams((x) => ({ ...x, [p.name]: d.value }))}
-                  />
-                </Field>
-              ),
-            )}
-          <div className={s.row}>
-            {state.status === "running" ? (
-              <>
-                <Button onClick={stop}>{t("stop")}</Button>
-                <Spinner size="tiny" label={task.output.kind === "json" ? t("generatingStructured", { chars: state.progressChars }) : t("working")} />
-              </>
-            ) : (
-              <Button appearance="primary" onClick={run}>
-                {t("run")}
-              </Button>
-            )}
-            {state.model && <Caption1>{state.model}</Caption1>}
+  if (!task) {
+    if (!tasks) return <Spinner size="small" label={t("loading")} />;
+    const categoryName: Record<TaskCategory, string> = { write: t("catWrite"), present: t("catPresent"), analyze: t("catAnalyze"), custom: t("catCustom") };
+    return (
+      <div className={mergeClasses(s.root, kit.appear)}>
+        {tasks.length > SEARCH_THRESHOLD && (
+          <SearchBox placeholder={t("searchActions")} aria-label={t("searchActions")} value={query} onChange={(_, d) => setQuery(d.value)} />
+        )}
+        {groups.map(({ cat, items }) => (
+          <section key={cat} aria-label={categoryName[cat]}>
+            <SectionLabel>{categoryName[cat]}</SectionLabel>
+            <Card className={s.list}>
+              {items.map((tk) => {
+                const meta = taskMeta(tk);
+                const descId = `${idBase}-${tk.id}-d`;
+                return (
+                  <div key={tk.id} className={s.row}>
+                    <IconTile icon={meta.icon} category={meta.category} />
+                    <span className={s.rowText}>
+                      <Button
+                        appearance="transparent"
+                        className={s.rowButton}
+                        onClick={() => select(tk)}
+                        aria-describedby={tk.description[lang] ? descId : undefined}
+                      >
+                        {tk.label[lang]}
+                      </Button>
+                      {tk.description[lang] && (
+                        <Caption1 id={descId} className={s.rowDesc}>
+                          {tk.description[lang]}
+                        </Caption1>
+                      )}
+                    </span>
+                    <ChevronRight20Regular className={s.chevron} aria-hidden />
+                  </div>
+                );
+              })}
+            </Card>
+          </section>
+        ))}
+        {groups.length === 0 && <EmptyState icon={SearchInfo20Regular} title={t("noActionsFound")} text={t("noActionsFoundHint")} />}
+      </div>
+    );
+  }
+
+  // --- En valgt handling: parametre → kør → resultat → indsæt -----------------------------
+  const meta = taskMeta(task);
+  const running = state.status === "running";
+  const hasResult = !!state.text || state.result !== undefined;
+  const showApply = state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length);
+
+  return (
+    <div className={mergeClasses(s.root, kit.appear)}>
+      <Button className={s.back} appearance="subtle" size="small" icon={<ArrowLeft20Regular />} onClick={back}>
+        {t("allActions")}
+      </Button>
+
+      <Card className={s.card}>
+        <div className={s.taskHead}>
+          <IconTile icon={meta.icon} category={meta.category} />
+          <div className={s.taskHeadText}>
+            <Subtitle2 as="h2">{task.label[lang]}</Subtitle2>
+            {task.description[lang] && <Body1 className={s.muted}>{task.description[lang]}</Body1>}
           </div>
         </div>
-      )}
+
+        {task.params
+          .filter((p) => p.name !== "language")
+          .map((p) =>
+            p.kind === "select" ? (
+              <Field key={p.name} label={p.label[lang]}>
+                <Dropdown
+                  value={p.options?.find((o) => o.value === params[p.name])?.label[lang] ?? ""}
+                  selectedOptions={params[p.name] ? [params[p.name]] : []}
+                  onOptionSelect={(_, d) => setParams((x) => ({ ...x, [p.name]: d.optionValue ?? "" }))}
+                >
+                  {p.options?.map((o) => (
+                    <Option key={o.value} value={o.value}>
+                      {o.label[lang]}
+                    </Option>
+                  ))}
+                </Dropdown>
+              </Field>
+            ) : (
+              <Field key={p.name} label={p.label[lang]}>
+                <Textarea
+                  resize="vertical"
+                  rows={3}
+                  placeholder={p.placeholder?.[lang]}
+                  value={params[p.name] ?? ""}
+                  onChange={(_, d) => setParams((x) => ({ ...x, [p.name]: d.value }))}
+                />
+              </Field>
+            ),
+          )}
+
+        <div className={s.runRow}>
+          {running ? (
+            <Button icon={<Stop20Regular />} onClick={stop}>
+              {t("stop")}
+            </Button>
+          ) : (
+            <Button appearance="primary" icon={<Play20Filled />} onClick={() => void run()}>
+              {t("run")}
+            </Button>
+          )}
+          <span className={s.grow} />
+          {state.model && <Caption1 className={s.muted}>{state.model}</Caption1>}
+        </div>
+      </Card>
 
       <TaskNotices state={state} ctx={ctxRef.current} inputError={inputError} />
 
-      {task && (state.text || state.result !== undefined) && (
-        <Card className={s.result}>
-          <ResultView task={task} format={format} text={shownText} result={state.result} />
-          {state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length) && (
-            <ApplyBar
-              key={state.text + JSON.stringify(state.result)}
-              modes={modes}
-              apply={apply}
-              copyText={task.output.kind === "text" ? shownText : undefined}
-            />
+      {(hasResult || running) && !state.error && (
+        <Card className={mergeClasses(s.card, kit.appear)}>
+          <div className={s.resultHead}>
+            <Subtitle2 as="h3">{t("result")}</Subtitle2>
+            {running && task.output.kind === "json" && <Caption1 className={s.muted}>{t("generatingStructured", { chars: state.progressChars })}</Caption1>}
+          </div>
+          <div className={s.resultBody} aria-live="polite" aria-busy={running}>
+            {hasResult ? <ResultView task={task} format={format} text={shownText} result={state.result} /> : <TextSkeleton label={t("working")} />}
+          </div>
+          {showApply && (
+            <>
+              <Divider />
+              <ApplyBar
+                key={state.text + JSON.stringify(state.result)}
+                modes={modes}
+                apply={apply}
+                copyText={task.output.kind === "text" ? shownText : undefined}
+              />
+            </>
           )}
         </Card>
       )}
@@ -208,7 +352,7 @@ function ResultView({ task, format, text, result }: { task: TaskView; format?: s
   const s = useStyles();
   const { t } = useI18n();
   if (format === "tsv") return <TsvPreview text={text} />;
-  if (format) return format === "markdown" ? <Markdown text={text} /> : <Text style={{ whiteSpace: "pre-wrap" }}>{text}</Text>;
+  if (format) return format === "markdown" ? <Markdown text={text} /> : <Text className={s.plain}>{text}</Text>;
   if (!result) return null;
   if (task.id === "grammar") {
     const r = result as GrammarResult;

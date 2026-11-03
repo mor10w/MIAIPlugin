@@ -22,6 +22,8 @@ export interface FakeOfficeOptions {
   /** Excel: arkets værdier (række 1 = A1). Markeringen er hele området. */
   excel?: { sheet: string; values: (string | number)[][] };
   displayLanguage?: string;
+  /** Office' tema. Kan skiftes undervejs med window.__miai.setTheme("dark"). */
+  theme?: "light" | "dark";
 }
 
 export interface OfficeCall {
@@ -32,7 +34,32 @@ export interface OfficeCall {
 export function installFakeOffice(o: FakeOfficeOptions): void {
   const calls: OfficeCall[] = [];
   const w = window as unknown as Record<string, unknown>;
-  w.__miai = { calls };
+  // Office' temafarver (lyst: hvid; mørkt: som Office' "Sort"/"Mørkegrå").
+  const THEMES = {
+    light: {
+      bodyBackgroundColor: "#ffffff",
+      bodyForegroundColor: "#262626",
+      controlBackgroundColor: "#ffffff",
+      controlForegroundColor: "#262626",
+      isDarkTheme: false,
+    },
+    dark: {
+      bodyBackgroundColor: "#262626",
+      bodyForegroundColor: "#ffffff",
+      controlBackgroundColor: "#333333",
+      controlForegroundColor: "#ffffff",
+      isDarkTheme: true,
+    },
+  };
+  const officeTheme = { ...THEMES[o.theme ?? "light"] };
+  const themeHandlers: ((e: unknown) => void)[] = [];
+  w.__miai = {
+    calls,
+    setTheme(name: "light" | "dark") {
+      Object.assign(officeTheme, THEMES[name]);
+      for (const h of themeHandlers) h({ type: "officeThemeChanged", officeTheme });
+    },
+  };
 
   const PASS = new Set(["then", "toJSON", "constructor", "$$typeof", "nodeType", "asymmetricMatch"]);
   function strict<T extends object>(name: string, obj: T): T {
@@ -65,12 +92,17 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     HostType: { Word: "Word", Excel: "Excel", PowerPoint: "PowerPoint" },
     CoercionType: { Text: "text" },
     AsyncResultStatus: { Succeeded: "succeeded", Failed: "failed" },
+    EventType: { OfficeThemeChanged: "officeThemeChanged" },
     context: strict("Office.context", {
       displayLanguage: o.displayLanguage ?? "da-DK",
-      officeTheme: { bodyBackgroundColor: "#ffffff" },
+      officeTheme,
       requirements: { isSetSupported: (name: string, v = "1.1") => versionAtLeast(o.apiSets?.[name], v) },
       document: strict("Office.context.document", {
         getSelectedDataAsync: (_t: string, cb: (r: unknown) => void) => cb({ status: "succeeded", value: selection }),
+        addHandlerAsync: (type: string, handler: (e: unknown) => void, cb?: (r: unknown) => void) => {
+          if (type === "officeThemeChanged") themeHandlers.push(handler);
+          cb?.({ status: "succeeded" });
+        },
         setSelectedDataAsync: (text: string, _opts: unknown, cb: (r: unknown) => void) => {
           record({ kind: "setSelectedData", text });
           selection = text;

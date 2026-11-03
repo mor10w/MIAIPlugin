@@ -9,7 +9,11 @@ export default defineConfig({
   testMatch: "**/*.spec.ts",
   outputDir: "../test-results",
   timeout: 30_000,
-  expect: { timeout: 10_000 },
+  expect: {
+    timeout: 10_000,
+    // Visuelle tests (#17): fast skrifttype, ingen animationer; små forskelle i kantudglatning tolereres.
+    toHaveScreenshot: { animations: "disabled", caret: "hide", maxDiffPixelRatio: 0.01 },
+  },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

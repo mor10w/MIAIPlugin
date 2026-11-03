@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Button, MessageBar, MessageBarBody, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowUndo16Regular, Copy16Regular } from "@fluentui/react-icons";
+import { ArrowUndo16Regular, Checkmark16Regular, Copy16Regular } from "@fluentui/react-icons";
 import type { ApplyMode } from "@miai/shared";
 import type { ApplyOutcome } from "../hosts/types";
 import { useI18n } from "../i18n";
 
 const useStyles = makeStyles({
-  bar: { display: "flex", flexWrap: "wrap", gap: tokens.spacingHorizontalS, marginTop: tokens.spacingVerticalS },
+  bar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
   msg: { marginTop: tokens.spacingVerticalS },
 });
 
@@ -22,6 +22,7 @@ export function ApplyBar({ modes, apply, copyText }: Props) {
   const s = useStyles();
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ApplyOutcome & { error?: string }>();
+  const [copied, setCopied] = useState(false);
 
   const run = async (mode: ApplyMode) => {
     setBusy(true);
@@ -57,8 +58,18 @@ export function ApplyBar({ modes, apply, copyText }: Props) {
           </Button>
         ))}
         {copyText !== undefined && (
-          <Button size="small" icon={<Copy16Regular />} onClick={() => navigator.clipboard?.writeText(copyText)}>
-            {t("copy")}
+          <Button
+            size="small"
+            appearance="subtle"
+            icon={copied ? <Checkmark16Regular /> : <Copy16Regular />}
+            onClick={() => {
+              void navigator.clipboard?.writeText(copyText).then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1_500);
+              });
+            }}
+          >
+            {copied ? t("copied") : t("copy")}
           </Button>
         )}
         {outcome?.undo && (

@@ -30,7 +30,8 @@ for (const pp18 of [false, true]) {
     await tp.run("Lav diagram");
 
     // Forhåndsvisningen er gyldig SVG med ombrudte labels som <tspan>.
-    const svg = tp.page.locator("svg[viewBox]").first();
+    // Resultatfeltet (aria-live) – ikke logo og ikoner, som også er SVG.
+    const svg = tp.page.locator("[aria-live='polite'] svg[viewBox]").first();
     await expect(svg).toBeVisible();
     expect(await svg.locator("tspan").count()).toBeGreaterThan(DIAGRAM.nodes.length);
     expect(await svg.textContent()).not.toContain("tspan");

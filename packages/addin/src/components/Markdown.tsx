@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { makeStyles, tokens } from "@fluentui/react-components";
 import { mdToSafeHtml } from "../markdown";
+import { ui } from "../theme";
 import { mermaidToSvg } from "../mermaid";
 import { sanitizeSvg } from "../svg";
 
@@ -12,9 +13,25 @@ const useStyles = makeStyles({
     "& p": { margin: `0 0 ${tokens.spacingVerticalS}` },
     "& h1, & h2, & h3": { margin: `${tokens.spacingVerticalM} 0 ${tokens.spacingVerticalXS}`, fontSize: tokens.fontSizeBase400 },
     "& ul, & ol": { paddingLeft: "1.2em", margin: `0 0 ${tokens.spacingVerticalS}` },
-    "& code": { fontFamily: tokens.fontFamilyMonospace, background: tokens.colorNeutralBackground3, padding: "0 3px", borderRadius: "3px" },
+    "& code": {
+      fontFamily: tokens.fontFamilyMonospace,
+      background: tokens.colorNeutralBackground3,
+      padding: `0 ${tokens.spacingHorizontalXXS}`,
+      borderRadius: tokens.borderRadiusSmall,
+    },
     "& pre": { background: tokens.colorNeutralBackground3, padding: tokens.spacingHorizontalS, overflowX: "auto" },
-    "& .figure": { margin: `0 0 ${tokens.spacingVerticalS}`, overflowX: "auto" },
+    // Figurer står altid på hvidt "papir" – Mermaid/SVG er tegnet til lys baggrund og skal kunne læses i mørkt tema.
+    "& .figure": {
+      margin: `0 0 ${tokens.spacingVerticalS}`,
+      overflowX: "auto",
+      padding: tokens.spacingHorizontalS,
+      borderRadius: tokens.borderRadiusMedium,
+      backgroundColor: ui.paper,
+      color: ui.paperInk,
+      border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    },
+    "& a": { color: tokens.colorBrandForegroundLink },
+    "& > :last-child": { marginBottom: 0 },
     "& .figure img": { maxWidth: "100%", height: "auto" },
   },
 });

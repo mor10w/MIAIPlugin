@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Badge,
   Button,
+  Caption1,
   Card,
   Checkbox,
   Dropdown,
@@ -12,7 +12,9 @@ import {
   Option,
   Spinner,
   Subtitle2,
+  Text,
   Textarea,
+  Tooltip,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -20,20 +22,37 @@ import { UserTaskFile as UserTaskSchema, localize, type UserTaskFile } from "@mi
 import { useBackend } from "../backend";
 import type { UserTaskInfo } from "../backend/types";
 import { useI18n } from "../i18n";
+import { ui } from "../theme";
+import {
+  Add20Regular,
+  ArrowExportLtr20Regular,
+  ArrowImport20Regular,
+  Delete20Regular,
+  Edit20Regular,
+  PuzzlePiece20Regular,
+  Save20Regular,
+} from "@fluentui/react-icons";
+import { EmptyState, IconTile, SectionLabel } from "./kit";
 
 const useStyles = makeStyles({
   root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
+  head: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXS },
+  muted: { color: tokens.colorNeutralForeground3 },
+  list: { display: "flex", flexDirection: "column", padding: tokens.spacingVerticalXS },
   listRow: {
     display: "flex",
-    gap: tokens.spacingHorizontalS,
+    gap: tokens.spacingHorizontalM,
     alignItems: "center",
-    padding: `${tokens.spacingVerticalXS} ${tokens.spacingHorizontalS}`,
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
+    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalS}`,
+    borderRadius: tokens.borderRadiusLarge,
+    ":hover": { backgroundColor: tokens.colorNeutralBackground1Hover },
   },
-  listLabel: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
+  listText: { display: "flex", flexDirection: "column", flex: 1, minWidth: 0 },
+  listLabel: { fontWeight: tokens.fontWeightSemibold, overflowWrap: "anywhere" },
+  listActions: { display: "flex", gap: tokens.spacingHorizontalXXS, flexShrink: 0 },
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
-  twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: tokens.spacingHorizontalS },
+  twoCol: { display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${ui.colMin}, 1fr))`, gap: tokens.spacingHorizontalS },
   paramCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   mono: { fontFamily: tokens.fontFamilyMonospace, fontSize: tokens.fontSizeBase200 },
 });
@@ -212,21 +231,26 @@ export function TasksTab() {
     }
   };
 
+  const newTask = () => {
+    setForm(emptyForm());
+    setMsg(undefined);
+  };
+
   const toggle = <T,>(list: T[], v: T): T[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
   return (
     <div className={s.root}>
+      <div className={s.head}>
+        <Subtitle2 as="h2">{t("userTasks")}</Subtitle2>
+        <Caption1 className={s.muted}>{t("tasksIntro")}</Caption1>
+      </div>
       <div className={s.row}>
-        <Button
-          appearance="primary"
-          onClick={() => {
-            setForm(emptyForm());
-            setMsg(undefined);
-          }}
-        >
+        <Button appearance="primary" icon={<Add20Regular />} onClick={newTask}>
           {t("newTask")}
         </Button>
-        <Button onClick={() => fileRef.current?.click()}>{t("importTask")}</Button>
+        <Button icon={<ArrowImport20Regular />} onClick={() => fileRef.current?.click()}>
+          {t("importTask")}
+        </Button>
         <input
           ref={fileRef}
           type="file"
@@ -248,7 +272,8 @@ export function TasksTab() {
 
       {form ? (
         <Card className={s.card}>
-          <Subtitle2>{t("editTask")}</Subtitle2>
+          <Subtitle2 as="h3">{t("editTask")}</Subtitle2>
+          <SectionLabel>{t("taskSecBasics")}</SectionLabel>
           <div className={s.twoCol}>
             <Field label={t("taskFieldId")}>
               <Input
@@ -322,7 +347,7 @@ export function TasksTab() {
             </div>
           </Field>
 
-          <Subtitle2>{t("paramsLabel")}</Subtitle2>
+          <SectionLabel>{t("paramsLabel")}</SectionLabel>
           {form.params.map((p, i) => (
             <Card key={i} className={s.paramCard}>
               <div className={s.twoCol}>
@@ -370,6 +395,7 @@ export function TasksTab() {
             {t("paramAdd")}
           </Button>
 
+          <SectionLabel>{t("taskSecPrompt")}</SectionLabel>
           <Field label={t("systemPrompt")}>
             <Textarea rows={3} className={s.mono} value={form.system} onChange={(_, d) => patch({ system: d.value })} />
           </Field>
@@ -377,7 +403,7 @@ export function TasksTab() {
             <Textarea rows={6} className={s.mono} value={form.user} onChange={(_, d) => patch({ user: d.value })} />
           </Field>
           <div className={s.row}>
-            <Button appearance="primary" onClick={() => void save()}>
+            <Button appearance="primary" icon={<Save20Regular />} onClick={() => void save()}>
               {t("save")}
             </Button>
             <Button appearance="subtle" onClick={() => setForm(undefined)}>
@@ -387,38 +413,46 @@ export function TasksTab() {
         </Card>
       ) : (
         <>
-          <Subtitle2>{t("userTasks")}</Subtitle2>
           {!tasks ? (
-            <Spinner />
+            <Spinner size="small" label={t("loading")} />
           ) : tasks.length === 0 ? (
-            <Card>{t("noTasks")}</Card>
-          ) : (
             <Card>
+              <EmptyState icon={PuzzlePiece20Regular} title={t("noTasksTitle")} text={t("noTasks")} />
+            </Card>
+          ) : (
+            <Card className={s.list}>
               {tasks.map((info) => (
                 <div key={info.spec.id + info.source} className={s.listRow}>
-                  <span className={s.listLabel}>{localize(info.spec.label, lang)}</span>
-                  <Badge appearance="tint" color={info.source === "machine" ? "informative" : "subtle"}>
-                    {t(info.source === "machine" ? "sourceMachine" : "sourceUser")}
-                  </Badge>
-                  {info.source === "user" && (
-                    <>
-                      <Button
-                        size="small"
-                        onClick={() => {
-                          setForm(specToForm(info.spec));
-                          setMsg(undefined);
-                        }}
-                      >
-                        {t("editTask")}
-                      </Button>
-                      <Button size="small" appearance="subtle" onClick={() => void del(info.spec.id)}>
-                        {t("deleteTask")}
-                      </Button>
-                    </>
-                  )}
-                  <Button size="small" appearance="secondary" onClick={() => exportTask(info)}>
-                    {t("exportTask")}
-                  </Button>
+                  <IconTile icon={PuzzlePiece20Regular} category="custom" />
+                  <span className={s.listText}>
+                    <Text className={s.listLabel}>{localize(info.spec.label, lang)}</Text>
+                    <Caption1 className={s.muted}>
+                      {t(info.source === "machine" ? "sourceMachine" : "sourceUser")} · {info.spec.hosts.map((h) => appLabel[h]).join(", ")}
+                    </Caption1>
+                  </span>
+                  <span className={s.listActions}>
+                    {info.source === "user" && (
+                      <Tooltip content={t("editTask")} relationship="label">
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          icon={<Edit20Regular />}
+                          onClick={() => {
+                            setForm(specToForm(info.spec));
+                            setMsg(undefined);
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                    <Tooltip content={t("exportTask")} relationship="label">
+                      <Button size="small" appearance="subtle" icon={<ArrowExportLtr20Regular />} onClick={() => exportTask(info)} />
+                    </Tooltip>
+                    {info.source === "user" && (
+                      <Tooltip content={t("deleteTask")} relationship="label">
+                        <Button size="small" appearance="subtle" icon={<Delete20Regular />} onClick={() => void del(info.spec.id)} />
+                      </Tooltip>
+                    )}
+                  </span>
                 </div>
               ))}
             </Card>

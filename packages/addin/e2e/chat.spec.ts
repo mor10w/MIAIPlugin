@@ -41,6 +41,8 @@ test("gentagelsessløjfe afbrydes med advarsel – uden note i selve teksten", a
 test("presence_penalty vælges i Indstillinger og sendes kun til fritekst", async ({ open }) => {
   const tp = await open({ host: "Word" });
   await tp.tab("Indstillinger");
+  // presence_penalty ligger under endpointens "Avanceret".
+  await tp.page.getByRole("button", { name: "Avanceret" }).click();
   await tp.page.getByRole("combobox").filter({ hasText: "Fra (serverens standard)" }).click();
   await tp.page.getByRole("option", { name: /Kraftig/ }).click();
   await tp.page.getByRole("button", { name: "Gem" }).click();
@@ -58,6 +60,7 @@ test("web-søgning: slået fra som standard i bridge-tilstand, værktøjet sende
   const tp = await open({ host: "Word", mode: "bridge" });
   tp.model.reply = () => ({ stream: ["Svar uden søgning."] });
   await tp.tab("Indstillinger");
+  await tp.section("Privatliv og politik");
   await expect(tp.page.getByRole("switch", { name: "Web-søgning" })).not.toBeChecked();
   await tp.tab("Chat");
   await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad er nyt?");

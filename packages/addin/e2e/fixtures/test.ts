@@ -29,7 +29,9 @@ export interface Taskpane {
   /** Første registrerede kald af en bestemt slags (fx "picture"), typet efter behov. */
   find<T = Record<string, unknown>>(kind: string): Promise<T | undefined>;
   /** Vælger en fane i task pane. */
-  tab(name: "Handlinger" | "Opgaver" | "Chat" | "Indstillinger"): Promise<void>;
+  tab(name: "Handlinger" | "Egne opgaver" | "Chat" | "Indstillinger"): Promise<void>;
+  /** Åbner en sektion under Indstillinger (accordion), hvis den er lukket. */
+  section(name: "Forbindelse" | "Modeller" | "Svar" | "Privatliv og politik" | "Generelt"): Promise<void>;
   /** Vælger en handling og trykker Kør. */
   run(action: string): Promise<void>;
 }
@@ -74,7 +76,7 @@ export const test = base.extend<{ open: Open }>({
       }
 
       await page.goto(`${origin}/taskpane.html${query}`);
-      await expect(page.getByText(opts.mode === "bridge" ? "· bridge" : "· direkte")).toBeVisible();
+      await expect(page.getByText(opts.mode === "bridge" ? "Via MIAI Bridge" : "Direkte forbindelse")).toBeVisible();
 
       return {
         page,
@@ -83,7 +85,14 @@ export const test = base.extend<{ open: Open }>({
         find: async <T>(kind: string) =>
           (await page.evaluate(() => (window as unknown as { __miai: { calls: OfficeCall[] } }).__miai.calls)).find((c) => c.kind === kind) as T | undefined,
         tab: async (name) => page.getByRole("tab", { name }).click(),
+        section: async (name) => {
+          const header = page.getByRole("button", { name, exact: true });
+          if ((await header.getAttribute("aria-expanded")) !== "true") await header.click();
+        },
         run: async (action) => {
+          // En åben handling vises i sit eget trin – gå tilbage til listen først.
+          const back = page.getByRole("button", { name: "Alle handlinger" });
+          if (await back.isVisible()) await back.click();
           await page.getByRole("button", { name: action, exact: true }).click();
           await page.getByRole("button", { name: "Kør" }).click();
         },

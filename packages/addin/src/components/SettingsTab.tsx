@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import {
+  Accordion,
+  AccordionHeader,
+  AccordionItem,
+  AccordionPanel,
+  Badge,
   Button,
   Caption1,
   Card,
@@ -12,9 +17,10 @@ import {
   Option,
   Radio,
   Spinner,
-  Subtitle2,
   Switch,
+  Text,
   Textarea,
+  Tooltip,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -28,7 +34,20 @@ import {
   type Settings,
   type StructuredOutputMode,
 } from "@miai/shared";
+import {
+  Add20Regular,
+  BrainCircuit20Regular,
+  Delete20Regular,
+  Globe20Regular,
+  History20Regular,
+  PlugConnected20Regular,
+  Save20Regular,
+  Search20Regular,
+  Shield20Regular,
+  TextEditStyle20Regular,
+} from "@fluentui/react-icons";
 import { useBackend } from "../backend";
+import { ui } from "../theme";
 import { useI18n } from "../i18n";
 import { SetupGuide } from "./SetupGuide";
 import { TaskModels } from "./TaskModels";
@@ -45,16 +64,42 @@ const PENALTY_PRESETS = [
 ] as const;
 
 const useStyles = makeStyles({
-  root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM },
+  root: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM, minWidth: 0 },
+  accordion: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
+  section: {
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderRadius: tokens.borderRadiusLarge,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    overflow: "hidden",
+  },
+  panel: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalM, paddingBottom: tokens.spacingVerticalM },
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
+  endpointHead: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, minWidth: 0 },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
-  logCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
-  logWrap: { overflowX: "auto", maxHeight: "320px", overflowY: "auto" },
+  twoCol: { display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${ui.colMin}, 1fr))`, gap: tokens.spacingHorizontalM },
+  grow: { flex: 1 },
+  muted: { color: tokens.colorNeutralForeground3 },
+  logCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
+  logWrap: { overflowX: "auto", maxHeight: ui.resultMaxHeight, overflowY: "auto" },
   logTable: {
     borderCollapse: "collapse",
     fontSize: tokens.fontSizeBase200,
     width: "100%",
-    "& td, & th": { border: `1px solid ${tokens.colorNeutralStroke2}`, padding: `2px ${tokens.spacingHorizontalXS}`, whiteSpace: "nowrap", textAlign: "left" },
+    "& td, & th": {
+      border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+      padding: `${tokens.spacingVerticalXXS} ${tokens.spacingHorizontalXS}`,
+      whiteSpace: "nowrap",
+      textAlign: "left",
+    },
+  },
+  saveBar: {
+    position: "sticky",
+    bottom: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: tokens.spacingVerticalS,
+    padding: `${tokens.spacingVerticalS} 0`,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
 });
 
@@ -129,6 +174,8 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     return preset ? t(preset.label) : String(v);
   };
   const locked = policy.locked || policySource === "machine";
+  const policySourceLabel =
+    { default: t("policySrcDefault"), user: t("policySrcUser"), machine: t("policySrcMachine"), browser: t("policySrcBrowser") }[policySource] ?? policySource;
   const setEp = (id: string, patch: Partial<Endpoint>) =>
     setSettings({ ...settings, endpoints: settings.endpoints.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
 
@@ -224,270 +271,348 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     }
   };
 
+  const endpointAdvanced = (ep: Endpoint) => (
+    <>
+      <Field label={t("structuredOutput")} hint={t("structuredOutputHint")}>
+        <Dropdown
+          value={ep.structuredOutput}
+          selectedOptions={[ep.structuredOutput]}
+          onOptionSelect={(_, d) => setEp(ep.id, { structuredOutput: d.optionValue as StructuredOutputMode })}
+        >
+          <Option value="json_schema">json_schema</Option>
+          <Option value="json_object">json_object</Option>
+          <Option value="none">none</Option>
+        </Dropdown>
+      </Field>
+      <Field label={t("presencePenalty")} hint={t("presencePenaltyHint")}>
+        <Dropdown
+          value={penaltyLabel(ep.presencePenalty)}
+          selectedOptions={[String(ep.presencePenalty ?? "")]}
+          onOptionSelect={(_, d) => setEp(ep.id, { presencePenalty: d.optionValue ? Number(d.optionValue) : undefined })}
+        >
+          {PENALTY_PRESETS.map((p) => (
+            <Option key={p.value} value={p.value} text={penaltyLabel(p.value ? Number(p.value) : undefined)}>
+              {penaltyLabel(p.value ? Number(p.value) : undefined)}
+            </Option>
+          ))}
+        </Dropdown>
+      </Field>
+      <Field label={t("contextTokens")} hint={t("contextTokensHint")}>
+        <Input
+          type="number"
+          min={512}
+          step={1024}
+          placeholder="auto"
+          value={ep.contextTokens ? String(ep.contextTokens) : ""}
+          onChange={(_, d) => setEp(ep.id, { contextTokens: d.value ? Math.max(512, Math.round(Number(d.value))) || undefined : undefined })}
+        />
+      </Field>
+      <Switch label={t("stripThinking")} checked={ep.stripThinking} onChange={(_, d) => setEp(ep.id, { stripThinking: d.checked })} />
+    </>
+  );
+
   return (
     <div className={s.root}>
-      <MessageBar intent="info">
-        {/* CORS-vejledningen står præcist pr. værktøj i guiden nedenfor (#4). */}
-        <MessageBarBody>{api.mode === "bridge" ? t("modeBridgeInfo") : t("modeDirectInfo")}</MessageBarBody>
-      </MessageBar>
-      {showGuide ? (
-        <SetupGuide onUse={useTool} />
-      ) : (
-        <div>
-          <Button size="small" onClick={() => setShowGuide(true)}>
-            {t("setupOpen")}
-          </Button>
-        </div>
-      )}
-      <Subtitle2>{t("endpoints")}</Subtitle2>
-      {settings.endpoints.map((ep) => (
-        <Card key={ep.id} className={s.card}>
-          <div className={s.row}>
-            <Radio
-              label={t("active")}
-              checked={settings.activeEndpoint === ep.id}
-              onChange={() => setSettings({ ...settings, activeEndpoint: ep.id, defaultModel: "" })}
-            />
-            {settings.endpoints.length > 1 && (
-              <Button
-                size="small"
-                appearance="subtle"
-                onClick={() => {
-                  const rest = settings.endpoints.filter((e) => e.id !== ep.id);
-                  setSettings({ ...settings, endpoints: rest, activeEndpoint: settings.activeEndpoint === ep.id ? rest[0].id : settings.activeEndpoint });
-                }}
+      <Accordion multiple collapsible defaultOpenItems={["connection"]} className={s.accordion}>
+        {/* --- Forbindelse ------------------------------------------------------------- */}
+        <AccordionItem value="connection" className={s.section}>
+          <AccordionHeader icon={<PlugConnected20Regular />} size="large">
+            {t("secConnection")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            {/* CORS-vejledningen står præcist pr. værktøj i guiden nedenfor (#4). */}
+            <Caption1 className={s.muted}>{api.mode === "bridge" ? t("modeBridgeInfo") : t("modeDirectInfo")}</Caption1>
+            {showGuide ? (
+              <SetupGuide onUse={useTool} />
+            ) : (
+              <div>
+                <Button size="small" icon={<Search20Regular />} onClick={() => setShowGuide(true)}>
+                  {t("setupOpen")}
+                </Button>
+              </div>
+            )}
+            {settings.endpoints.map((ep) => (
+              <Card key={ep.id} className={s.card} appearance="outline">
+                <div className={s.endpointHead}>
+                  <Radio
+                    label={<Text weight="semibold">{ep.name || t("name")}</Text>}
+                    aria-label={`${t("active")}: ${ep.name}`}
+                    checked={settings.activeEndpoint === ep.id}
+                    onChange={() => setSettings({ ...settings, activeEndpoint: ep.id, defaultModel: "" })}
+                  />
+                  {settings.activeEndpoint === ep.id && (
+                    <Badge appearance="tint" color="brand" size="small">
+                      {t("active")}
+                    </Badge>
+                  )}
+                  <span className={s.grow} />
+                  {settings.endpoints.length > 1 && (
+                    <Tooltip content={t("remove")} relationship="label">
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<Delete20Regular />}
+                        onClick={() => {
+                          const rest = settings.endpoints.filter((e) => e.id !== ep.id);
+                          setSettings({
+                            ...settings,
+                            endpoints: rest,
+                            activeEndpoint: settings.activeEndpoint === ep.id ? rest[0].id : settings.activeEndpoint,
+                          });
+                        }}
+                      />
+                    </Tooltip>
+                  )}
+                </div>
+                <Field label={t("name")}>
+                  <Input value={ep.name} onChange={(_, d) => setEp(ep.id, { name: d.value })} />
+                </Field>
+                <Field label={t("baseUrl")}>
+                  <Input value={ep.baseUrl} onChange={(_, d) => setEp(ep.id, { baseUrl: d.value })} />
+                </Field>
+                <Field label={t("apiKey")}>
+                  <Input type="password" value={ep.apiKey} onChange={(_, d) => setEp(ep.id, { apiKey: d.value })} />
+                </Field>
+                <Accordion collapsible>
+                  <AccordionItem value="advanced">
+                    <AccordionHeader size="small" expandIconPosition="start">
+                      {t("endpointAdvanced")}
+                    </AccordionHeader>
+                    <AccordionPanel className={s.panel}>{endpointAdvanced(ep)}</AccordionPanel>
+                  </AccordionItem>
+                </Accordion>
+              </Card>
+            ))}
+            <div className={s.row}>
+              <Dropdown
+                aria-label={t("preset")}
+                value={PRESETS.find((p) => p.id === preset)?.name}
+                selectedOptions={[preset]}
+                onOptionSelect={(_, d) => setPreset(d.optionValue ?? "custom")}
               >
-                {t("remove")}
+                {PRESETS.map((p) => (
+                  <Option key={p.id} value={p.id}>
+                    {p.name}
+                  </Option>
+                ))}
+              </Dropdown>
+              <Button icon={<Add20Regular />} onClick={addEndpoint}>
+                {t("addEndpoint")}
               </Button>
-            )}
-          </div>
-          <Field label={t("name")}>
-            <Input value={ep.name} onChange={(_, d) => setEp(ep.id, { name: d.value })} />
-          </Field>
-          <Field label={t("baseUrl")}>
-            <Input value={ep.baseUrl} onChange={(_, d) => setEp(ep.id, { baseUrl: d.value })} />
-          </Field>
-          <Field label={t("apiKey")}>
-            <Input type="password" value={ep.apiKey} onChange={(_, d) => setEp(ep.id, { apiKey: d.value })} />
-          </Field>
-          <Field label={t("structuredOutput")}>
-            <Dropdown
-              value={ep.structuredOutput}
-              selectedOptions={[ep.structuredOutput]}
-              onOptionSelect={(_, d) => setEp(ep.id, { structuredOutput: d.optionValue as StructuredOutputMode })}
-            >
-              <Option value="json_schema">json_schema</Option>
-              <Option value="json_object">json_object</Option>
-              <Option value="none">none</Option>
-            </Dropdown>
-          </Field>
-          <Field label={t("presencePenalty")} hint={t("presencePenaltyHint")}>
-            <Dropdown
-              value={penaltyLabel(ep.presencePenalty)}
-              selectedOptions={[String(ep.presencePenalty ?? "")]}
-              onOptionSelect={(_, d) => setEp(ep.id, { presencePenalty: d.optionValue ? Number(d.optionValue) : undefined })}
-            >
-              {PENALTY_PRESETS.map((p) => (
-                <Option key={p.value} value={p.value} text={penaltyLabel(p.value ? Number(p.value) : undefined)}>
-                  {penaltyLabel(p.value ? Number(p.value) : undefined)}
-                </Option>
-              ))}
-            </Dropdown>
-          </Field>
-          <Field label={t("contextTokens")} hint={t("contextTokensHint")}>
-            <Input
-              type="number"
-              min={512}
-              step={1024}
-              placeholder="auto"
-              value={ep.contextTokens ? String(ep.contextTokens) : ""}
-              onChange={(_, d) => setEp(ep.id, { contextTokens: d.value ? Math.max(512, Math.round(Number(d.value))) || undefined : undefined })}
-            />
-          </Field>
-          <Switch label={t("stripThinking")} checked={ep.stripThinking} onChange={(_, d) => setEp(ep.id, { stripThinking: d.checked })} />
-        </Card>
-      ))}
-      <div className={s.row}>
-        <Dropdown value={PRESETS.find((p) => p.id === preset)?.name} selectedOptions={[preset]} onOptionSelect={(_, d) => setPreset(d.optionValue ?? "custom")}>
-          {PRESETS.map((p) => (
-            <Option key={p.id} value={p.id}>
-              {p.name}
-            </Option>
-          ))}
-        </Dropdown>
-        <Button onClick={addEndpoint}>{t("addEndpoint")}</Button>
-      </div>
-
-      <div className={s.row}>
-        <Button onClick={test} disabled={testing}>
-          {t("testConnection")}
-        </Button>
-        {testing && <Spinner size="tiny" />}
-      </div>
-
-      <Field label={t("defaultModel")}>
-        <Dropdown
-          value={settings.defaultModel || t("firstAvailable")}
-          selectedOptions={[settings.defaultModel]}
-          onOptionSelect={(_, d) => setSettings({ ...settings, defaultModel: d.optionValue ?? "" })}
-        >
-          <Option value="">{t("firstAvailable")}</Option>
-          {models.map((m) => (
-            <Option key={m} value={m}>
-              {m}
-            </Option>
-          ))}
-        </Dropdown>
-      </Field>
-      <TaskModels value={settings.taskModels} models={models} onChange={(taskModels) => setSettings({ ...settings, taskModels })} />
-      <div className={s.row}>
-        <Field label={t("temperature")}>
-          <Input
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={String(settings.temperature)}
-            onChange={(_, d) => setSettings({ ...settings, temperature: Number(d.value) })}
-          />
-        </Field>
-        <Field label={t("maxTokens")}>
-          <Input
-            type="number"
-            min={16}
-            step={256}
-            value={String(settings.maxTokens)}
-            onChange={(_, d) => setSettings({ ...settings, maxTokens: Number(d.value) })}
-          />
-        </Field>
-      </div>
-      <Field label={t("uiLanguage")}>
-        <Dropdown
-          value={settings.uiLanguage === "da" ? "Dansk" : "English"}
-          selectedOptions={[settings.uiLanguage]}
-          onOptionSelect={(_, d) => setSettings({ ...settings, uiLanguage: d.optionValue as "da" | "en" })}
-        >
-          <Option value="da">Dansk</Option>
-          <Option value="en">English</Option>
-        </Dropdown>
-      </Field>
-      <Switch label={t("auditLog")} checked={settings.auditLog} onChange={(_, d) => setSettings({ ...settings, auditLog: d.checked })} />
-      {api.mode === "bridge" && (
-        <Field label={t("customTasksDir")} hint={t("customTasksDirHint")}>
-          <Input value={settings.customTasksDir} onChange={(_, d) => setSettings({ ...settings, customTasksDir: d.value })} />
-        </Field>
-      )}
-      <div className={s.row}>
-        <Button onClick={() => void toggleAudit()}>{showAudit ? t("hideAudit") : t("viewAudit")}</Button>
-      </div>
-      {showAudit && (
-        <Card className={s.logCard}>
-          {!auditEntries ? (
-            <Spinner />
-          ) : auditEntries.length === 0 ? (
-            t("auditEmpty")
-          ) : (
-            <div className={s.logWrap}>
-              <table className={s.logTable}>
-                <thead>
-                  <tr>
-                    <th>{t("auditTime")}</th>
-                    <th>{t("auditTask")}</th>
-                    <th>host</th>
-                    <th>{t("model")}</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditEntries.map((e, i) => (
-                    <tr key={i}>
-                      <td>{new Date(e.ts).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}</td>
-                      <td>{e.kind === "task" ? e.task : "models"}</td>
-                      <td>{e.host}</td>
-                      <td>{e.model ?? "—"}</td>
-                      <td>
-                        {e.status === "ok"
-                          ? `${t("statusOk")}${e.durationMs !== undefined ? ` · ${(Math.round(e.durationMs / 10) / 100).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}s` : ""}`
-                          : `${t("statusError")}${e.code ? ` (${e.code})` : ""}`}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
-          )}
-        </Card>
-      )}
-      {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
-      {api.mode === "bridge" && (
-        <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>
-          <Switch
-            label={t("webSearch")}
-            disabled={!policy.webSearch}
-            checked={settings.webSearch && policy.webSearch}
-            onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })}
-          />
-        </Field>
-      )}
-      {/* Søgetjeneste (#12): DuckDuckGo eller selvhostet SearXNG; kan låses af organisationens politik. */}
-      {api.mode === "bridge" && policy.webSearch && settings.webSearch && (
-        <div className={s.row}>
-          <Field label={t("searchProvider")} hint={policy.search ? t("searchLocked") : undefined}>
-            <Dropdown
-              disabled={!!policy.search}
-              value={(policy.search ?? settings.search).provider === "searxng" ? "SearXNG" : "DuckDuckGo"}
-              selectedOptions={[(policy.search ?? settings.search).provider]}
-              onOptionSelect={(_, d) => setSettings({ ...settings, search: { ...settings.search, provider: d.optionValue as "duckduckgo" | "searxng" } })}
-            >
-              <Option value="duckduckgo">DuckDuckGo</Option>
-              <Option value="searxng">SearXNG</Option>
-            </Dropdown>
-          </Field>
-          {(policy.search ?? settings.search).provider === "searxng" && (
-            <Field label={t("searxngUrl")} hint={policy.search ? undefined : t("searxngHint")}>
-              <Input
-                disabled={!!policy.search}
-                placeholder="https://search.firma.local"
-                value={(policy.search ?? settings.search).url ?? ""}
-                onChange={(_, d) => setSettings({ ...settings, search: { ...settings.search, url: d.value || undefined } })}
-              />
-            </Field>
-          )}
-        </div>
-      )}
-      <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : undefined}>
-        <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
-      </Field>
-      <Caption1>
-        {t("policySource")}: {policySource}
-      </Caption1>
-
-      <Button appearance="primary" onClick={() => void save()}>
-        {t("save")}
-      </Button>
-      {unverified && !unverified.ok && (
-        <MessageBar intent="warning">
-          <MessageBarBody>
-            {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")}{" "}
-            <Caption1>{unverified.message}</Caption1>
-          </MessageBarBody>
-          <MessageBarActions>
-            <Button size="small" onClick={() => void save(true)}>
-              {t("saveAnyway")}
-            </Button>
-            {unverified.reason === "cors" && (
-              <Button size="small" onClick={() => setShowGuide(true)}>
-                {t("setupOpen")}
+            <div className={s.row}>
+              <Button icon={<PlugConnected20Regular />} onClick={() => void test()} disabled={testing}>
+                {t("testConnection")}
               </Button>
+              {testing && <Spinner size="tiny" />}
+            </div>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* --- Modeller ---------------------------------------------------------------- */}
+        <AccordionItem value="models" className={s.section}>
+          <AccordionHeader icon={<BrainCircuit20Regular />} size="large">
+            {t("secModels")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            <Field label={t("defaultModel")}>
+              <Dropdown
+                value={settings.defaultModel || t("firstAvailable")}
+                selectedOptions={[settings.defaultModel]}
+                onOptionSelect={(_, d) => setSettings({ ...settings, defaultModel: d.optionValue ?? "" })}
+              >
+                <Option value="">{t("firstAvailable")}</Option>
+                {models.map((m) => (
+                  <Option key={m} value={m}>
+                    {m}
+                  </Option>
+                ))}
+              </Dropdown>
+            </Field>
+            <TaskModels value={settings.taskModels} models={models} onChange={(taskModels) => setSettings({ ...settings, taskModels })} />
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* --- Svar -------------------------------------------------------------------- */}
+        <AccordionItem value="replies" className={s.section}>
+          <AccordionHeader icon={<TextEditStyle20Regular />} size="large">
+            {t("secReplies")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            <div className={s.twoCol}>
+              <Field label={t("temperature")} hint={t("temperatureHint")}>
+                <Input
+                  type="number"
+                  min={0}
+                  max={2}
+                  step={0.1}
+                  value={String(settings.temperature)}
+                  onChange={(_, d) => setSettings({ ...settings, temperature: Number(d.value) })}
+                />
+              </Field>
+              <Field label={t("maxTokens")}>
+                <Input
+                  type="number"
+                  min={16}
+                  step={256}
+                  value={String(settings.maxTokens)}
+                  onChange={(_, d) => setSettings({ ...settings, maxTokens: Number(d.value) })}
+                />
+              </Field>
+            </div>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* --- Privatliv og politik ---------------------------------------------------- */}
+        <AccordionItem value="privacy" className={s.section}>
+          <AccordionHeader icon={<Shield20Regular />} size="large">
+            {t("secPrivacy")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
+            {api.mode === "bridge" && (
+              <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>
+                <Switch
+                  label={t("webSearch")}
+                  disabled={!policy.webSearch}
+                  checked={settings.webSearch && policy.webSearch}
+                  onChange={(_, d) => setSettings({ ...settings, webSearch: d.checked })}
+                />
+              </Field>
             )}
-          </MessageBarActions>
-        </MessageBar>
-      )}
-      {msg && (
-        <MessageBar intent={msg.intent}>
-          <MessageBarBody>{msg.text}</MessageBarBody>
-        </MessageBar>
-      )}
+            {/* Søgetjeneste (#12): DuckDuckGo eller selvhostet SearXNG; kan låses af organisationens politik. */}
+            {api.mode === "bridge" && policy.webSearch && settings.webSearch && (
+              <div className={s.twoCol}>
+                <Field label={t("searchProvider")} hint={policy.search ? t("searchLocked") : undefined}>
+                  <Dropdown
+                    disabled={!!policy.search}
+                    value={(policy.search ?? settings.search).provider === "searxng" ? "SearXNG" : "DuckDuckGo"}
+                    selectedOptions={[(policy.search ?? settings.search).provider]}
+                    onOptionSelect={(_, d) => setSettings({ ...settings, search: { ...settings.search, provider: d.optionValue as "duckduckgo" | "searxng" } })}
+                  >
+                    <Option value="duckduckgo">DuckDuckGo</Option>
+                    <Option value="searxng">SearXNG</Option>
+                  </Dropdown>
+                </Field>
+                {(policy.search ?? settings.search).provider === "searxng" && (
+                  <Field label={t("searxngUrl")} hint={policy.search ? undefined : t("searxngHint")}>
+                    <Input
+                      disabled={!!policy.search}
+                      placeholder="https://search.firma.local"
+                      value={(policy.search ?? settings.search).url ?? ""}
+                      onChange={(_, d) => setSettings({ ...settings, search: { ...settings.search, url: d.value || undefined } })}
+                    />
+                  </Field>
+                )}
+              </div>
+            )}
+            <Switch label={t("auditLog")} checked={settings.auditLog} onChange={(_, d) => setSettings({ ...settings, auditLog: d.checked })} />
+            <div>
+              <Button size="small" icon={<History20Regular />} onClick={() => void toggleAudit()}>
+                {showAudit ? t("hideAudit") : t("viewAudit")}
+              </Button>
+            </div>
+            {showAudit && (
+              <div className={s.logCard}>
+                {!auditEntries ? (
+                  <Spinner size="tiny" />
+                ) : auditEntries.length === 0 ? (
+                  <Caption1 className={s.muted}>{t("auditEmpty")}</Caption1>
+                ) : (
+                  <div className={s.logWrap}>
+                    <table className={s.logTable}>
+                      <thead>
+                        <tr>
+                          <th>{t("auditTime")}</th>
+                          <th>{t("auditTask")}</th>
+                          <th>host</th>
+                          <th>{t("model")}</th>
+                          <th>{t("auditStatus")}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditEntries.map((e, i) => (
+                          <tr key={i}>
+                            <td>{new Date(e.ts).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}</td>
+                            <td>{e.kind === "task" ? e.task : e.kind}</td>
+                            <td>{e.host}</td>
+                            <td>{e.model ?? "—"}</td>
+                            <td>
+                              {e.status === "ok"
+                                ? `${t("statusOk")}${e.durationMs !== undefined ? ` · ${(Math.round(e.durationMs / 10) / 100).toLocaleString(lang === "da" ? "da-DK" : "en-GB")}s` : ""}`
+                                : `${t("statusError")}${e.code ? ` (${e.code})` : ""}`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+            <Field label={t("allowedHosts")} hint={locked ? t("policyLocked") : t("allowedHostsHint")}>
+              <Textarea rows={4} disabled={locked} value={hostsText} onChange={(_, d) => setHostsText(d.value)} />
+            </Field>
+            <Caption1 className={s.muted}>
+              {t("policySource")}: {policySourceLabel}
+            </Caption1>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* --- Generelt ---------------------------------------------------------------- */}
+        <AccordionItem value="general" className={s.section}>
+          <AccordionHeader icon={<Globe20Regular />} size="large">
+            {t("secGeneral")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            <Field label={t("uiLanguage")}>
+              <Dropdown
+                value={settings.uiLanguage === "da" ? "Dansk" : "English"}
+                selectedOptions={[settings.uiLanguage]}
+                onOptionSelect={(_, d) => setSettings({ ...settings, uiLanguage: d.optionValue as "da" | "en" })}
+              >
+                <Option value="da">Dansk</Option>
+                <Option value="en">English</Option>
+              </Dropdown>
+            </Field>
+            {api.mode === "bridge" && (
+              <Field label={t("customTasksDir")} hint={t("customTasksDirHint")}>
+                <Input value={settings.customTasksDir} onChange={(_, d) => setSettings({ ...settings, customTasksDir: d.value })} />
+              </Field>
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+      </Accordion>
+
+      {/* Fast gem-bjælke nederst – altid synlig, også i lange sektioner. */}
+      <div className={s.saveBar}>
+        {unverified && !unverified.ok && (
+          <MessageBar intent="warning">
+            <MessageBarBody>
+              {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")}{" "}
+              <Caption1>{unverified.message}</Caption1>
+            </MessageBarBody>
+            <MessageBarActions>
+              <Button size="small" onClick={() => void save(true)}>
+                {t("saveAnyway")}
+              </Button>
+              {unverified.reason === "cors" && (
+                <Button size="small" onClick={() => setShowGuide(true)}>
+                  {t("setupOpen")}
+                </Button>
+              )}
+            </MessageBarActions>
+          </MessageBar>
+        )}
+        {msg && (
+          <MessageBar intent={msg.intent}>
+            <MessageBarBody>{msg.text}</MessageBarBody>
+          </MessageBar>
+        )}
+        <Button appearance="primary" icon={<Save20Regular />} onClick={() => void save()}>
+          {t("save")}
+        </Button>
+      </div>
     </div>
   );
 }
