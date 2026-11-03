@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Caption1, FluentProvider, MessageBar, MessageBarActions, MessageBarBody, Tab, TabList, Text, Tooltip, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
+import { Badge, Button, Caption1, FluentProvider, MessageBar, MessageBarActions, MessageBarBody, MessageBarTitle, Tab, TabList, Text, Tooltip, makeStyles, tokens, webDarkTheme, webLightTheme } from "@fluentui/react-components";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
@@ -15,7 +15,8 @@ const useStyles = makeStyles({
   banner: { marginBottom: tokens.spacingVerticalM },
 });
 
-type Status = { kind: "ok" | "warn" | "down"; detail?: string };
+/** token = bridgen afviser, fordi adgangstokenet mangler (gammelt manifest, #11). */
+type Status = { kind: "ok" | "warn" | "down"; detail?: string; token?: boolean };
 
 function isDarkOffice(): boolean {
   const bg = Office.context.officeTheme?.bodyBackgroundColor;
@@ -42,7 +43,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         .health()
         .then(
           (h) => setStatus(h.endpoint.reachable ? { kind: "ok", detail: h.endpoint.baseUrl } : { kind: "warn", detail: h.endpoint.error }),
-          (e) => setStatus({ kind: "down", detail: (e as Error).message }),
+          (e) => setStatus({ kind: "down", detail: (e as Error).message, token: (e as { code?: string }).code === "TOKEN" }),
         )
         .finally(() => setChecked(true)),
     [api],
@@ -83,7 +84,15 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         </TabList>
         <div className={s.body}>
           {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
-          {checked && status.kind !== "ok" && tab !== "settings" && (
+          {status.token && (
+            <MessageBar intent="error" className={s.banner}>
+              <MessageBarBody>
+                <MessageBarTitle>{t("tokenTitle")}</MessageBarTitle>
+                {t("tokenHelp")}
+              </MessageBarBody>
+            </MessageBar>
+          )}
+          {checked && status.kind !== "ok" && !status.token && tab !== "settings" && (
             <MessageBar intent="warning" className={s.banner}>
               <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
               <MessageBarActions>

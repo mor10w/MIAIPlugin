@@ -12,7 +12,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 
-const PORT = Number(process.env.MIAI_PORT ?? 44321);
+/** Den faktiske port meldes af bridge-processen (pr. bruger, #11). */
+let PORT = Number(process.env.MIAI_PORT ?? 44321);
+/** Brugerens personlige manifest (med port og adgangstoken), skrevet af bridge-processen. */
+let PERSONAL_MANIFEST = null;
 const MIAI_DIR = join(homedir(), "Library", "Application Support", "MIAI");
 const CERT_FILE = join(MIAI_DIR, "tls", "localhost.crt");
 
@@ -26,6 +29,7 @@ function log(msg) {
 // Packaget: filer ligger i Resources/ (electron-builder extraResources). I dev: repoet.
 // main.js ligger i packages/app, så søsterpakken er ../addin.
 const ADDIN_DIR = app.isPackaged ? join(process.resourcesPath, "addin") : fileURLToPath(new URL("../addin/dist", import.meta.url));
+/** Bridge-manifestet, som det personlige manifest laves ud fra. */
 const MANIFEST = app.isPackaged ? join(process.resourcesPath, "manifest.xml") : fileURLToPath(new URL("../addin/manifest.xml", import.meta.url));
 
 let bridgeProc = null;
@@ -43,12 +47,15 @@ function startBridge() {
   bridgeProc = utilityProcess.fork(
     join(app.getAppPath(), "bridge-process.mjs"),
     [],
-    { env: { ...process.env, MIAI_PORT: String(PORT), MIAI_ADDIN_DIR: ADDIN_DIR } },
+    // MIAI_PORT sendes kun videre, hvis brugeren selv har sat den; ellers vælger bridgen en ledig port pr. bruger.
+    { env: { ...process.env, MIAI_ADDIN_DIR: ADDIN_DIR, MIAI_MANIFEST: MANIFEST } },
   );
 
   bridgeProc.on("message", (msg) => {
     if (msg?.type === "listening") {
       bridgeState.listening = true;
+      if (msg.port) PORT = msg.port;
+      if (msg.manifest) PERSONAL_MANIFEST = msg.manifest;
       log(`bridge-process: lytter på ${msg.addr} (v${msg.version})`);
       setStatus("Bridgen kører");
     } else if (msg?.type === "status") {
@@ -81,13 +88,14 @@ const OFFICE_APPS = ["Word", "Excel", "Powerpoint"];
 
 /** Sideloader bridge-manifestet i de tre Office-apps (som scripts/sideload-mac.mjs). */
 function installInOffice() {
-  const xml = readFileSync(MANIFEST, "utf8");
+  if (!PERSONAL_MANIFEST) throw new Error("Bridgen har ikke skrevet dit manifest endnu.");
+  const xml = readFileSync(PERSONAL_MANIFEST, "utf8");
   const id = xml.match(/<Id>([^<]+)<\/Id>/)?.[1];
   if (!id) throw new Error("Fandt ikke <Id> i manifestet");
   for (const app_ of OFFICE_APPS) {
     const dir = join(homedir(), "Library", "Containers", `com.microsoft.${app_}`, "Data", "Documents", "wef");
     mkdirSync(dir, { recursive: true });
-    copyFileSync(MANIFEST, join(dir, `miai-${id}.xml`));
+    copyFileSync(PERSONAL_MANIFEST, join(dir, `miai-${id}.xml`));
   }
 }
 
@@ -108,12 +116,20 @@ function isCertTrusted() {
 }
 
 /** Er manifestet allerede lagt i alle tre Office-apps? */
-function isInstalledInOffice() {
+/**
+ * Er brugerens personlige manifest installeret i alle tre Office-apps?
+ * "stale" = installeret, men med en anden port/token (fx efter opdatering til #11) – opdateres automatisk.
+ */
+function officeInstallState() {
   try {
-    const id = readFileSync(MANIFEST, "utf8").match(/<Id>([^<]+)<\/Id>/)?.[1];
-    return !!id && OFFICE_APPS.every((a) => existsSync(join(homedir(), "Library", "Containers", `com.microsoft.${a}`, "Data", "Documents", "wef", `miai-${id}.xml`)));
+    const xml = readFileSync(PERSONAL_MANIFEST, "utf8");
+    const id = xml.match(/<Id>([^<]+)<\/Id>/)?.[1];
+    if (!id) return "missing";
+    const files = OFFICE_APPS.map((a) => join(homedir(), "Library", "Containers", `com.microsoft.${a}`, "Data", "Documents", "wef", `miai-${id}.xml`));
+    if (!files.every((f) => existsSync(f))) return "missing";
+    return files.every((f) => readFileSync(f, "utf8") === xml) ? "ok" : "stale";
   } catch {
-    return false;
+    return "missing";
   }
 }
 
@@ -212,7 +228,18 @@ if (!gotLock) {
       // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
       // Tidligere blev velkomstdialogen vist ved hver start.
       const needTrust = !isCertTrusted();
-      const needInstall = !isInstalledInOffice();
+      const installState = officeInstallState();
+      if (installState === "stale") {
+        // Port eller adgangstoken er ændret: opdater manifestet i Office uden at spørge (det er brugerens egen installation).
+        try {
+          installInOffice();
+          log("manifest opdateret i Office (ny port/token)");
+          dialog.showMessageBox({ type: "info", title: "MIAI", message: "MIAI er opdateret i Office.", detail: "Genstart Word, Excel og PowerPoint, så de bruger den nye forbindelse." });
+        } catch (err) {
+          log(`kunne ikke opdatere manifest: ${err.message}`);
+        }
+      }
+      const needInstall = installState === "missing";
       log(`opsætning: certifikat betroet=${!needTrust}, installeret i Office=${!needInstall}`);
       if (needTrust || needInstall) {
         const steps = [needTrust && "betro MIAI-certifikatet (bruges til den lokale HTTPS-forbindelse)", needInstall && "installere MIAI i Word, Excel og PowerPoint"].filter(Boolean);

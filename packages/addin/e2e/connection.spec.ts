@@ -50,4 +50,11 @@ test.describe("bridge-tilstand", () => {
     await tp.page.getByRole("button", { name: "Erstat" }).click();
     expect(await tp.calls()).toContainEqual(expect.objectContaining({ kind: "insertText", text: "Kort tekst." }));
   });
+
+  test("uden adgangstoken (gammelt manifest): tydelig fejl om at geninstallere (#11)", async ({ open }) => {
+    const tp = await open({ host: "Word", mode: "bridge", selection: "Tekst.", omitToken: true });
+    await expect(tp.page.getByText("MIAI skal geninstalleres i Office")).toBeVisible();
+    await expect(tp.page.getByRole("button", { name: "Kom i gang" })).toHaveCount(0); // guiden hjælper ikke her
+    expect(tp.model.requests).toHaveLength(0);
+  });
 });

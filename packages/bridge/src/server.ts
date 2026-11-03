@@ -23,6 +23,7 @@ import { z } from "zod";
 import { appendAudit, auditFile, readAuditTail } from "./audit.js";
 import { PolicyError, type ConfigStore } from "./config.js";
 import { invalidateUserTasks, loadUserTasks, machineTasksDir, mergedCatalog, userTasksDir } from "./userTasks.js";
+import { tokenMatches } from "./identity.js";
 import { runTask } from "./runner.js";
 import { pickLang, renderStatusPage } from "./statusPage.js";
 
@@ -34,12 +35,17 @@ export interface ServerOptions {
   port: number;
   /** Mappe med add-in'ets byggede filer (packages/addin/dist). */
   addinDir?: string;
+  /**
+   * Adgangstoken (#11). Når det er sat, kræver alle /api/*-kald headeren X-MIAI-Token, så andre
+   * lokale processer (fx andre brugere på en delt maskine) ikke kan bruge bridgen.
+   */
+  token?: string;
   /** TLS (cert/key). Udeladt i tests. */
   https?: { cert: Buffer; key: Buffer };
   fastify?: FastifyServerOptions;
 }
 
-export async function buildServer({ store, port, addinDir, https, fastify }: ServerOptions): Promise<FastifyInstance> {
+export async function buildServer({ store, port, addinDir, https, token, fastify }: ServerOptions): Promise<FastifyInstance> {
   const opts = { logger: false, bodyLimit: 2 * 1024 * 1024, ...fastify, ...(https ? { https } : {}) };
   // Fastifys typer skelner mellem http- og https-instanser; vi bruger den fælles FastifyInstance.
   const app = Fastify(opts as FastifyServerOptions) as unknown as FastifyInstance;
@@ -61,6 +67,9 @@ export async function buildServer({ store, port, addinDir, https, fastify }: Ser
       if (origin && !allowedOrigins.has(origin.toLowerCase())) return reply.code(403).send({ error: "Fremmed origin" });
       if (req.method === "OPTIONS") return reply.code(403).send();
       if (req.headers["x-miai"] !== "1") return reply.code(403).send({ error: "Manglende X-MIAI-header" });
+      if (token && !tokenMatches(token, req.headers["x-miai-token"])) {
+        return reply.code(401).send({ error: "Manglende eller forkert adgangstoken. Geninstallér MIAI i Office (manifestet indeholder tokenet).", code: "TOKEN" });
+      }
     }
   });
 

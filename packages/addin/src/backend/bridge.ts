@@ -2,11 +2,30 @@ import type { AuditEntry, Endpoint, HealthInfo, ProbeResult, ModelInfo, Policy, 
 import type { Backend, UserTaskInfo } from "./types";
 
 // Task pane serveres af bridgen, så API'et ligger på samme origin.
-const H = { "content-type": "application/json", "x-miai": "1" };
+// Adgangstokenet (#11) står i task pane-adressen fra brugerens personlige manifest
+// (…/taskpane.html?token=…); det sendes med hvert API-kald.
+const token = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get("token") ?? "";
+  } catch {
+    return "";
+  }
+})();
+const H: Record<string, string> = { "content-type": "application/json", "x-miai": "1", ...(token ? { "x-miai-token": token } : {}) };
+
+/** Fejl fra bridgen med dens kode (fx "TOKEN"), så UI'et kan forklare præcist, hvad der skal gøres. */
+export class BridgeError extends Error {
+  constructor(
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
 
 async function json<T>(res: Response): Promise<T> {
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((body as { error?: string }).error ?? `${res.status} ${res.statusText}`);
+  const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+  if (!res.ok) throw new BridgeError(body.error ?? `${res.status} ${res.statusText}`, body.code);
   return body as T;
 }
 
@@ -75,6 +94,9 @@ export async function detectBridge(): Promise<boolean> {
     const t = setTimeout(() => ctrl.abort(), 1_500);
     const res = await fetch("/api/health", { headers: H, signal: ctrl.signal });
     clearTimeout(t);
+    // 401 med TOKEN = det er en bridge, men tokenet mangler (fx gammelt manifest). Brug bridgen,
+    // så brugeren får den tydelige fejl i stedet for et forvirrende skift til direkte tilstand.
+    if (res.status === 401) return ((await res.json().catch(() => ({}))) as { code?: string }).code === "TOKEN";
     if (!res.ok) return false;
     const body = (await res.json()) as Partial<HealthInfo>;
     return typeof body.version === "string" && !!body.endpoint;

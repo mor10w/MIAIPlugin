@@ -6,10 +6,13 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ConfigStore } from "@miai/bridge/dist/config.js";
+import { ConfigStore, configDir } from "@miai/bridge/dist/config.js";
+import { loadIdentity, writePersonalManifest } from "@miai/bridge/dist/identity.js";
 import { buildServer, VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 
-const PORT = Number(process.env.MIAI_PORT ?? 44321);
+/** Port og adgangstoken pr. bruger (#11) – sættes ved start. MIAI_PORT låser porten. */
+let PORT;
+let TOKEN;
 // parentPort eksisterer kun i en utility-process (ikke export fra 'electron').
 const parentPort = process.parentPort;
 const MIAI_DIR = join(homedir(), "Library", "Application Support", "MIAI");
@@ -88,7 +91,7 @@ let lastStatus = "";
 async function reportStatus() {
   let endpoint = null;
   try {
-    const res = await server.inject({ method: "GET", url: "/api/health", headers: { host: `localhost:${PORT}`, "x-miai": "1" } });
+    const res = await server.inject({ method: "GET", url: "/api/health", headers: { host: `localhost:${PORT}`, "x-miai": "1", "x-miai-token": TOKEN } });
     endpoint = res.json().endpoint ?? null;
   } catch (err) {
     log(`status-fejl: ${err?.message ?? err}`);
@@ -104,10 +107,15 @@ try {
   const store = new ConfigStore();
   const tls = ensureTls();
   log(`TLS OK (cert ${tls.cert.length} bytes)`);
-  server = await buildServer({ store, port: PORT, addinDir: process.env.MIAI_ADDIN_DIR, https: tls });
+  const id = await loadIdentity(configDir(), process.env.MIAI_PORT ? Number(process.env.MIAI_PORT) : undefined);
+  PORT = id.port;
+  TOKEN = id.token;
+  // Brugerens personlige manifest med port og token – det er dét, der installeres i Office.
+  const manifest = process.env.MIAI_MANIFEST ? writePersonalManifest(configDir(), process.env.MIAI_MANIFEST, id) : undefined;
+  server = await buildServer({ store, port: PORT, token: TOKEN, addinDir: process.env.MIAI_ADDIN_DIR, https: tls });
   const addr = await server.listen({ host: "127.0.0.1", port: PORT });
   log(`lytter på ${addr}`);
-  parentPort?.postMessage({ type: "listening", addr, version: BRIDGE_VERSION });
+  parentPort?.postMessage({ type: "listening", addr, version: BRIDGE_VERSION, port: PORT, manifest });
   await reportStatus();
   setInterval(() => void reportStatus(), 20_000);
 } catch (err) {

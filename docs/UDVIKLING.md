@@ -48,11 +48,13 @@ npm run build
 ```bash
 npm start
 ```
-Bridgen kører på `https://localhost:44321` og serverer også task pane. Sideload bridge-manifestet:
+Bridgen kører på `https://localhost:44321` og serverer også task pane. Er porten optaget (fx af en anden brugers bridge), vælges og huskes den næste ledige. `MIAI_PORT` låser porten.
+
+API'et kræver et adgangstoken pr. bruger (#11). Bridgen skriver dit personlige manifest med port og token i konfigurationsmappen og viser stien ved start. Sideload det:
 ```bash
-npm run sideload:mac -- packages/addin/manifest.xml
+npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
 ```
-På Windows: `npm run sideload:windows -- packages\addin\manifest.xml`.
+På Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`. Linux: `~/.config/miai/manifest.xml`.
 
 Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 

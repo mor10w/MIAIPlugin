@@ -17,6 +17,8 @@ export interface TaskpaneOptions extends FakeOfficeOptions {
   models?: string[];
   /** Fast port til mock-modellen (fx 11434 for at ligne Ollama). Standard: tilfældig. */
   modelPort?: number;
+  /** Bridge: åbn task pane uden adgangstoken (som med et gammelt manifest). */
+  omitToken?: boolean;
 }
 
 export interface Taskpane {
@@ -52,11 +54,13 @@ export const test = base.extend<{ open: Open }>({
       await page.route("https://appsforoffice.microsoft.com/**", (r) => r.fulfill({ contentType: "text/javascript", body: fakeOfficeScript(opts) }));
 
       let origin: string;
+      let query = "";
       if (opts.mode === "bridge") {
         const endpointExtra = opts.endpoint ?? {};
         const bridge = await startBridge(model.url, { ...opts.settings, ...(Object.keys(endpointExtra).length ? { endpoints: [{ id: "mock", name: "Mock", baseUrl: model.url, ...endpointExtra }] } : {}) });
         cleanup.push(bridge.stop);
         origin = bridge.origin;
+        if (!opts.omitToken) query = `?token=${encodeURIComponent(bridge.token)}`;
       } else {
         const host = await startStaticHost();
         cleanup.push(host.stop);
@@ -66,7 +70,7 @@ export const test = base.extend<{ open: Open }>({
         await page.addInitScript((s) => localStorage.setItem("miai.settings.v1", s), JSON.stringify(settings));
       }
 
-      await page.goto(`${origin}/taskpane.html`);
+      await page.goto(`${origin}/taskpane.html${query}`);
       await expect(page.getByText(opts.mode === "bridge" ? "· bridge" : "· direkte")).toBeVisible();
 
       return {

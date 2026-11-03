@@ -125,7 +125,7 @@ export async function startStaticHost(): Promise<{ origin: string; stop: () => P
 }
 
 /** Starter den rigtige MIAI Bridge (bygget) med en midlertidig konfiguration, der peger på mock-modellen. */
-export async function startBridge(modelUrl: string, settings: Record<string, unknown> = {}): Promise<{ origin: string; stop: () => Promise<void> }> {
+export async function startBridge(modelUrl: string, settings: Record<string, unknown> = {}): Promise<{ origin: string; token: string; stop: () => Promise<void> }> {
   const { ConfigStore } = await import("@miai/bridge/dist/config.js");
   const { buildServer } = await import("@miai/bridge/dist/server.js");
   const { Settings } = await import("@miai/shared");
@@ -135,9 +135,11 @@ export async function startBridge(modelUrl: string, settings: Record<string, unk
   // Porten skal kendes, før serveren bygges (Host-tjekket), så find en ledig først.
   const port = await freePort();
   // forceCloseConnections: luk browserens keep-alive-forbindelser ved oprydning (ellers venter close ~15 s).
-  const app = await buildServer({ store, port, addinDir: DIST, https: testCert(), fastify: { forceCloseConnections: true } });
+  // Adgangstoken som i det personlige manifest (#11).
+  const token = `e2e-${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+  const app = await buildServer({ store, port, token, addinDir: DIST, https: testCert(), fastify: { forceCloseConnections: true } });
   await app.listen({ host: "127.0.0.1", port });
-  return { origin: `https://localhost:${port}`, stop: () => app.close() };
+  return { origin: `https://localhost:${port}`, token, stop: () => app.close() };
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

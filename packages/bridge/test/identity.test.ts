@@ -1,0 +1,87 @@
+import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { createServer } from "node:net";
+import { platform, tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { Settings } from "@miai/shared";
+import { ConfigStore } from "../src/config.js";
+import { DEFAULT_PORT, identityFile, loadIdentity, personalizeManifest, portIsFree, tokenMatches } from "../src/identity.js";
+import { buildServer } from "../src/server.js";
+
+const dir = () => mkdtempSync(join(tmpdir(), "miai-id-"));
+
+describe("identitet pr. bruger (#11)", () => {
+  it("opretter et token og husker det sammen med porten", async () => {
+    const d = dir();
+    const a = await loadIdentity(d, 45_101);
+    const b = await loadIdentity(d, 45_101);
+    expect(a.token).toHaveLength(43); // 32 tilfældige bytes, base64url
+    expect(b).toEqual(a);
+    if (platform() !== "win32") expect(statSync(identityFile(d)).mode & 0o777).toBe(0o600);
+  });
+
+  it("forskellige brugere (konfigurationsmapper) får forskellige tokens", async () => {
+    expect((await loadIdentity(dir(), 45_102)).token).not.toBe((await loadIdentity(dir(), 45_102)).token);
+  });
+
+  it("vælger næste ledige port, når den gemte er optaget – og husker den", async () => {
+    const d = dir();
+    // Optag standardporten, som en anden brugers bridge ville gøre.
+    const other = createServer();
+    const blocked = await new Promise<boolean>((ok) => other.once("error", () => ok(false)).listen(DEFAULT_PORT, "127.0.0.1", () => ok(true)));
+    try {
+      const id = await loadIdentity(d);
+      expect(id.port).not.toBe(DEFAULT_PORT);
+      expect(id.port).toBeGreaterThan(DEFAULT_PORT);
+      expect(await portIsFree(id.port)).toBe(true);
+      expect(JSON.parse(readFileSync(identityFile(d), "utf8")).port).toBe(id.port);
+      expect(blocked || !(await portIsFree(DEFAULT_PORT))).toBe(true);
+    } finally {
+      other.close();
+    }
+  });
+
+  it("personligt manifest: port og token i task pane-adressen, ikke i ikoner", () => {
+    const base = `<SourceLocation DefaultValue="https://localhost:44321/taskpane.html"/><bt:Url id="x" DefaultValue="https://localhost:44321/taskpane.html"/><bt:Image DefaultValue="https://localhost:44321/assets/icon-32.png"/><AppDomain>https://localhost:44321</AppDomain>`;
+    const xml = personalizeManifest(base, { port: 44_322, token: "abc_DEF-123" });
+    expect(xml.match(/taskpane\.html\?token=abc_DEF-123"/g)).toHaveLength(2);
+    expect(xml).toContain('https://localhost:44322/assets/icon-32.png"');
+    expect(xml).toContain("<AppDomain>https://localhost:44322</AppDomain>");
+    expect(xml).not.toContain("44321");
+  });
+
+  it("sammenligner tokens sikkert", () => {
+    expect(tokenMatches("hemmelig", "hemmelig")).toBe(true);
+    expect(tokenMatches("hemmelig", "hemmeliG")).toBe(false);
+    expect(tokenMatches("hemmelig", "kort")).toBe(false);
+    expect(tokenMatches("hemmelig", undefined)).toBe(false);
+  });
+});
+
+describe("tokenkontrol i API'et", () => {
+  const H = { host: "localhost:44321", "x-miai": "1" };
+  async function app() {
+    const d = dir();
+    const store = new ConfigStore(d, join(d, "ingen-politik.json"));
+    store.update(Settings.parse({ endpoints: [{ id: "x", name: "X", baseUrl: "http://127.0.0.1:9/v1" }], activeEndpoint: "x" }));
+    return buildServer({ store, port: 44321, token: "rigtigt-token" });
+  }
+
+  it("afviser API-kald uden eller med forkert token (401, kode TOKEN)", async () => {
+    const a = await app();
+    const none = await a.inject({ url: "/api/settings", headers: H });
+    expect(none.statusCode).toBe(401);
+    expect(none.json().code).toBe("TOKEN");
+    expect((await a.inject({ url: "/api/settings", headers: { ...H, "x-miai-token": "forkert" } })).statusCode).toBe(401);
+  });
+
+  it("tillader API-kald med det rigtige token", async () => {
+    const a = await app();
+    expect((await a.inject({ url: "/api/settings", headers: { ...H, "x-miai-token": "rigtigt-token" } })).statusCode).toBe(200);
+  });
+
+  it("statussiden og statiske filer kræver intet token", async () => {
+    const a = await app();
+    expect((await a.inject({ url: "/", headers: { host: H.host } })).statusCode).toBe(200);
+  });
+});

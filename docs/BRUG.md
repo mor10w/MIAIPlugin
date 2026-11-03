@@ -42,15 +42,17 @@ Bridgen er en lokal Node.js-service, der serverer add-in'et og kalder modellen. 
 
 ```bash
 npm run build
-npm start                # bridgen kører på https://localhost:44321
+npm start                # bridgen kører på https://localhost:44321 (eller næste ledige port)
 ```
 
-Sideload bridge-manifestet:
+Bridgen skriver dit **personlige manifest** med din port og din adgangsnøgle. Stien vises ved start, fx `~/Library/Application Support/MIAI/manifest.xml`. Sideload den fil:
 
 ```bash
-npm run sideload:mac -- packages/addin/manifest.xml        # macOS
-npm run sideload:windows -- packages\addin\manifest.xml    # Windows
+npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
 ```
+På Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`.
+
+Adgangsnøglen betyder, at kun du kan bruge din bridge, også på en delt maskine (Remote Desktop/Citrix), hvor andre brugere kan nå `127.0.0.1`. MIAI App installerer og opdaterer det personlige manifest automatisk.
 
 Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
