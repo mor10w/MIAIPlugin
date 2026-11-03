@@ -19,6 +19,8 @@ export interface FakeOfficeOptions {
   apiSets?: Record<string, string>;
   /** Markeret tekst (Word, PowerPoint). */
   selection?: string;
+  /** Word: hele dokumentets tekst (bruges, når intet er markeret). Standard: markeringen. */
+  document?: string;
   /** Excel: arkets værdier (række 1 = A1). Markeringen er hele området. */
   excel?: { sheet: string; values: (string | number)[][] };
   displayLanguage?: string;
@@ -119,41 +121,75 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   // --- Word -------------------------------------------------------------------
   if (o.host === "Word") {
     const picture = (base64: string, loc: string) => record({ kind: "picture", bytes: base64.length, loc });
-    const paragraph = () =>
-      strict("Word.Paragraph", {
+    // Afsnit: typografi registreres, når agenten sætter den (#6).
+    const paragraph = (text = "") => {
+      const p: Record<string, unknown> = {
         insertInlinePictureFromBase64: picture,
         insertHtml: (html: string, loc: string) => record({ kind: "insertHtml", html, loc }),
+        insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc }), paragraph(t)),
+      };
+      Object.defineProperty(p, "styleBuiltIn", { set: (v: string) => record({ kind: "style", text, style: v }), enumerable: true });
+      return strict("Word.Paragraph", p);
+    };
+    // Et søgeresultat: ét sted i teksten, hvor adapterne kan erstatte, slette, kommentere eller indsætte.
+    const hit = (text: string): unknown =>
+      strict("Word.Range(search)", {
+        text,
+        load() {},
+        insertText: (rep: string, loc: string) => record({ kind: loc === "Replace" ? "replace" : "insertText", from: text, to: rep, text: rep, loc }),
+        delete: () => record({ kind: "delete", text }),
+        insertComment: (c: string) => record({ kind: "comment", on: text, text: c }),
+        insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc, anchor: text }), paragraph(t)),
+        paragraphs: {
+          getLast: () =>
+            strict("Word.Paragraph(anchor)", {
+              insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc, anchor: text }), paragraph(t)),
+            }),
+        },
       });
-    const range: Record<string, unknown> = strict("Word.Range", {
-      text: selection,
-      load() {},
-      insertText: (text: string, loc: string) => record({ kind: "insertText", text, loc }),
-      insertHtml: (html: string, loc: string) => record({ kind: "insertHtml", html, loc }),
-      insertComment: (text: string) => record({ kind: "comment", text }),
-      insertParagraph: () => paragraph(),
-      insertInlinePictureFromBase64: picture,
-      getRange: () => range,
-      search(text: string) {
-        // Én forekomst pr. gang teksten findes i markeringen.
-        const items: unknown[] = [];
-        let i = selection.indexOf(text);
-        while (i >= 0) {
-          items.push(strict("Word.Range(search)", { insertText: (rep: string, loc: string) => record({ kind: "replace", from: text, to: rep, loc }) }));
-          i = selection.indexOf(text, i + text.length);
-        }
-        return { items, load() {} };
-      },
-    });
+    const makeRange = (getText: () => string): Record<string, unknown> => {
+      const r: Record<string, unknown> = strict("Word.Range", {
+        get text() {
+          return getText();
+        },
+        load() {},
+        insertText: (text: string, loc: string) => record({ kind: "insertText", text, loc }),
+        insertHtml: (html: string, loc: string) => record({ kind: "insertHtml", html, loc }),
+        insertComment: (text: string) => record({ kind: "comment", text }),
+        insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc }), paragraph(t)),
+        insertInlinePictureFromBase64: picture,
+        getRange: () => r,
+        search(text: string) {
+          // Én forekomst pr. gang teksten findes.
+          const items: unknown[] = [];
+          const all = getText();
+          let i = all.indexOf(text);
+          while (i >= 0) {
+            items.push(hit(text));
+            i = all.indexOf(text, i + text.length);
+          }
+          return { items, load() {} };
+        },
+      });
+      return r;
+    };
+    const range = makeRange(() => selection);
+    const bodyRange = makeRange(() => o.document ?? selection);
     const document = strict("Word.Document", {
       getSelection: () => range,
-      body: strict("Word.Body", { getRange: () => range, insertParagraph: () => paragraph() }),
+      body: strict("Word.Body", {
+        getRange: () => (o.document !== undefined ? bodyRange : range),
+        insertParagraph: (t: string, loc: string) => (record({ kind: "insertParagraph", text: t, loc }), paragraph(t)),
+        getOoxml: () => ({ value: "<pkg:package>øjebliksbillede</pkg:package>" }),
+        insertOoxml: (ooxml: string, loc: string) => record({ kind: "insertOoxml", ooxml, loc }),
+      }),
       load() {},
       changeTrackingMode: "Off",
     });
     const ctx = strict("Word.RequestContext", { document, trackedObjects: { add() {}, remove() {} }, sync });
     w.Word = strict("Word", {
       ChangeTrackingMode: { trackAll: "TrackAll", off: "Off" },
-      run: (a: unknown, b?: unknown) => (typeof a === "function" ? a(ctx) : (b as (c: unknown, r: unknown) => unknown)(ctx, range)),
+      run: (a: unknown, b?: unknown) => (typeof a === "function" ? a(ctx) : (b as (c: unknown, r: unknown) => unknown)(ctx, a)),
     });
   }
 
@@ -165,7 +201,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     const addr = (r0: number, c0: number, rows: number, cols: number) =>
       `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
     function rng(r0: number, c0: number, rows: number, cols: number): unknown {
-      const slice = () => grid.slice(r0, r0 + rows).map((r) => r.slice(c0, c0 + cols));
+      // Udfyldt med "" uden for arkets data, som i Excel.
+      const slice = () => Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r0 + r]?.[c0 + c] ?? ""));
       const target = {
         address: addr(r0, c0, rows, cols),
         rowCount: rows,
@@ -187,6 +224,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         set formulas(v: unknown) {
           record({ kind: "formulas", address: addr(r0, c0, rows, cols), formulas: v });
         },
+        clear: (applyTo: string) => record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo }),
         get valueTypes() {
           return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
         },
@@ -195,18 +233,27 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       return strict("Excel.Range", target);
     }
     const used = () => rng(0, 0, grid.length, grid[0]?.length ?? 1);
+    /** "B2" eller "B2:D4" → område (kun enkelt-bogstavs kolonner i simuleringen). */
+    const parse = (a: string) => {
+      const [from, to = from] = a.toUpperCase().split(":");
+      const cell = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
+      const f = cell(from);
+      const t = cell(to);
+      return rng(f.r, f.c, t.r - f.r + 1, t.c - f.c + 1);
+    };
     const worksheet = strict("Excel.Worksheet", { name: sheet, load() {}, getUsedRangeOrNullObject: used });
     const workbook = strict("Excel.Workbook", {
       getSelectedRange: used,
       worksheets: strict("Excel.WorksheetCollection", {
         load() {},
         items: [strict("Excel.Worksheet", { name: sheet, getUsedRangeOrNullObject: used })],
-        getItem: () => strict("Excel.Worksheet", { getRange: () => used() }),
+        getItem: () => strict("Excel.Worksheet", { getRange: (a?: string) => (a ? parse(a) : used()) }),
       }),
       comments: { add: (address: string, text: string) => record({ kind: "comment", address, text }) },
     });
     w.Excel = strict("Excel", {
       RangeValueType: { error: "Error" },
+      ClearApplyTo: { contents: "Contents" },
       run: async (fn: (c: unknown) => unknown) => fn(strict("Excel.RequestContext", { workbook, sync })),
     });
   }

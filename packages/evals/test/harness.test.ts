@@ -228,3 +228,16 @@ describe("rapport", () => {
     expect(md).toContain("| a | lille |");
   });
 });
+
+describe("agent-planer (#6)", () => {
+  const doc = "Vi har mange kunder. Alle kunder får svar.";
+  const ans = (actions: unknown[]) => ({ output: "", result: { summary: "", actions }, input: doc, toolCalls: [], host: "word" as const });
+  it("kræver de rigtige handlinger, forbyder destruktive og tjekker, at teksten findes", () => {
+    const good = ans([{ action: "replace", find: "kunder", replace: "klienter", all: true, reason: "" }]);
+    expect(runCheck({ type: "plan", min: 1, include: ["replace"], exclude: ["delete"], valid: true }, good).ok).toBe(true);
+    const bad = ans([{ action: "delete", find: "findes ikke", reason: "" }]);
+    const r = runCheck({ type: "plan", include: ["replace"], exclude: ["delete"], valid: true }, bad);
+    expect(r.ok).toBe(false);
+    expect(r.detail).toMatch(/mangler replace.*indeholder delete.*kan ikke udføres/);
+  });
+});

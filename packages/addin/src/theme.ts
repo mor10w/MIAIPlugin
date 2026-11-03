@@ -76,12 +76,13 @@ export const ui = {
 } as const;
 
 /** Opgavekategorier og deres farver (afledt af Fluents palet, så de virker i lyst og mørkt tema). */
-export type TaskCategory = "write" | "present" | "analyze" | "custom";
+export type TaskCategory = "write" | "present" | "analyze" | "agent" | "custom";
 
 export const categoryColors: Record<TaskCategory, { bg: string; fg: string }> = {
   write: { bg: tokens.colorBrandBackground2, fg: tokens.colorBrandForeground1 },
   present: { bg: tokens.colorPalettePeachBackground2, fg: tokens.colorPalettePeachForeground2 },
   analyze: { bg: tokens.colorPaletteTealBackground2, fg: tokens.colorPaletteTealForeground2 },
+  agent: { bg: tokens.colorPaletteCornflowerBackground2, fg: tokens.colorPaletteCornflowerForeground2 },
   custom: { bg: tokens.colorPaletteLavenderBackground2, fg: tokens.colorPaletteLavenderForeground2 },
 };
 

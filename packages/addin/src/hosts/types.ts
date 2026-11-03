@@ -1,4 +1,4 @@
-import type { ApplyMode, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
+import type { AgentAction, ApplyMode, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 
@@ -8,6 +8,29 @@ export interface ApplyOutcome {
   /** Besked til brugeren, fx "3 af 4 rettelser anvendt" eller en formelfejl. */
   message?: string;
   warning?: boolean;
+}
+
+/** Udfaldet af én agent-handling (#6). */
+export interface AgentStepResult {
+  ok: boolean;
+  /** Antal steder, handlingen ramte (fx forekomster erstattet eller celler skrevet). */
+  count?: number;
+  /** Hvorfor handlingen ikke blev udført – oversættes i UI'et. */
+  error?: "not-found" | "anchor-missing" | "other-sheet" | "formula-error" | "failed";
+  /** Teknisk detalje, fx Office' fejlbesked eller Excels fejlværdi (#VALUE!). */
+  detail?: string;
+}
+
+export interface AgentOutcome extends ApplyOutcome {
+  /** Ét resultat pr. udført handling, i samme rækkefølge. */
+  results: AgentStepResult[];
+  /** Fortryder hele agent-sessionen. */
+  undo: () => Promise<void>;
+}
+
+export interface AgentOptions {
+  /** Word: udfør som sporede ændringer, så de også kan gennemgås i Word. */
+  trackChanges?: boolean;
 }
 
 export interface ContextOptions {
@@ -36,6 +59,10 @@ export interface HostAdapter {
   applyDiagram?(result: DiagramResult, ctx: DocContext): Promise<ApplyOutcome>;
   /** Indsætter den første ```mermaid- eller ```svg-blok i teksten som billede. Kaster, hvis ingen blok findes. */
   applyImage?(text: string, ctx?: DocContext): Promise<ApplyOutcome>;
+  /** Agent-tilstand (#6): udfører de bekræftede handlinger og returnerer fortryd for hele sessionen. */
+  applyAgent?(actions: AgentAction[], ctx: DocContext, opts?: AgentOptions): Promise<AgentOutcome>;
+  /** Kan agentens ændringer udføres som sporede ændringer? */
+  agentTracking?(): boolean;
 }
 
 /** Ca. 6-8k tokens. Større dokumenter afkortes (chunking kommer i fase 1). */

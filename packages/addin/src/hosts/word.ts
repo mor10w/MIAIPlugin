@@ -1,13 +1,31 @@
-import type { ApplyMode, DiagramResult, DocContext, GrammarResult } from "@miai/shared";
+import type { AgentAction, ApplyMode, DiagramResult, DocContext, GrammarResult, WordStyle } from "@miai/shared";
 import { diagramToPng, graphicToPng, pointSize, type PngImage } from "../image";
 import { mdToSafeHtml } from "../markdown";
 import { extractGraphic } from "../svg";
-import { truncate, type ApplyOutcome, type ContextOptions, type HostAdapter, type TextFormat } from "./types";
+import {
+  truncate,
+  type AgentOptions,
+  type AgentOutcome,
+  type AgentStepResult,
+  type ApplyOutcome,
+  type ContextOptions,
+  type HostAdapter,
+  type TextFormat,
+} from "./types";
 
 const has = (v: string) => Office.context.requirements.isSetSupported("WordApi", v);
 
 /** Escape af Words specialtegn i søgning (^ bruges til fx ^p). */
 const escapeSearch = (s: string) => s.replace(/\^/g, "^^");
+
+/** Agentens typografier → Words indbyggede (kun indbyggede typografier; ingen fri formatering). */
+const STYLE: Record<WordStyle, string> = {
+  normal: "Normal",
+  heading1: "Heading1",
+  heading2: "Heading2",
+  heading3: "Heading3",
+  bullet: "ListBullet",
+};
 
 export class WordAdapter implements HostAdapter {
   readonly host = "word" as const;
@@ -16,7 +34,7 @@ export class WordAdapter implements HostAdapter {
 
   supports(mode: ApplyMode): boolean {
     if (mode === "trackChanges" || mode === "comment") return has("1.4");
-    return mode === "replace" || mode === "insertAfter" || mode === "diagram" || mode === "image";
+    return mode === "replace" || mode === "insertAfter" || mode === "diagram" || mode === "image" || mode === "agent";
   }
 
   async getContext(opts: ContextOptions): Promise<DocContext> {
@@ -152,5 +170,103 @@ export class WordAdapter implements HostAdapter {
       await ctx.sync();
       return { message: "Figuren er indsat efter markeringen." };
     });
+  }
+  agentTracking(): boolean {
+    return has("1.4");
+  }
+
+  /**
+   * Agent-tilstand (#6): udfører de bekræftede handlinger én ad gangen inden for markeringen
+   * (eller hele dokumentet). Fortryd gendanner dokumentets indhold fra et OOXML-øjebliksbillede
+   * taget lige før – også når ændringerne er lavet som sporede ændringer.
+   */
+  async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
+    return this.run(async (ctx, range) => {
+      const body = ctx.document.body;
+      const snapshot = body.getOoxml();
+      await ctx.sync();
+      const ooxml = snapshot.value;
+      const scope = dc.isWholeDocument ? body.getRange("Whole") : range;
+      const results: AgentStepResult[] = [];
+      await this.withTracking(ctx, !!opts.trackChanges && has("1.4"), async () => {
+        for (const a of actions) {
+          try {
+            results.push(await this.agentStep(ctx, scope, dc, a));
+          } catch (err) {
+            results.push({ ok: false, error: "failed", detail: (err as Error).message });
+          }
+        }
+      });
+      const undo = () =>
+        Word.run(async (c) => {
+          c.document.body.insertOoxml(ooxml, "Replace");
+          await c.sync();
+        });
+      return { results, undo };
+    });
+  }
+
+  private async find(ctx: Word.RequestContext, scope: Word.Range, text: string): Promise<Word.Range[]> {
+    const res = scope.search(escapeSearch(text), { matchCase: true });
+    res.load("items");
+    await ctx.sync();
+    return res.items;
+  }
+
+  private async agentStep(ctx: Word.RequestContext, scope: Word.Range, dc: DocContext, a: AgentAction): Promise<AgentStepResult> {
+    switch (a.action) {
+      case "replace": {
+        const hits = await this.find(ctx, scope, a.find);
+        if (!hits.length) return { ok: false, error: "not-found" };
+        const targets = a.all ? hits : hits.slice(0, 1);
+        for (const h of targets) h.insertText(a.replace, "Replace");
+        await ctx.sync();
+        return { ok: true, count: targets.length };
+      }
+      case "delete": {
+        const [hit] = await this.find(ctx, scope, a.find);
+        if (!hit) return { ok: false, error: "not-found" };
+        hit.delete();
+        await ctx.sync();
+        return { ok: true, count: 1 };
+      }
+      case "comment": {
+        const [hit] = await this.find(ctx, scope, a.find);
+        if (!hit) return { ok: false, error: "not-found" };
+        hit.insertComment(a.text);
+        await ctx.sync();
+        return { ok: true, count: 1 };
+      }
+      case "insert": {
+        let para: Word.Paragraph;
+        if (a.position === "after") {
+          const [anchor] = await this.find(ctx, scope, a.anchor ?? "");
+          if (!anchor) return { ok: false, error: "anchor-missing" };
+          para = has("1.3") ? anchor.paragraphs.getLast().insertParagraph(a.text, "After") : anchor.insertParagraph(a.text, "After");
+        } else if (dc.isWholeDocument) {
+          para = ctx.document.body.insertParagraph(a.text, a.position === "start" ? "Start" : "End");
+        } else {
+          para = scope.insertParagraph(a.text, a.position === "start" ? "Before" : "After");
+        }
+        if (a.style && has("1.3")) para.styleBuiltIn = STYLE[a.style] as Word.BuiltInStyleName;
+        await ctx.sync();
+        return { ok: true, count: 1 };
+      }
+      case "move": {
+        const [hit] = await this.find(ctx, scope, a.find);
+        if (!hit) return { ok: false, error: "not-found" };
+        const [anchor] = await this.find(ctx, scope, a.anchor);
+        if (!anchor) return { ok: false, error: "anchor-missing" };
+        hit.load("text");
+        await ctx.sync();
+        // Flyttes som tekst (bevidst ingen formateringsværktøjer); originalen slettes bagefter.
+        anchor.insertText(a.position === "before" ? `${hit.text} ` : ` ${hit.text}`, a.position === "before" ? "Before" : "After");
+        hit.delete();
+        await ctx.sync();
+        return { ok: true, count: 1 };
+      }
+      default:
+        return { ok: false, error: "failed", detail: `${a.action} findes ikke i Word` };
+    }
   }
 }

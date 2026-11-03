@@ -1,3 +1,4 @@
+import { AgentPlan, checkPlan, type HostKind } from "@miai/shared";
 import type { Check, CheckResult } from "./types.js";
 
 /** Automatiske tjek af et svar (#2). Rene funktioner, så de kan unit-testes uden model. */
@@ -10,6 +11,8 @@ export interface Answer {
   /** Inputtets tekst – til længde i forhold til input. */
   input: string;
   toolCalls: string[];
+  /** Værten – til agent-planer. */
+  host?: HostKind;
 }
 
 const STOPWORDS: Record<"da" | "en" | "de", string[]> = {
@@ -102,6 +105,23 @@ export function runCheck(check: Check, a: Answer): CheckResult {
       const colsOk = check.columns === undefined || rows.every((row) => row.split("\t").length === check.columns);
       const rowsOk = check.rows === undefined || rows.length === check.rows;
       return r(colsOk && rowsOk, `${rows.length} rækker, kolonner ${[...new Set(rows.map((row) => row.split("\t").length))].join("/")}`);
+    }
+    case "plan": {
+      const parsed = AgentPlan.safeParse(a.result);
+      if (!parsed.success) return r(false, "ingen gyldig plan");
+      const kinds = parsed.data.actions.map((x) => x.action as string);
+      const problems = [
+        check.min !== undefined && kinds.length < check.min && `${kinds.length} < ${check.min} handlinger`,
+        check.max !== undefined && kinds.length > check.max && `${kinds.length} > ${check.max} handlinger`,
+        ...(check.include ?? []).filter((k) => !kinds.includes(k)).map((k) => `mangler ${k}`),
+        ...(check.exclude ?? []).filter((k) => kinds.includes(k)).map((k) => `indeholder ${k}`),
+      ];
+      if (check.valid) {
+        const bad = checkPlan(parsed.data, { host: a.host ?? "word", text: a.input }).filter((c) => c.problem);
+        if (bad.length) problems.push(`${bad.length} handlinger kan ikke udføres (${bad.map((b) => b.problem).join(", ")})`);
+      }
+      const list = problems.filter(Boolean);
+      return r(list.length === 0, list.join("; "));
     }
     case "tool": {
       const called = a.toolCalls.length > 0;

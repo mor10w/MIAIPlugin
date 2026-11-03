@@ -59,3 +59,35 @@ test("billeder – uden forbindelse", async ({ open }) => {
   await settle(tp.page);
   await tp.page.screenshot({ path: `${OUT}/6-uden-forbindelse-light.png`, animations: "disabled" });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`billeder: agent – ${theme}`, async ({ open }) => {
+    const tp = await open({
+      host: "Word",
+      theme,
+      apiSets: { WordApi: "1.4" },
+      document: "Kære kunde\n\nTak for din henvendelse. Vores kunder er vigtige for os.\n\nGammel note: ring til Bo.\n\nMed venlig hilsen\nKundeservice",
+    });
+    tp.model.reply = () => ({
+      json: JSON.stringify({
+        summary: "Retter 'kunder' til 'klienter', tilføjer en overskrift og fjerner den gamle note.",
+        actions: [
+          { action: "replace", find: "kunder", replace: "klienter", all: true, reason: "Det ønskede ordvalg" },
+          { action: "insert", text: "Svar på din henvendelse", position: "start", style: "heading1", reason: "Overskrift øverst" },
+          { action: "delete", find: "Gammel note: ring til Bo.", reason: "Intern note, der ikke skal med" },
+          { action: "comment", find: "Kundeservice", text: "Skal der stå et navn?", reason: "Forslag" },
+        ],
+      }),
+    });
+    await tp.run("Agent: redigér dokumentet");
+    await expect(tp.page.getByRole("button", { name: "Udfør 4 handlinger" })).toBeVisible();
+    await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).scrollIntoViewIfNeeded();
+    await settle(tp.page);
+    await tp.page.screenshot({ path: `${OUT}/7-agent-plan-${theme}.png`, animations: "disabled", fullPage: true });
+    await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).click();
+    await expect(tp.page.getByText("4 af 4 handlinger udført.")).toBeVisible();
+    await tp.page.getByRole("button", { name: "Fortryd agent-session" }).scrollIntoViewIfNeeded();
+    await settle(tp.page);
+    await tp.page.screenshot({ path: `${OUT}/8-agent-udfoert-${theme}.png`, animations: "disabled", fullPage: true });
+  });
+}

@@ -29,6 +29,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 
 - **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
 - **`userTasks.ts`**: brugerdefinerede opgaver (F14, ADR-0011) – `UserTaskFile`-skema (JSON-filer med prompt-skabelon), `renderTemplate`, omsætning til `TaskDefinition` og det serialiserbare `TaskView`.
+- **`agent.ts`**: agent-tilstand (#6, ADR-0012) – `AgentPlan`/`AgentAction` (lukket union af Word- og Excel-handlinger), værktøjsbeskrivelse til prompten og `checkPlan`, der markerer handlinger, som ikke kan udføres. Udførelsen sker i add-in'ets host-adaptere (`applyAgent`) med fortryd for hele sessionen.
 - **`audit.ts`**: `AuditEntry`-skema (kun metadata) og grænser for loggen.
 - **`engine.ts`** (`executeTask`):
   - vælger model (forespørgsel → model pr. opgave → standard → første fra `/v1/models`)

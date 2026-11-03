@@ -19,6 +19,7 @@ export const CATEGORY: Record<string, string> = {
   summarize: "Resumé og analyse",
   "analyze-data": "Resumé og analyse",
   chat: "Chat",
+  agent: "Agent",
 };
 export const categoryOf = (task: string) => CATEGORY[task] ?? "Andet";
 

@@ -48,6 +48,21 @@ export const VIEWS: Record<string, (tp: Taskpane) => Promise<void>> = {
     await tp.run("Forenkl");
     await expect(tp.page.getByRole("button", { name: "Erstat" })).toBeVisible();
   },
+  "agent-plan": async (tp) => {
+    tp.model.reply = () => ({
+      json: JSON.stringify({
+        summary: "Gør teksten enklere og tilføjer en overskrift.",
+        actions: [
+          { action: "replace", find: "skal forenkles", replace: "er enkel", reason: "Enklere ordvalg" },
+          { action: "insert", text: "Resumé", position: "start", style: "heading1", reason: "Overskrift" },
+          { action: "delete", find: "Tekst, der", reason: "Overflødigt" },
+          { action: "comment", find: "findes ikke", text: "Tjek", reason: "Eksempel på en handling, der ikke kan udføres" },
+        ],
+      }),
+    });
+    await tp.run("Agent: redigér dokumentet");
+    await expect(tp.page.getByRole("button", { name: "Udfør 3 handlinger" })).toBeVisible();
+  },
   chat: async (tp) => {
     tp.model.reply = () => ({ stream: chunks(ANSWER, 12) });
     await tp.tab("Chat");

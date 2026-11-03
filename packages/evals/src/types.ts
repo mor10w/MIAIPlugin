@@ -42,6 +42,18 @@ export const Check = z.discriminatedUnion("type", [
   }),
   /** TSV (Excel-celler): antal kolonner pr. række og antal rækker. */
   z.object({ type: z.literal("tsv"), columns: z.number().int().optional(), rows: z.number().int().optional() }),
+  /**
+   * Agent-planer (#6): antal handlinger, hvilke slags der skal/ikke må være med, og om al
+   * `find`/`anchor`-tekst faktisk findes i dokumentet (checkPlan).
+   */
+  z.object({
+    type: z.literal("plan"),
+    min: z.number().int().optional(),
+    max: z.number().int().optional(),
+    include: z.array(z.string()).optional(),
+    exclude: z.array(z.string()).optional(),
+    valid: z.boolean().optional(),
+  }),
   /** Kaldte modellen web_search (true) – eller lod den være (false)? */
   z.object({ type: z.literal("tool"), called: z.boolean() }),
 ]);

@@ -1,6 +1,7 @@
 import type { FluentIcon } from "@fluentui/react-icons";
 import {
   ArrowRepeatAll20Regular,
+  BotSparkle20Regular,
   CalculatorMultiple20Regular,
   DataBarVertical20Regular,
   DocumentEdit20Regular,
@@ -36,6 +37,7 @@ const META: Record<string, { icon: FluentIcon; category: TaskCategory }> = {
   "explain-formula": { icon: MathFormula20Regular, category: "analyze" },
   "generate-formula": { icon: CalculatorMultiple20Regular, category: "analyze" },
   "analyze-data": { icon: DataBarVertical20Regular, category: "analyze" },
+  agent: { icon: BotSparkle20Regular, category: "agent" },
 };
 
 export function taskMeta(task: Pick<TaskView, "id" | "custom">): { icon: FluentIcon; category: TaskCategory } {
@@ -44,4 +46,4 @@ export function taskMeta(task: Pick<TaskView, "id" | "custom">): { icon: FluentI
 }
 
 /** Rækkefølgen, kategorierne vises i. */
-export const CATEGORY_ORDER: TaskCategory[] = ["write", "present", "analyze", "custom"];
+export const CATEGORY_ORDER: TaskCategory[] = ["agent", "write", "present", "analyze", "custom"];

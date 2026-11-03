@@ -1,6 +1,6 @@
-import { fitGrid, parseTsv, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import { fitGrid, parseTsv, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
-import type { ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
+import type { AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
 
 const MAX_ROWS = 200;
 const MAX_COLS = 30;
@@ -111,7 +111,7 @@ export class ExcelAdapter implements HostAdapter {
 
   supports(mode: ApplyMode): boolean {
     if (mode === "comment") return Office.context.requirements.isSetSupported("ExcelApi", "1.10");
-    return mode === "cells" || mode === "formula" || mode === "replace";
+    return mode === "cells" || mode === "formula" || mode === "replace" || mode === "agent";
   }
 
   async getContext(opts: ContextOptions): Promise<DocContext> {
@@ -239,6 +239,75 @@ export class ExcelAdapter implements HostAdapter {
         return { undo, warning: true, message: `Formlen gav fejlen ${cell.values[0][0]}. Tjek den, eller fortryd.` };
       }
       return { undo, message: `Resultat: ${cell.values[0][0]}` };
+    });
+  }
+  /**
+   * Agent-tilstand (#6): skriver de bekræftede handlinger på markeringens ark. Alle berørte
+   * områders formler gemmes først, så hele sessionen kan fortrydes (Excel kan ikke altid
+   * fortryde add-in-ændringer med Ctrl+Z).
+   */
+  async applyAgent(actions: AgentAction[], dc: DocContext): Promise<AgentOutcome> {
+    if (!dc.address) throw new Error("Ingen markering.");
+    const sheetName = splitAddress(dc.address).sheet;
+    return Excel.run(async (ctx) => {
+      const sheet = ctx.workbook.worksheets.getItem(sheetName);
+      const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
+      // 1) Find målområderne og gem deres nuværende formler (= værdier for celler uden formel).
+      const targets = actions.map((a, i): Excel.Range | undefined => {
+        if (a.action !== "setValues" && a.action !== "setFormula" && a.action !== "clear") {
+          results[i] = { ok: false, error: "failed", detail: `${a.action} findes ikke i Excel` };
+          return undefined;
+        }
+        const { sheet: s, range } = a.address.includes("!") ? splitAddress(a.address) : { sheet: sheetName, range: a.address };
+        if (s !== sheetName) {
+          results[i] = { ok: false, error: "other-sheet" };
+          return undefined;
+        }
+        const r = sheet.getRange(range.replace(/\$/g, ""));
+        if (a.action === "setValues") {
+          const cols = Math.max(...a.values.map((row) => row.length));
+          return r.getCell(0, 0).getResizedRange(a.values.length - 1, cols - 1);
+        }
+        return a.action === "setFormula" ? r.getCell(0, 0) : r;
+      });
+      for (const t of targets) t?.load("address,formulas");
+      await ctx.sync();
+      const snapshots = targets.flatMap((t) => (t ? [{ address: t.address, formulas: t.formulas }] : []));
+
+      // 2) Udfør.
+      actions.forEach((a, i) => {
+        const t = targets[i];
+        if (!t) return;
+        if (a.action === "setValues") {
+          const cols = Math.max(...a.values.map((row) => row.length));
+          t.values = a.values.map((row) => [...row, ...Array(cols - row.length).fill("")]);
+          results[i] = { ok: true, count: a.values.length * cols };
+        } else if (a.action === "setFormula") {
+          const f = a.formula.trim();
+          t.formulas = [[f.startsWith("=") ? f : `=${f}`]];
+          results[i] = { ok: true, count: 1 };
+        } else if (a.action === "clear") {
+          t.clear(Excel.ClearApplyTo.contents);
+          results[i] = { ok: true };
+        }
+      });
+      await ctx.sync();
+
+      // 3) Formelfejl (#VALUE!, #NAME? …) meldes pr. handling.
+      const formulaCells = actions.map((a, i) => (a.action === "setFormula" ? targets[i] : undefined));
+      for (const c of formulaCells) c?.load("values,valueTypes");
+      await ctx.sync();
+      formulaCells.forEach((c, i) => {
+        if (c && c.valueTypes[0][0] === Excel.RangeValueType.error) results[i] = { ok: false, error: "formula-error", detail: String(c.values[0][0]) };
+      });
+
+      const undo = () =>
+        this.withRange(dc.address!, async (c) => {
+          const ws = c.workbook.worksheets.getItem(sheetName);
+          for (const snap of [...snapshots].reverse()) ws.getRange(splitAddress(snap.address).range).formulas = snap.formulas as string[][];
+          await c.sync();
+        });
+      return { results, undo };
     });
   }
 }

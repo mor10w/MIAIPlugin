@@ -182,6 +182,23 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8).
 - **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, fra som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
 
+### Agent (Word og Excel)
+
+**Agent: redigér dokumentet** udfører ændringer for dig. Beskriv, hvad der skal ændres, fx *"ret alle 'kunde' til 'klient' og tilføj overskriften 'Vilkår' øverst"* eller i Excel *"tilføj en total-række under tabellen"*.
+
+1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
+   - Word: erstat, indsæt afsnit med indbygget typografi (overskrift, punktopstilling), slet, flyt og kommentér.
+   - Excel: skriv værdier, skriv en formel og ryd et område.
+2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
+   - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
+   - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
+   - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.
+3. **Udfør.** Hver handling får ✓ eller en forklaring.
+
+Hele sessionen kan fortrydes med **Fortryd agent-session**. I Word gendannes dokumentets indhold fra lige før, også ændringer du selv har lavet siden. I Excel gendannes de berørte celler.
+
+Agenten arbejder på markeringen, eller på hele dokumentet hvis intet er markeret. I Excel arbejder den kun på det aktive ark. Den har ingen adgang til netværk, filer eller formatering, og instruktioner, der står i selve dokumentet, følges ikke. Se [ADR-0012](adr/0012-agent-tilstand.md).
+
 ## Brugerdefinerede opgaver
 
 Fanen **Opgaver** viser dine egne opgaver, som du kan oprette, redigere, slette og importere/eksportere. En opgave er en JSON-fil:

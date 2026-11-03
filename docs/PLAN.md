@@ -124,7 +124,7 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af
 - [x] Politikfil og audit-log færdiggjort (forberedelse til enterprise): JSONL `audit.log` med rotation i bridgen, ringbuffer i direkte tilstand; log vises under Indstillinger.
 
 ### Fase 3
-- F13: agent-tilstand (tool calling, whitelisted Office-værktøjer, plan → bekræft → udfør).
+- [x] F13: agent-tilstand (whitelisted Office-handlinger, plan → bekræft → udfør, fortryd af hele sessionen) – ADR-0012.
 - Outlook. Office på web via central udrulning plus on-prem endpoint.
 
 ### Fase 4

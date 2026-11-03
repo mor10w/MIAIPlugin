@@ -24,6 +24,7 @@ import {
   formatForView,
   parseTsv,
   stripEmphasis,
+  type AgentPlan,
   type ApplyMode,
   type DiagramResult,
   type DocContext,
@@ -41,6 +42,7 @@ import { CATEGORY_ORDER, taskMeta } from "../taskMeta";
 import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
+import { AgentPlanView } from "./AgentPlanView";
 import { ApplyBar } from "./ApplyBar";
 import { EmptyState, IconTile, SectionLabel, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
@@ -105,6 +107,8 @@ const useStyles = makeStyles({
     backgroundColor: tokens.colorNeutralBackground2,
     overflowWrap: "anywhere",
   },
+  /** Agentens plan: knapperne (Udfør, Fortryd) skal altid kunne nås, så ingen indre scroll. */
+  agentBody: { maxHeight: "none", overflowY: "visible" },
   plain: { whiteSpace: "pre-wrap" },
   edit: { padding: `${tokens.spacingVerticalXS} 0`, borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}` },
   del: { textDecoration: "line-through", color: tokens.colorPaletteRedForeground1 },
@@ -165,7 +169,8 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
     setInputError(undefined);
     try {
       const ctx = await adapter.getContext({
-        wholeDocumentFallback: task.input === "selectionOrDocument",
+        // Agenten arbejder på markeringen eller – uden markering – hele dokumentet (#6).
+        wholeDocumentFallback: task.input === "selectionOrDocument" || task.id === "agent",
         // Kolonnestatistik over hele arket er dyr at hente og bruges kun af dataanalysen.
         overview: task.id === "analyze-data" ? "stats" : "headers",
         // Opgaver, der deler lange tekster op, kan få meget mere end standardgrænsen.
@@ -211,7 +216,13 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
 
   if (!task) {
     if (!tasks) return <Spinner size="small" label={t("loading")} />;
-    const categoryName: Record<TaskCategory, string> = { write: t("catWrite"), present: t("catPresent"), analyze: t("catAnalyze"), custom: t("catCustom") };
+    const categoryName: Record<TaskCategory, string> = {
+      agent: t("catAgent"),
+      write: t("catWrite"),
+      present: t("catPresent"),
+      analyze: t("catAnalyze"),
+      custom: t("catCustom"),
+    };
     return (
       <div className={mergeClasses(s.root, kit.appear)}>
         {tasks.length > SEARCH_THRESHOLD && (
@@ -258,7 +269,8 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
   const meta = taskMeta(task);
   const running = state.status === "running";
   const hasResult = !!state.text || state.result !== undefined;
-  const showApply = state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length);
+  const isAgent = task.id === "agent";
+  const showApply = !isAgent && state.status === "done" && modes.length > 0 && !(task.id === "grammar" && !(state.result as GrammarResult).edits.length);
 
   return (
     <div className={mergeClasses(s.root, kit.appear)}>
@@ -328,8 +340,14 @@ export function ActionsTab({ adapter }: { adapter: HostAdapter }) {
             <Subtitle2 as="h3">{t("result")}</Subtitle2>
             {running && task.output.kind === "json" && <Caption1 className={s.muted}>{t("generatingStructured", { chars: state.progressChars })}</Caption1>}
           </div>
-          <div className={s.resultBody} aria-live="polite" aria-busy={running}>
-            {hasResult ? <ResultView task={task} format={format} text={shownText} result={state.result} /> : <TextSkeleton label={t("working")} />}
+          <div className={mergeClasses(s.resultBody, isAgent && s.agentBody)} aria-live="polite" aria-busy={running}>
+            {isAgent && state.status === "done" && state.result !== undefined && ctxRef.current ? (
+              <AgentPlanView key={JSON.stringify(state.result)} plan={state.result as AgentPlan} ctx={ctxRef.current} adapter={adapter} />
+            ) : hasResult && !isAgent ? (
+              <ResultView task={task} format={format} text={shownText} result={state.result} />
+            ) : (
+              <TextSkeleton label={t("working")} />
+            )}
           </div>
           {showApply && (
             <>
