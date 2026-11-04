@@ -137,6 +137,13 @@ Skal afprøves i Office desktop.
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
 
+**MIAI App (Mac)**
+- [ ] "Start automatisk ved login" til: MIAI står under Systemindstillinger → Generelt → Login-emner og starter efter log ud/ind (én instans, ingen dubletter)
+- [ ] Slå det fra igen: appen bliver kørende og starter ikke ved næste login
+- [ ] Startet fra DMG'en (ikke i Programmer): appen tilbyder at flytte sig til Programmer
+- [ ] Opgradering fra en udgave med LaunchAgent (`~/Library/LaunchAgents/dk.miai.app.plist`): filen fjernes, login-elementet er slået til, og appen starter kun én gang ved login
+- [ ] Installér i Office uden adgang: dialogen om Fuld diskadgang vises, og "Åbn Indstillinger" åbner det rigtige sted
+
 **Agent i Word – formatering** (simuleringen efterligner Words regler, men kun rigtig Word kan bekræfte dem). Brug et dokument med titel, overskrifter, fed tekst, et link, en punktliste, en nummereret liste og en tabel:
 - [ ] Erstat et ord midt i en sætning med fed tekst: kun ordet skifter, og fed tekst omkring det bevares
 - [ ] Indsæt efter en overskrift: det nye afsnit er brødtekst (ikke overskrift), uden arvet fed eller farve; fed, kursiv og link i teksten virker

@@ -77,6 +77,9 @@ MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hve
 2. Ved første start genererer appen et TLS-certifikat for `localhost` og tilbyder at betro det og installere MIAI i Office i ét trin (**Gør det nu**). Dialogen vises kun igen, hvis noget mangler, fx når certifikatet fornyes (ca. hvert andet år).
 3. Genstart Word/Excel/PowerPoint. Begge trin findes også i menuen (**Betro certifikat…**, **Installer i Office…**).
 4. Vælg endpoint (model-URL) og model i add-in'ets fanen **Indstillinger**.
+5. Valgfrit: **Start automatisk ved login** i menuen. Appen bliver så et login-emne i macOS. Første gang skal du måske godkende det under Systemindstillinger → Generelt → Login-emner, og appen skal ligge i Programmer.
+
+Blokerer macOS installationen i Office ("Adgang nægtet"), skal MIAI have **Fuld diskadgang** under Systemindstillinger → Anonymitet og sikkerhed. Appen tilbyder at åbne stedet.
 
 Alt kører lokalt: ingen vendor-cloud, ingen CORS (add-in og bridge er samme origin), indstillinger ligger i `~/Library/Application Support/MIAI/config.json`.
 

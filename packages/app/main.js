@@ -6,7 +6,7 @@
 // TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
 import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -146,13 +146,14 @@ function officeInstallState() {
 /** Viser install-fejl. EPERM = macOS blokerede adgangen (TCC) – der gives en vej til Full Disk Access. */
 function showInstallError(err) {
   if (err?.code === "EPERM") {
-    const target = app.isPackaged ? "MIAI-appen" : `Electron (${app.getAppPath()})`;
+    // I dev er det Electron-programmet selv, der skal have adgangen.
+    const target = app.isPackaged ? "MIAI" : `Electron (${process.execPath})`;
     void dialog
       .showMessageBox({
         type: "warning",
         title: "Adgang nægtet af macOS",
         message: "macOS blokerede MIAI fra at skrive i Office-appernes mapper.",
-        detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Indstilling af privatliv og sikkerhed → Fuld diskadgang, og prøv igen.`,
+        detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Anonymitet og sikkerhed → Fuld diskadgang, og prøv igen.`,
         buttons: ["Åbn Indstillinger", "Luk"],
         defaultId: 0,
       })
@@ -161,7 +162,7 @@ function showInstallError(err) {
       });
     return;
   }
-  dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
+  dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err?.message ?? String(err)}`);
 }
 
 function showCertResult(r) {
@@ -202,10 +203,21 @@ function buildMenu() {
       click: () => showCertResult(trustCert()),
     },
     { label: `Åbn https://localhost:${PORT}`, click: () => void shell.openExternal(`https://localhost:${PORT}`) },
-    { type: "checkbox", label: "Start ved genstart", checked: startAtLoginEnabled(), click: (item) => setStartAtLogin(item.checked) },
+    {
+      type: "checkbox",
+      label: app.isPackaged ? "Start automatisk ved login" : "Start automatisk ved login (kun i den installerede app)",
+      enabled: app.isPackaged,
+      checked: startAtLoginEnabled(),
+      click: (item) => void setStartAtLogin(item.checked),
+    },
     { type: "separator" },
     { label: "Afslut MIAI", click: () => app.quit() },
   ]);
+}
+
+/** Bygger menuen igen (fx når login-elementets tilstand er ændret). */
+function refreshMenu() {
+  if (tray) tray.setContextMenu(buildMenu());
 }
 
 let lastStatus = "";
@@ -227,58 +239,66 @@ function statusFromEndpoint(ep) {
   return `Modellen svarer ikke (${ep.error ?? "ukendt fejl"})`;
 }
 
-// --- Start ved genstart (LaunchAgent) -------------------------------------------------
-const LAUNCH_AGENT_LABEL = "dk.miai.app";
-const LAUNCH_AGENT_FILE = join(homedir(), "Library", "LaunchAgents", `${LAUNCH_AGENT_LABEL}.plist`);
-const LOG_DIR = join(homedir(), "Library", "Logs");
+// --- Start ved login ------------------------------------------------------------
+// macOS' egen login-element-API via Electron (SMAppService på macOS 13+): elementet vises under
+// Systemindstillinger → Generelt → Login-emner, følger app-bundlen, hvis den flyttes, og kan
+// kræve brugerens godkendelse. Kun i den installerede app – i dev ville det starte en tom Electron.
 
-function launchctl(args) {
-  const r = spawnSync("launchctl", args, { encoding: "utf8" });
-  return { ok: r.status === 0, stderr: (r.stderr ?? "").trim() };
-}
+/** LaunchAgent fra en tidligere udgave af denne funktion – fjernes, så appen ikke startes to gange. */
+const OLD_LAUNCH_AGENT = join(homedir(), "Library", "LaunchAgents", "dk.miai.app.plist");
 
-/** Kommando der starter appen – pakket: selve app-binæret; dev: Electron + app-mappen. */
-function loginItemCommand() {
-  return app.isPackaged ? [process.execPath] : [process.execPath, app.getAppPath()];
+function migrateOldLaunchAgent() {
+  if (!existsSync(OLD_LAUNCH_AGENT)) return;
+  try {
+    // Ingen "launchctl bootout": den ville stoppe appen selv, hvis den er startet af agenten.
+    // Agenten er indlæst til næste log ud; uden filen indlæses den ikke igen.
+    unlinkSync(OLD_LAUNCH_AGENT);
+    app.setLoginItemSettings({ openAtLogin: true });
+    log("Gammel LaunchAgent erstattet af login-element");
+  } catch (err) {
+    log(`Kunne ikke fjerne gammel LaunchAgent: ${err.message}`);
+  }
 }
 
 function startAtLoginEnabled() {
-  return existsSync(LAUNCH_AGENT_FILE);
+  return app.isPackaged && app.getLoginItemSettings().openAtLogin;
 }
 
-/**
- * Slår LaunchAgenten til/fra, så appen (og dermed bridgen) starter ved login.
- * Ved "til" skrives plisten og servicen bootstrappes, hvilket også starter den med det samme.
- */
-function setStartAtLogin(enabled) {
-  const domain = `gui/${process.getuid()}`;
-  // Fjern evt. kørende service først, så ny konfiguration træder i kraft (ignorér fejl ved "frakobling").
-  launchctl(["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]);
-  if (enabled) {
-    const plist = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${LAUNCH_AGENT_LABEL}</string>
-  <key>ProgramArguments</key><array>
-${loginItemCommand().map((a) => `    <string>${a}</string>`).join("\n")}
-  </array>
-  <key>WorkingDirectory</key><string>${app.getAppPath()}</string>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>${join(LOG_DIR, "miai-app.log")}</string>
-  <key>StandardErrorPath</key><string>${join(LOG_DIR, "miai-app-err.log")}</string>
-  <key>EnvironmentVariables</key><dict>
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-</dict>
-</plist>`;
-    mkdirSync(join(homedir(), "Library", "LaunchAgents"), { recursive: true });
-    writeFileSync(LAUNCH_AGENT_FILE, plist);
-    const r = launchctl(["bootstrap", domain, LAUNCH_AGENT_FILE]);
-    if (!r.ok) log(`launchctl bootstrap fejlede: ${r.stderr}`);
-  } else if (existsSync(LAUNCH_AGENT_FILE)) {
-    unlinkSync(LAUNCH_AGENT_FILE);
+/** Slår login-elementet til/fra. Kræver macOS godkendelse, vises der en vej til Indstillinger. */
+async function setStartAtLogin(enabled) {
+  // Fra en DMG eller Overførsler kører appen fra en midlertidig sti (App Translocation),
+  // som et login-element ikke kan pege på – flyt først appen til Programmer.
+  if (enabled && !app.isInApplicationsFolder()) {
+    const r = await dialog.showMessageBox({
+      type: "question",
+      message: "Flyt MIAI til mappen Programmer?",
+      detail: "MIAI kan kun starte automatisk ved login, når appen ligger i Programmer. Appen genstarter derfra – slå så indstillingen til igen.",
+      buttons: ["Flyt til Programmer", "Annullér"],
+      defaultId: 0,
+      cancelId: 1,
+    });
+    try {
+      if (r.response === 0 && app.moveToApplicationsFolder()) return; // appen genstarter fra Programmer
+    } catch (err) {
+      log(`Flytning til Programmer fejlede: ${err.message}`);
+      dialog.showErrorBox("MIAI", `MIAI kunne ikke flyttes til Programmer: ${err.message}. Træk appen derind i Finder.`);
+    }
+    refreshMenu();
+    return;
   }
+  app.setLoginItemSettings({ openAtLogin: enabled });
+  const status = app.getLoginItemSettings().status;
+  if (enabled && status === "requires-approval") {
+    const r = await dialog.showMessageBox({
+      type: "info",
+      message: "Godkend MIAI under Login-emner",
+      detail: "macOS skal godkende, at MIAI starter ved login: Systemindstillinger → Generelt → Login-emner.",
+      buttons: ["Åbn Indstillinger", "Luk"],
+      defaultId: 0,
+    });
+    if (r.response === 0) void shell.openExternal("x-apple.systempreferences:com.apple.LoginItems-Settings.extension");
+  }
+  refreshMenu();
 }
 
 // --- Livscyklus -----------------------------------------------------------------
@@ -311,6 +331,7 @@ if (!gotLock) {
       icon.setTemplateImage(true);
       tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
       log("tray oprettet");
+      if (app.isPackaged) migrateOldLaunchAgent();
 
       // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
       // Tidligere blev velkomstdialogen vist ved hver start.
