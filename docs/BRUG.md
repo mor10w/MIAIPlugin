@@ -219,7 +219,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 
 1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
    - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit og kommentér.
-   - Excel: skriv værdier, skriv en formel, tilføj rækker i en Excel-tabel og ryd et område.
+   - Excel: skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område, giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat og tilpas kolonnebredden.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
@@ -238,7 +238,10 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 **I Excel** bevares formateringen også:
 - Værdier og formler ændrer aldrig cellernes format.
 - Tomme celler, der fyldes ud lige under eller ved siden af data, får naboens format. En ny total-række får altså kolonnens valuta- eller procentformat.
-- Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner.
+- Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
+- *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
+
+**Chatten ændrer ikke dokumentet.** Beder du chatten om at formatere, sortere eller slette, henviser den til agenten. Der vises en knap, **Gør det med agenten**, der tager din besked med. MIAI kan ikke køre VBA eller makroer.
 
 **I PowerPoint** følger agenten skabelonen:
 - Erstat ændrer kun de ord, der er forskellige.

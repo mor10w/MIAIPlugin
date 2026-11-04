@@ -28,10 +28,19 @@ const DA_VERBS = [
   "flyt(?:te|ter)?",
   "korrigér|korrigere?",
   "rediger(?:e)?",
+  // Formatering og opbygning (især Excel og PowerPoint).
+  "formatér|formater(?:e)?",
+  "sortér|sorter(?:e)?",
+  "fremhæv(?:e|er)?",
+  "konvertér|konverter(?:e)?",
+  "ryd\\s+op",
 ];
 // Danske vendinger: "gør teksten kortere", "skriv … ind i dokumentet", "lav afsnit 2 om til …", "ret … til …".
 const DA_PHRASES = [
   "gør\\s+[\\p{L}\\s]{0,30}?(?:kortere|længere|enklere|tydeligere|mere\\s+\\p{L}+|mindre\\s+\\p{L}+|til\\s+(?:en\\s+)?(?:overskrift|punkt|liste|tabel))",
+  // "Gør tabellen pæn", "gør arket mere overskueligt", "giv tabellen et moderne layout".
+  "gør\\s+[\\p{L}\\s]{0,30}?(?:pæn(?:t|e|ere)?|flot(?:t|te|tere)?|moderne|overskuelig(?:t|e)?|læsbar(?:t|e)?|lækker(?:t|e)?|professionel(?:t|e)?)(?![\\p{L}])",
+  "giv\\s+[\\p{L}\\s]{0,30}?(?:et\\s+|en\\s+)?(?:moderne|nyt|pænt|flot|bedre|andet)\\s+(?:layout|look|udseende|design|format)",
   "skriv\\s+[^?]{0,60}?(?:i|ind\\s+i|til)\\s+(?:dokumentet|teksten|rapporten|afsnittet)",
   "lav\\s+[^?]{0,40}?\\s+om(?:\\s+til)?",
   "ret\\s+[^?]{0,60}?\\s+til\\s+",
@@ -48,7 +57,10 @@ const EN = [
   "rephras(?:e|es|ed|ing)",
   "shorten(?:s|ed|ing)?",
   "replac(?:e|es|ed|ing)",
-  "make\\s+[\\p{L}\\s]{0,30}?(?:shorter|longer|simpler|clearer|a\\s+(?:heading|bullet|list|table))",
+  "format(?:s|ted|ting)?\\s+(?:the|this|that|it|my|our|all|every|as)",
+  "sort(?:s|ed|ing)?\\s+(?:the|this|by)",
+  "(?:tidy|clean)\\s+up",
+  "make\\s+[\\p{L}\\s]{0,30}?(?:shorter|longer|simpler|clearer|nicer|prettier|modern|readable|a\\s+(?:heading|bullet|list|table))",
 ];
 
 const DA_RE = new RegExp(`${W0}(?:${DA_VERBS.join("|")})${W1}|${W0}(?:${DA_PHRASES.join("|")})`, "iu");

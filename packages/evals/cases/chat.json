@@ -239,5 +239,36 @@
       }
     ],
     "rubric": "Svaret indeholder et færdigt ```mermaid- eller ```svg-blok, der viser de fire faser i rækkefølge – ingen rå XML uden gærde og ingen værktøjskald i svaret."
+  },
+  {
+    "id": "chat-da-excel-formater-ingen-vba",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F4",
+    "note": "Regression: 'gør tabellen pæn' i chatten gav en klikvejledning og et tilbud om en VBA-makro, som add-in'et ikke kan køre.",
+    "context": {
+      "host": "excel",
+      "text": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n02-10-2026\tDesign\t7,5",
+      "table": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n02-10-2026\tDesign\t7,5",
+      "address": "Ark1!A1:C3"
+    },
+    "params": {
+      "prompt": "Gør tabellen pæn, med et moderne layout"
+    },
+    "checks": [
+      {
+        "type": "notContains",
+        "values": ["VBA", "makro", "macro", "Sub ", "Alt+F11"]
+      },
+      {
+        "type": "regex",
+        "pattern": "agent"
+      },
+      {
+        "type": "language",
+        "lang": "da"
+      }
+    ],
+    "rubric": "Henviser kort til agenten (Agent: redigér dokumentet), evt. med 2–4 punkter om hvad den ville ændre; ingen VBA, ingen lang klikvejledning."
   }
 ]

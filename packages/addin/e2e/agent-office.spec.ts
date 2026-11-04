@@ -5,7 +5,8 @@ import { expect, test } from "./fixtures/test";
 type Sheet = {
   values: unknown[][];
   formats: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
-  tables: { name: string; range: string }[];
+  tables: { name: string; range: string; style?: string }[];
+  widths: Record<string, number>;
 };
 const sheet = (page: import("@playwright/test").Page) => page.evaluate(() => (window as unknown as { __miai: { sheet: () => Sheet } }).__miai.sheet());
 
@@ -65,6 +66,175 @@ test("Excel: ny række i tabellen og en total får tabellens og kolonnernes form
   expect(undone.values.filter((r) => r.some((v) => v !== ""))).toEqual(before.values);
   expect(undone.tables).toEqual(before.tables);
   expect(undone.formats).toEqual(before.formats);
+});
+
+test("Excel: tomme rækker fjernes, og tabellen får en tabeltypografi, talformat og kolonnebredde; fortryd gendanner alt", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Dato", "Aktivitet", "Timer"],
+        ["01-10-2026", "Analyse", 12],
+        ["", "", ""],
+        ["02-10-2026", "Design", 7.5],
+        ["", "", ""],
+        ["03-10-2026", "Test", 1250],
+        ["Note: timer er foreløbige", "", ""],
+      ],
+      formats: { "A1:C1": { bold: true }, "C2:C6": { numberFormat: "0.0" } },
+      tables: [{ name: "Aktiviteter", range: "A1:C6" }],
+    },
+  });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Fjerner de tomme rækker og giver tabellen et moderne udseende.",
+      actions: [
+        { action: "formatTable", target: "Aktiviteter", style: "TableStyleMedium9", reason: "Moderne tabeltypografi" },
+        { action: "setNumberFormat", address: "C2:C6", format: "#,##0.0", reason: "Tusindtalsseparator" },
+        { action: "autofitColumns", address: "A1:C6", reason: "Kolonnebredde" },
+        { action: "deleteEmptyRows", target: "Aktiviteter", reason: "Tomme rækker" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
+  // Modellen ser arkets rækkenumre foran værdierne, så den kan pege på rækker.
+  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  expect(prompt).toContain("3\t\t\t");
+  expect(prompt).toContain("deleteEmptyRows {target}");
+  await expect(tp.page.getByRole("checkbox", { name: "Slet tomme rækker i Aktiviteter" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Formatér Aktiviteter som tabel (Medium9)" })).toBeChecked();
+
+  await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).click();
+  await expect(tp.page.getByText("4 af 4 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.values.filter((r) => r.some((v) => v !== ""))).toEqual([
+    ["Dato", "Aktivitet", "Timer"],
+    ["01-10-2026", "Analyse", 12],
+    ["02-10-2026", "Design", 7.5],
+    ["03-10-2026", "Test", 1250],
+    ["Note: timer er foreløbige", "", ""],
+  ]);
+  // Tabellen er krympet, og noten under den er rykket op.
+  expect(after.tables).toEqual([{ name: "Aktiviteter", range: "A1:C4", style: "TableStyleMedium9" }]);
+  expect(after.values[4][0]).toBe("Note: timer er foreløbige");
+  expect(after.formats.C4).toMatchObject({ numberFormat: "#,##0.0" });
+  expect(after.formats.A1).toMatchObject({ bold: true });
+  expect(after.widths.B).toBeGreaterThan(48);
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values).toEqual(before.values);
+  expect(undone.tables).toEqual([{ name: "Aktiviteter", range: "A1:C6", style: "TableStyleMedium2" }]);
+  expect(undone.formats).toEqual(before.formats);
+  expect(Object.values(undone.widths).every((x) => x === 48)).toBe(true);
+});
+
+test("Excel: et område uden tabel bliver en formateret tabel, deleteRows sletter en række; fortryd gør det til et område igen", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Navn", "Afdeling", "Løn"],
+        ["Anna", "Salg", 41000],
+        ["Bo", "IT", 45000],
+        ["Dublet", "IT", 45000],
+        ["Cille", "HR", 39000],
+      ],
+      formats: { "A1:C1": { bold: true, fill: "#FFFF00" } },
+    },
+  });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Laver området til en tabel og sletter dubletten.",
+      actions: [
+        { action: "formatTable", target: "A1:C5", style: "TableStyleLight9", reason: "Tabel" },
+        { action: "deleteRows", address: "A4:C4", reason: "Dublet" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByRole("checkbox", { name: "Slet rækkerne A4:C4" })).toBeChecked();
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.tables).toEqual([{ name: "Tabel1", range: "A1:C4", style: "TableStyleLight9" }]);
+  expect(after.values.map((r) => r[0])).toEqual(["Navn", "Anna", "Bo", "Cille"]);
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values).toEqual(before.values);
+  expect(undone.tables).toEqual([]);
+  expect(undone.formats).toEqual(before.formats);
+});
+
+test("Excel: tomme rækker i et område uden tabel slettes kun i områdets kolonner; fortryd sætter dem ind igen", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Vare", "Antal", "", "Noter"],
+        ["Æbler", 4, "", "a"],
+        ["", "", "", "b"],
+        ["", "", "", "c"],
+        ["Pærer", 9, "", "d"],
+      ],
+      formats: { "B2:B5": { numberFormat: "0" } },
+    },
+  });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Fjerner tomme rækker.", actions: [{ action: "deleteEmptyRows", target: "A1:B40", reason: "Tomme rækker" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  // A:B rykker op; noterne i D står, hvor de stod.
+  expect(after.values.map((r) => [r[0], r[1], r[3]])).toEqual([
+    ["Vare", "Antal", "Noter"],
+    ["Æbler", 4, "a"],
+    ["Pærer", 9, "b"],
+    ["", "", "c"],
+    ["", "", "d"],
+  ]);
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values).toEqual(before.values);
+  expect(undone.formats).toEqual(before.formats);
+});
+
+test("Excel: sletning, der ville ødelægge en tabel, fravælges i planen", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Region", "Beløb"],
+        ["Nord", 1],
+        ["Syd", 2],
+      ],
+      tables: [{ name: "Salg", range: "A1:B3" }],
+    },
+  });
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Sletter overskriften.", actions: [{ action: "deleteRows", address: "A1:B2", reason: "Overskrift" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Ville ændre en tabels opbygning")).toBeVisible();
+  await expect(tp.page.getByRole("checkbox", { name: "Slet rækkerne A1:B2" })).not.toBeChecked();
 });
 
 type Deck = {

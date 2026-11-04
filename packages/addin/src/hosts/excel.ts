@@ -1,4 +1,4 @@
-import { fitGrid, parseTsv, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import { fitGrid, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
 import type { AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
 
@@ -274,20 +274,17 @@ export class ExcelAdapter implements HostAdapter {
     });
   }
   /**
-   * Agent-tilstand (#6): skriver de bekræftede handlinger på markeringens ark. Alle berørte
-   * områders formler gemmes først, så hele sessionen kan fortrydes (Excel kan ikke altid
-   * fortryde add-in-ændringer med Ctrl+Z).
-   */
-  /**
-   * Agent-tilstand (#6): skriver de bekræftede handlinger på markeringens ark og bevarer
+   * Agent-tilstand (#6, ADR-0012): udfører de bekræftede handlinger på markeringens ark og bevarer
    * formateringen:
-   *  - værdier og formler ændrer aldrig cellernes format;
-   *  - celler, der var tomme, får naboens format (rækken over eller kolonnen til venstre), så en
-   *    ny total-række eller kolonne får samme talformat, skrift og fyld som data (ExcelApi 1.9);
-   *  - rækker i en Excel-tabel tilføjes med tabellen selv, så de får tabellens formatering og
-   *    beregnede kolonner.
-   * Fortryd gendanner formler og (ExcelApi 1.9) formater i alle berørte områder og fjerner
-   * tilføjede tabelrækker.
+   *  - værdier og formler ændrer aldrig cellernes format; tomme celler lige under eller ved siden af
+   *    data får naboens talformat, skrift og fyld (ExcelApi 1.9);
+   *  - tabeller får udseende med Excels indbyggede tabeltypografier (følger temaet), aldrig fri formatering;
+   *  - rækker slettes til sidst og nedefra, så adresserne i planen (arket før handlingerne) holder;
+   *    rækker i en Excel-tabel slettes som tabelrækker, så tabellen krymper;
+   *  - nye tabelrækker tilføjes med tabellen selv (tabellens format og beregnede kolonner).
+   * Fortryd gendanner alt i omvendt rækkefølge: slettede rækker sættes ind igen med værdier og
+   * formater, tilføjede tabelrækker fjernes, nye tabeller bliver almindelige områder igen, og formler,
+   * talformater, formater og kolonnebredder får deres tidligere værdier.
    */
   async applyAgent(actions: AgentAction[], dc: DocContext): Promise<AgentOutcome> {
     if (!dc.address) throw new Error("Ingen markering.");
@@ -296,97 +293,175 @@ export class ExcelAdapter implements HostAdapter {
     return Excel.run(async (ctx) => {
       const sheet = ctx.workbook.worksheets.getItem(sheetName);
       const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
-
-      // 1) Find målområderne.
-      const targets = actions.map((a, i): Excel.Range | undefined => {
-        if (a.action === "appendRows") return undefined;
-        if (a.action !== "setValues" && a.action !== "setFormula" && a.action !== "clear") {
-          results[i] = { ok: false, error: "failed", detail: `${a.action} findes ikke i Excel` };
-          return undefined;
-        }
-        const { sheet: s, range } = a.address.includes("!") ? splitAddress(a.address) : { sheet: sheetName, range: a.address };
+      const fail = (i: number, detail: string) => (results[i] = { ok: false, error: "failed", detail });
+      /** Adresse på arket (uden arknavn), eller undefined hvis den peger på et andet ark. */
+      const local = (i: number, address: string): string | undefined => {
+        const { sheet: s, range } = address.includes("!") ? splitAddress(address) : { sheet: sheetName, range: address };
         if (s !== sheetName) {
           results[i] = { ok: false, error: "other-sheet" };
           return undefined;
         }
-        const r = sheet.getRange(range.replace(/\$/g, ""));
-        if (a.action === "setValues") {
-          const cols = Math.max(...a.values.map((row) => row.length));
-          return r.getCell(0, 0).getResizedRange(a.values.length - 1, cols - 1);
+        return range.replace(/\$/g, "");
+      };
+      const knownTables = (dc.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address) }));
+      const isTableName = (target: string) => !ADDRESS.test(target);
+
+      // 1) Find målområderne. formatTable på et område gemmer også områdets formater (til fortryd).
+      const targets = actions.map((a, i): Excel.Range | undefined => {
+        switch (a.action) {
+          case "setValues": {
+            const r = local(i, a.address);
+            if (!r) return undefined;
+            const cols = Math.max(...a.values.map((row) => row.length));
+            return sheet
+              .getRange(r)
+              .getCell(0, 0)
+              .getResizedRange(a.values.length - 1, cols - 1);
+          }
+          case "setFormula": {
+            const r = local(i, a.address);
+            return r ? sheet.getRange(r).getCell(0, 0) : undefined;
+          }
+          case "clear":
+          case "setNumberFormat":
+          case "autofitColumns": {
+            const r = local(i, a.address);
+            return r ? sheet.getRange(r) : undefined;
+          }
+          case "formatTable": {
+            if (isTableName(a.target)) return undefined;
+            if (!formats) {
+              fail(i, "Kræver ExcelApi 1.9 (for at kunne fortryde formateringen)");
+              return undefined;
+            }
+            const r = local(i, a.target);
+            return r ? sheet.getRange(r) : undefined;
+          }
+          case "appendRows":
+          case "deleteRows":
+          case "deleteEmptyRows":
+            return undefined;
+          default:
+            fail(i, `${a.action} findes ikke i Excel`);
+            return undefined;
         }
-        return a.action === "setFormula" ? r.getCell(0, 0) : r;
       });
-      const tables = actions.map((a) => (a.action === "appendRows" ? sheet.tables.getItem(a.table) : undefined));
-      for (const t of targets) t?.load("address,formulas,numberFormat,rowIndex,columnIndex");
-      for (const t of tables) t?.rows.load("count");
-      // Naboer til tomme mål: rækken over og kolonnen til venstre (samme størrelse).
-      const above = targets.map((t, i) => (t && actions[i].action !== "clear" ? t : undefined));
+      for (const t of targets) t?.load("address,formulas,numberFormat,rowIndex,columnIndex,rowCount,columnCount");
+      // Eksisterende tabeller, der skal have en ny typografi: den gamle gemmes til fortryd.
+      const styled = actions.map((a) => (a.action === "formatTable" && isTableName(a.target) ? sheet.tables.getItem(a.target) : undefined));
+      for (const t of styled) t?.load("name,style");
+      const appendTables = actions.map((a) => (a.action === "appendRows" ? sheet.tables.getItem(a.table) : undefined));
+      for (const t of appendTables) t?.rows.load("count");
+      // Kolonnebredder før autofit (højst 50 kolonner pr. handling).
+      const widths = actions.map((a, i) => {
+        if (a.action !== "autofitColumns" || !targets[i]) return undefined;
+        const b = rangeBox(a.address);
+        const n = Math.min(b.c1 - b.c0 + 1, 50);
+        return Array.from({ length: n }, (_, c) => {
+          const column = targets[i]!.getColumn(c);
+          column.format.load("columnWidth");
+          return column;
+        });
+      });
       await ctx.sync();
-      const neighbours = above.map((t) => {
-        if (!t || !formats) return undefined;
+      // Naboer til tomme mål for nye værdier: rækken over og kolonnen til venstre (samme størrelse).
+      const writes = (k: number) => actions[k].action === "setValues" || actions[k].action === "setFormula";
+      const neighbours = targets.map((t, i) => {
+        if (!t || !formats || !writes(i)) return undefined;
         const up = t.rowIndex > 0 ? t.getOffsetRange(-1, 0) : undefined;
         const left = t.columnIndex > 0 ? t.getOffsetRange(0, -1) : undefined;
         up?.load("formulas");
         left?.load("formulas");
         return { up, left };
       });
-      // Formater gemmes til fortryd (ExcelApi 1.9).
-      const FORMAT_PROPS = {
-        format: {
-          fill: { color: true },
-          font: { bold: true, italic: true, color: true, name: true, size: true, underline: true, strikethrough: true },
-          horizontalAlignment: true,
-          verticalAlignment: true,
-          wrapText: true,
-          indentLevel: true,
-        },
-      } as Excel.CellPropertiesLoadOptions;
       const props = targets.map((t) => (t && formats ? t.getCellProperties(FORMAT_PROPS) : undefined));
       await ctx.sync();
 
-      const snapshots = targets.flatMap((t, i) =>
+      const snapshots = targets.flatMap((t) =>
         t
-          ? [{ address: t.address, formulas: t.formulas, numberFormat: t.numberFormat, props: props[i]?.value as Excel.SettableCellProperties[][] | undefined }]
+          ? [
+              {
+                address: t.address,
+                formulas: t.formulas,
+                numberFormat: t.numberFormat,
+                props: props[targets.indexOf(t)]?.value as Excel.SettableCellProperties[][] | undefined,
+              },
+            ]
           : [],
       );
-      const added = tables.flatMap((t, i) => (t ? [{ name: (actions[i] as Extract<AgentAction, { action: "appendRows" }>).table, from: t.rows.count }] : []));
+      const added = appendTables.flatMap((t, i) =>
+        t ? [{ name: (actions[i] as Extract<AgentAction, { action: "appendRows" }>).table, from: t.rows.count }] : [],
+      );
+      const oldStyles = styled.flatMap((t) => (t ? [{ name: t.name, style: t.style }] : []));
+      const oldWidths = widths.flatMap((cols, i) =>
+        cols ? cols.map((c, k) => ({ address: targets[i]!.address, column: k, width: c.format.columnWidth })) : [],
+      );
       const isEmpty = (f: unknown[][]) => f.every((row) => row.every((v) => v === "" || v === null));
       const hasData = (r?: Excel.Range) => !!r && !isEmpty(r.formulas);
 
-      // 2) Udfør.
+      // 2) Værdier, formler, talformater, kolonnebredder og tabeltypografier.
+      const created: { name?: string; table: Excel.Table; box: ReturnType<typeof rangeBox>; i: number }[] = [];
       actions.forEach((a, i) => {
         const t = targets[i];
+        if (a.action === "formatTable" && styled[i]) {
+          styled[i]!.style = a.style;
+          return;
+        }
         if (a.action === "appendRows") {
-          const tbl = tables[i]!;
           const width = (dc.excel?.tables.find((x) => x.name === a.table)?.headers.length ?? Math.max(...a.values.map((r) => r.length))) || 1;
           // null = Excel udfylder selv (beregnede kolonner) / lader cellen være.
-          tbl.rows.add(undefined, a.values.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill(null)]) as (string | number | boolean)[][]);
+          appendTables[i]!.rows.add(
+            undefined,
+            a.values.map((row) => [...row, ...Array(Math.max(0, width - row.length)).fill(null)]) as (string | number | boolean)[][],
+          );
           results[i] = { ok: true, count: a.values.length };
           return;
         }
         if (!t) return;
-        // Tomme celler får naboens format, før værdien skrives (så fx talformatet gælder med det samme).
-        const n = neighbours[i];
-        if (n && isEmpty(t.formulas)) {
-          const src = hasData(n.up) ? n.up : hasData(n.left) ? n.left : undefined;
-          if (src) t.copyFrom(src, Excel.RangeCopyType.formats);
+        if (writes(i)) {
+          // Tomme celler får naboens format, før værdien skrives (så fx talformatet gælder med det samme).
+          const n = neighbours[i];
+          if (n && isEmpty(t.formulas)) {
+            const src = hasData(n.up) ? n.up : hasData(n.left) ? n.left : undefined;
+            if (src) t.copyFrom(src, Excel.RangeCopyType.formats);
+          }
         }
-        if (a.action === "setValues") {
-          const cols = Math.max(...a.values.map((row) => row.length));
-          t.values = a.values.map((row) => [...row, ...Array(cols - row.length).fill(null)]) as (string | number | boolean)[][];
-          results[i] = { ok: true, count: a.values.length * cols };
-        } else if (a.action === "setFormula") {
-          const f = a.formula.trim();
-          t.formulas = [[f.startsWith("=") ? f : `=${f}`]];
-          results[i] = { ok: true, count: 1 };
-        } else if (a.action === "clear") {
-          t.clear(Excel.ClearApplyTo.contents);
-          results[i] = { ok: true };
+        switch (a.action) {
+          case "setValues": {
+            const cols = Math.max(...a.values.map((row) => row.length));
+            t.values = a.values.map((row) => [...row, ...Array(cols - row.length).fill(null)]) as (string | number | boolean)[][];
+            results[i] = { ok: true, count: a.values.length * cols };
+            break;
+          }
+          case "setFormula": {
+            const f = a.formula.trim();
+            t.formulas = [[f.startsWith("=") ? f : `=${f}`]];
+            results[i] = { ok: true, count: 1 };
+            break;
+          }
+          case "clear":
+            t.clear(Excel.ClearApplyTo.contents);
+            break;
+          case "setNumberFormat":
+            t.numberFormat = Array.from({ length: t.rowCount }, () => Array(t.columnCount).fill(a.format) as string[]);
+            results[i] = { ok: true, count: t.rowCount * t.columnCount };
+            break;
+          case "autofitColumns":
+            t.format.autofitColumns();
+            break;
+          case "formatTable": {
+            const table = sheet.tables.add(t, true);
+            table.style = a.style;
+            table.load("name");
+            created.push({ table, box: rangeBox(t.address), i });
+            break;
+          }
         }
       });
       await ctx.sync();
+      for (const c of created) c.name = c.table.name;
 
-      // 3) Formelfejl (#VALUE!, #NAME? …) meldes pr. handling.
+      // 3) Formelfejl (#VALUE!, #NAME? …) meldes pr. handling – før sletninger flytter cellerne.
       const formulaCells = actions.map((a, i) => (a.action === "setFormula" ? targets[i] : undefined));
       for (const c of formulaCells) c?.load("values,valueTypes");
       await ctx.sync();
@@ -394,18 +469,114 @@ export class ExcelAdapter implements HostAdapter {
         if (c && c.valueTypes[0][0] === Excel.RangeValueType.error) results[i] = { ok: false, error: "formula-error", detail: String(c.values[0][0]) };
       });
 
+      // 4) Rækker, der skal slettes. Nye tabeller fra trin 2 tæller med som tabeller.
+      const tablesNow = [...knownTables, ...created.map((c) => ({ name: c.name!, box: c.box }))];
+      type Unit = { i: number; top: number } & ({ kind: "table"; table: string; index: number } | { kind: "range"; address: string });
+      const units: Unit[] = [];
+      const tableRows = (i: number, table: { name: string; box: ReturnType<typeof rangeBox> }, rows: number[]) =>
+        rows.forEach((r) => units.push({ i, top: r, kind: "table", table: table.name, index: r - table.box.r0 - 1 }));
+      const scans: { i: number; table?: { name: string; box: ReturnType<typeof rangeBox> }; range: Excel.Range; box?: ReturnType<typeof rangeBox> }[] = [];
+      // Tomme rækker i et område tælles kun inden for arkets data (ikke de tomme rækker under det).
+      const used = actions.some((a) => a.action === "deleteEmptyRows" && !isTableName(a.target)) ? sheet.getUsedRangeOrNullObject(true) : undefined;
+      used?.load("rowIndex,rowCount");
+      actions.forEach((a, i) => {
+        if (a.action === "deleteRows") {
+          const r = local(i, a.address);
+          if (!r) return;
+          const b = rangeBox(r);
+          const table = tablesNow.find((t) => b.r0 > t.box.r0 && b.r1 <= t.box.r1 && b.c0 <= t.box.c1 && t.box.c0 <= b.c1);
+          if (table) tableRows(i, table, range(b.r0, b.r1));
+          else units.push({ i, top: b.r0, kind: "range", address: r });
+        } else if (a.action === "deleteEmptyRows") {
+          const target = isTableName(a.target) ? a.target : local(i, a.target);
+          if (!target) return;
+          const b = isTableName(target) ? undefined : rangeBox(target);
+          // Et område, der rammer en tabel, behandles som tabellen (tabellens tomme rækker).
+          const table = tablesNow.find((t) => (b ? b.r0 <= t.box.r1 && t.box.r0 <= b.r1 && b.c0 <= t.box.c1 && t.box.c0 <= b.c1 : t.name === target));
+          if (!table && !b) {
+            fail(i, `Tabellen ${target} findes ikke`);
+            return;
+          }
+          const scan = table ? sheet.tables.getItem(table.name).getDataBodyRange() : sheet.getRange(target);
+          scan.load("formulas");
+          scans.push({ i, table, range: scan, box: table ? { ...table.box, r0: table.box.r0 + 1 } : b });
+        }
+      });
+      await ctx.sync();
+      const lastUsed = used ? (used.isNullObject ? -1 : used.rowIndex + used.rowCount - 1) : Infinity;
+      for (const s of scans) {
+        const empty = s.range.formulas.flatMap((row, k) => (isEmpty([row]) ? [s.box!.r0 + k] : [])).filter((r) => r <= lastUsed);
+        if (s.table) tableRows(s.i, s.table, empty);
+        else
+          for (const [from, to] of groups(empty)) {
+            units.push({ i: s.i, top: from, kind: "range", address: `${colName(s.box!.c0)}${from + 1}:${colName(s.box!.c1)}${to + 1}` });
+          }
+      }
+      // Nedefra og hver række kun én gang, så de øvrige adresser og tabelindeks holder.
+      const seen = new Set<string>();
+      const ordered = units
+        .sort((x, y) => y.top - x.top)
+        .filter((u) => {
+          const k = u.kind === "table" ? `${u.table}:${u.index}` : u.address;
+          return !seen.has(k) && !!seen.add(k);
+        });
+      const rowRange = (c: Excel.RequestContext, ws: Excel.Worksheet, u: Unit) =>
+        u.kind === "table" ? ws.tables.getItem(u.table).rows.getItemAt(u.index).getRange() : ws.getRange(u.address);
+      const deleted: (Unit & { formulas: unknown[][]; numberFormat: string[][]; props?: Excel.SettableCellProperties[][] })[] = [];
+      for (const u of ordered) {
+        const r = rowRange(ctx, sheet, u);
+        r.load("formulas,numberFormat");
+        const p = formats ? r.getCellProperties(FORMAT_PROPS) : undefined;
+        try {
+          await ctx.sync();
+          // Gem værdierne, før rækken forsvinder.
+          const snap = { formulas: r.formulas, numberFormat: r.numberFormat, props: p?.value as Excel.SettableCellProperties[][] | undefined };
+          if (u.kind === "table") sheet.tables.getItem(u.table).rows.getItemAt(u.index).delete();
+          else r.delete(Excel.DeleteShiftDirection.up);
+          await ctx.sync();
+          deleted.push({ ...u, ...snap });
+        } catch (e) {
+          fail(u.i, e instanceof Error ? e.message : String(e));
+        }
+      }
+      actions.forEach((a, i) => {
+        if ((a.action === "deleteRows" || a.action === "deleteEmptyRows") && results[i].ok) {
+          const n = deleted.filter((d) => d.i === i).reduce((sum, d) => sum + (d.kind === "table" ? 1 : d.formulas.length), 0);
+          results[i] = { ok: true, count: n };
+        }
+      });
+
       const undo = () =>
-        this.withRange(dc.address!, async (c) => {
+        Excel.run(async (c) => {
           const ws = c.workbook.worksheets.getItem(sheetName);
-          // Først cellerne (på de adresser, de havde under sessionen) …
+          // Slettede rækker sættes ind igen oppefra (omvendt af sletningen) med værdier og formater.
+          for (const d of [...deleted].reverse()) {
+            if (d.kind === "table") ws.tables.getItem(d.table).rows.add(d.index, d.formulas as (string | number | boolean)[][]);
+            else ws.getRange(d.address).insert(Excel.InsertShiftDirection.down);
+            await c.sync();
+            const r = rowRange(c, ws, d);
+            r.formulas = d.formulas as string[][];
+            r.numberFormat = d.numberFormat;
+            if (d.props) r.setCellProperties(d.props);
+            await c.sync();
+          }
+          // Nye tabeller bliver almindelige områder igen; tabeltypografiens formater ryddes (cellerne gendannes nedenfor).
+          for (const t of [...created].reverse()) {
+            if (!t.name) continue;
+            ws.tables.getItem(t.name).convertToRange();
+            ws.getRange(`${colName(t.box.c0)}${t.box.r0 + 1}:${colName(t.box.c1)}${t.box.r1 + 1}`).clear(Excel.ClearApplyTo.formats);
+          }
+          for (const s of oldStyles) ws.tables.getItem(s.name).style = s.style;
+          // Cellerne (på de adresser, de havde under sessionen).
           for (const snap of [...snapshots].reverse()) {
             const r = ws.getRange(splitAddress(snap.address).range);
             r.formulas = snap.formulas as string[][];
             r.numberFormat = snap.numberFormat;
             if (snap.props) r.setCellProperties(snap.props);
           }
+          for (const w of oldWidths) ws.getRange(splitAddress(w.address).range).getColumn(w.column).format.columnWidth = w.width;
           await c.sync();
-          // … så de tilføjede tabelrækker (bagfra, så indeks ikke flytter sig). Celler under tabellen rykker op igen.
+          // Tilføjede tabelrækker (bagfra, så indeks ikke flytter sig).
           for (const t of [...added].reverse()) {
             const rows = ws.tables.getItem(t.name).rows;
             rows.load("count");
@@ -417,4 +588,33 @@ export class ExcelAdapter implements HostAdapter {
       return { results, undo, undoKind: "cells" };
     });
   }
+}
+
+/** Formater, der gemmes til fortryd (ExcelApi 1.9). Kanter med, fordi tabeltypografier kan sætte dem. */
+const FORMAT_PROPS = {
+  format: {
+    fill: { color: true },
+    font: { bold: true, italic: true, color: true, name: true, size: true, underline: true, strikethrough: true },
+    borders: { style: true, color: true, weight: true },
+    horizontalAlignment: true,
+    verticalAlignment: true,
+    wrapText: true,
+    indentLevel: true,
+  },
+} as Excel.CellPropertiesLoadOptions;
+
+/** En adresse som "B2" eller "Ark1!B2:D9" (ellers er det et tabelnavn). */
+const ADDRESS = /^(?:(?:'[^']+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$/i;
+
+const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
+
+/** Sorterede rækkenumre → sammenhængende stykker [fra, til]. */
+function groups(rows: number[]): [number, number][] {
+  const out: [number, number][] = [];
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && r === last[1] + 1) last[1] = r;
+    else out.push([r, r]);
+  }
+  return out;
 }

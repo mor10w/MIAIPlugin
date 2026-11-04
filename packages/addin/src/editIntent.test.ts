@@ -57,6 +57,26 @@ describe("looksLikeEditRequest", () => {
     }
   });
 
+  it("formatering og oprydning (regression: 'Gør tabellen pæn' gav kun en vejledning)", () => {
+    for (const p of [
+      "Gør tabellen du nævner pæn, med en moderne layout",
+      "Gør arket mere overskueligt",
+      "Giv tabellen et moderne look",
+      "Formatér tallene som kroner",
+      "Sortér tabellen efter dato",
+      "Fjern de tomme rækker i tabellen",
+      "Ryd op i arket",
+      "Format the table as currency",
+      "Make the table nicer",
+      "Clean up the sheet",
+    ]) {
+      expect(looksLikeEditRequest(p), p).toBe(true);
+    }
+    for (const p of ["Hvilket format bruger I til datoer?", "What format should dates use?", "Hvad er et pænt resultat for kvartalet?"]) {
+      expect(looksLikeEditRequest(p), p).toBe(false);
+    }
+  });
+
   it("returnerer false på tom tekst", () => {
     expect(looksLikeEditRequest("")).toBe(false);
   });

@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ChatMessage, DocContext, HostKind, ParsedTaskRequest, Source } from "./types.js";
 import { DiagramResult } from "./diagram.js";
 import { DesignPlan, DESIGN_GUIDE } from "./design.js";
-import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, renderExcelStructure, renderParagraphs, renderSlides } from "./agent.js";
+import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, numberedRows, renderExcelStructure, renderParagraphs, renderSlides } from "./agent.js";
 
 export type ApplyMode =
   | "replace" // erstat markeringen
@@ -198,6 +198,16 @@ const TEXT_HOSTS: HostKind[] = ["word", "powerpoint"];
 const ALL_HOSTS: HostKind[] = ["word", "excel", "powerpoint"];
 /** Tekstopgaver, der også giver mening på mails (Outlook, #7). */
 const MAIL_TEXT: HostKind[] = [...TEXT_HOSTS, "outlook"];
+
+/**
+ * Chatten kan ikke selv ændre dokumentet. Uden denne regel svarer små modeller på "gør tabellen
+ * pæn" med en klikvejledning eller en VBA-makro, som add-in'et ikke kan køre; agenten kan gøre det.
+ */
+const CHAT_EDIT_RULES =
+  "You cannot change the document from this chat, and the add-in cannot run VBA, macros or scripts – never offer or write them. " +
+  "When the user asks you to change the document's formatting, layout or structure (e.g. format or style a table, delete or sort rows, number formats, column widths), " +
+  "do not give click-by-click instructions: say in one sentence that MIAI's agent ('Agent: edit the document' / 'Agent: redigér dokumentet') can do it directly in the document, and at most list in 2–4 short bullets what it would change. " +
+  "New or rewritten text is fine to write here – the user can insert it with the buttons below your answer.";
 
 export const TASKS: TaskDefinition[] = [
   {
@@ -649,7 +659,7 @@ export const TASKS: TaskDefinition[] = [
           excel
             ? [
                 `Selected range: ${c.address ?? "?"}`,
-                c.table && `Selected values (TSV):\n${doc(c.table)}`,
+                c.table && `Selected values (TSV; the first column is the sheet's row number, not data):\n${doc(numberedRows(c.table, c.address))}`,
                 c.surroundings && `Sheet overview:\n${doc(c.surroundings)}`,
                 c.excel && renderExcelStructure(c.excel) && `Sheet structure:\n${doc(renderExcelStructure(c.excel))}`,
               ]
@@ -760,6 +770,7 @@ export const TASKS: TaskDefinition[] = [
           "Be concise and practical. Use Markdown when it helps.",
           "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. The add-in offers a button that inserts such a figure into the document as an image — do not tell the user to use external tools.",
           ctx.host === "excel" ? EXCEL_SCOPE_RULES : undefined,
+          ctx.host === "outlook" ? undefined : CHAT_EDIT_RULES,
           contextNote,
           ctx.surroundings && `Workbook overview (computed by the add-in over the full used range):\n${doc(ctx.surroundings)}`,
           req.sources.length ? sourcesBlock(req.sources) : undefined,

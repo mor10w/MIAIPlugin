@@ -358,5 +358,64 @@
       }
     ],
     "rubric": "appendRows i tabellen Salg med [\"Fyn\", 70] – tallet som tal, ikke tekst."
+  },
+  {
+    "id": "agent-excel-tomme-raekker-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent",
+    "note": "Regression: agenten svarede med en forklaring, fordi Excel ikke kunne slette rækker.",
+    "context": {
+      "host": "excel",
+      "text": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n\t\t\n02-10-2026\tDesign\t7,5\n\t\t\n03-10-2026\tTest\t1250",
+      "table": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n\t\t\n02-10-2026\tDesign\t7,5\n\t\t\n03-10-2026\tTest\t1250",
+      "address": "Ark1!A1:C6",
+      "surroundings": "Active sheet 'Ark1', used range A1:C6 (6 rows x 3 columns)\nHeaders (row 1): A=Dato B=Aktivitet C=Timer"
+    },
+    "params": {
+      "prompt": "Fjern de tomme rækker i tabellen"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 2,
+        "exclude": ["clear", "setValues"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "\"(deleteEmptyRows|deleteRows)\""
+      }
+    ],
+    "rubric": "Én deleteEmptyRows på A1:C6 (eller deleteRows på række 3 og 5); ingen andre ændringer."
+  },
+  {
+    "id": "agent-excel-moderne-tabel-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent",
+    "note": "Regression: 'gør tabellen pæn' gav en klikvejledning og et tilbud om VBA. Agenten skal bruge en tabeltypografi.",
+    "context": {
+      "host": "excel",
+      "text": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n\t\t\n02-10-2026\tDesign\t7,5\n\t\t\n03-10-2026\tTest\t1250",
+      "table": "Dato\tAktivitet\tTimer\n01-10-2026\tAnalyse\t12\n\t\t\n02-10-2026\tDesign\t7,5\n\t\t\n03-10-2026\tTest\t1250",
+      "address": "Ark1!A1:C6",
+      "surroundings": "Active sheet 'Ark1', used range A1:C6 (6 rows x 3 columns)\nHeaders (row 1): A=Dato B=Aktivitet C=Timer"
+    },
+    "params": {
+      "prompt": "Gør tabellen pæn med et moderne layout"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 4,
+        "include": ["formatTable"],
+        "exclude": ["setValues", "clear", "deleteRows", "deleteEmptyRows"],
+        "valid": true
+      }
+    ],
+    "rubric": "formatTable på A1:C6 med en indbygget typografi, evt. talformat på C (tusindtalsseparator) og autofitColumns; ingen værdier ændres, intet slettes."
   }
 ]

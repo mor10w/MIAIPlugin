@@ -559,7 +559,36 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     const key = (r: number, c: number) => `${r},${c}`;
     const fmtOf = (r: number, c: number): Fmt => fmts.get(key(r, c)) ?? {};
     const setFmt = (r: number, c: number, f: Fmt) => fmts.set(key(r, c), { ...fmtOf(r, c), ...f });
-    const tables = (o.excel?.tables ?? []).map((t) => ({ ...t }));
+    const tables: { name: string; range: string; style?: string }[] = (o.excel?.tables ?? []).map((t) => ({ ...t }));
+    const widths = new Map<number, number>();
+    /**
+     * Flytter celler (værdier og formater) i kolonnerne c0..c1 fra række `from` og ned med `delta`
+     * (negativ = op). Tabeller helt under og inden for kolonnerne flytter med; en tabel, der kun
+     * delvist ligger i kolonnerne, afvises som i Excel.
+     */
+    const shift = (from: number, delta: number, c0: number, c1: number) => {
+      for (const t of tables) {
+        const [tr, tc, trows, tcols] = parseA(t.range);
+        if (tr + trows - 1 < from || tc > c1 || tc + tcols - 1 < c0) continue;
+        if (tr < from || tc < c0 || tc + tcols - 1 > c1) throw new Error("InvalidOperation: This operation is attempting to shift cells in a table");
+        t.range = `${col(tc)}${tr + 1 + delta}:${col(tc + tcols - 1)}${tr + trows + delta}`;
+      }
+      const height = Math.max(grid.length, ...[...fmts.keys()].map((k) => Number(k.split(",")[0]) + 1));
+      const cells: { r: number; c: number; v: unknown; f?: Fmt }[] = [];
+      for (let r = from; r < height; r++)
+        for (let c = c0; c <= c1; c++) {
+          cells.push({ r, c, v: grid[r]?.[c] ?? "", f: fmts.get(key(r, c)) });
+          if (grid[r]) grid[r][c] = "";
+          fmts.delete(key(r, c));
+        }
+      for (const x of cells) {
+        const r = x.r + delta;
+        if (r < 0) continue;
+        if (x.v !== "") put(r, x.c, x.v);
+        if (x.f) fmts.set(key(r, x.c), x.f);
+      }
+      while (grid.length && grid[grid.length - 1].every((v) => v === "" || v === undefined)) grid.pop();
+    };
     const col = (i: number) => String.fromCharCode(65 + i);
     const cellOf = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
     /** "B2" eller "B2:D4" → [r0, c0, rows, cols] (kun enkelt-bogstavs kolonner i simuleringen). */
@@ -596,7 +625,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
             f,
           ]),
       ),
-      tables: tables.map((t) => ({ name: t.name, range: t.range })),
+      tables: tables.map((t) => ({ name: t.name, range: t.range, ...(t.style ? { style: t.style } : {}) })),
+      widths: Object.fromEntries([...widths].map(([c, wd]) => [col(c), wd])),
     });
 
     function rng(r0: number, c0: number, rows: number, cols: number): unknown {
@@ -618,6 +648,33 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         getResizedRange: (dr: number, dc: number) => rng(r0, c0, rows + dr, cols + dc),
         getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
         getRow: (i: number) => rng(r0 + i, c0, 1, cols),
+        getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+        format: strict("Excel.RangeFormat", {
+          load() {},
+          get columnWidth() {
+            return widths.get(c0) ?? 48;
+          },
+          set columnWidth(v: number) {
+            for (let c = 0; c < cols; c++) widths.set(c0 + c, v);
+          },
+          autofitColumns() {
+            record({ kind: "autofitColumns", address: addr(r0, c0, rows, cols) });
+            for (let c = 0; c < cols; c++) widths.set(c0 + c, 10 + 7 * Math.max(1, ...grid.map((row) => String(row[c0 + c] ?? "").length)));
+          },
+        }),
+        delete(direction: string) {
+          record({ kind: "rangeDelete", address: addr(r0, c0, rows, cols), direction });
+          each((r, c) => {
+            if (grid[r]) grid[r][c] = "";
+            fmts.delete(key(r, c));
+          });
+          shift(r0 + rows, -rows, c0, c0 + cols - 1);
+        },
+        insert(direction: string) {
+          record({ kind: "rangeInsert", address: addr(r0, c0, rows, cols), direction });
+          shift(r0, rows, c0, c0 + cols - 1);
+          return rng(r0, c0, rows, cols);
+        },
         worksheet: undefined as unknown,
         get values() {
           return slice();
@@ -660,7 +717,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         },
         clear(applyTo: string) {
           record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo });
-          each((r, c) => put(r, c, ""));
+          if (applyTo === "Formats") each((r, c) => fmts.delete(key(r, c)));
+          else each((r, c) => put(r, c, ""));
         },
         get valueTypes() {
           return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
@@ -671,10 +729,27 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     }
     const used = () => rng(0, 0, grid.length, width());
     const parse = (a: string) => rng(...parseA(a));
-    const tableObj = (t: { name: string; range: string }) =>
+    const tableObj = (t: { name: string; range: string; style?: string }) =>
       strict("Excel.Table", {
         name: t.name,
+        load() {},
+        get style() {
+          return t.style ?? "TableStyleMedium2";
+        },
+        set style(v: string) {
+          record({ kind: "tableStyle", table: t.name, style: v });
+          t.style = v;
+        },
+        convertToRange() {
+          record({ kind: "convertToRange", table: t.name });
+          tables.splice(tables.indexOf(t), 1);
+          return parse(t.range);
+        },
         getRange: () => parse(t.range),
+        getDataBodyRange: () => {
+          const [r0, c0, rows, cols] = parseA(t.range);
+          return rng(r0 + 1, c0, rows - 1, cols);
+        },
         getHeaderRowRange: () => {
           const [r0, c0, , cols] = parseA(t.range);
           return rng(r0, c0, 1, cols);
@@ -684,10 +759,24 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           get count() {
             return parseA(t.range)[2] - 1;
           },
-          add(_index: unknown, values: unknown[][]) {
+          add(index: number | undefined, values: unknown[][]) {
             // Som Excel: rækkerne lægges ind i tabellen og får formatet fra tabellens sidste række.
             const [r0, c0, rows, cols] = parseA(t.range);
-            record({ kind: "tableRowsAdd", table: t.name, values });
+            record({ kind: "tableRowsAdd", table: t.name, index, values });
+            if (index !== undefined && index < rows - 1) {
+              // Midt i tabellen: rækkerne under rykker ned.
+              const at = r0 + 1 + index;
+              grid.splice(at, 0, ...values.map(() => [] as unknown[]));
+              const moved = [...fmts].map(([kk, f]) => {
+                const [r, c] = kk.split(",").map(Number);
+                return [key(r >= at ? r + values.length : r, c), f] as const;
+              });
+              fmts.clear();
+              for (const [kk, f] of moved) fmts.set(kk, f);
+              values.forEach((row, i) => row.forEach((v, c) => put(at + i, c0 + c, v ?? "")));
+              t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
+              return;
+            }
             values.forEach((row, i) => {
               const r = r0 + rows + i;
               for (let c = 0; c < cols; c++) {
@@ -699,6 +788,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           },
           getItemAt: (k: number) =>
             strict("Excel.TableRow", {
+              getRange: () => {
+                const [r0, c0, , cols] = parseA(t.range);
+                return rng(r0 + 1 + k, c0, 1, cols);
+              },
               delete() {
                 const [r0, c0, rows, cols] = parseA(t.range);
                 record({ kind: "tableRowDelete", table: t.name, index: k });
@@ -731,6 +824,21 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           if (!t) throw new Error(`ItemNotFound: ${name}`);
           return tableObj(t);
         },
+        add(r: { address: string }, hasHeaders: boolean) {
+          const range = r.address.replace(/^.*!/, "");
+          const [r0, c0, rows, cols] = parseA(range);
+          if (
+            tables.some((t) => {
+              const [a, b, n, m] = parseA(t.range);
+              return a <= r0 + rows - 1 && r0 <= a + n - 1 && b <= c0 + cols - 1 && c0 <= b + m - 1;
+            })
+          )
+            throw new Error("InvalidOperation: A table can't overlap another table");
+          const t = { name: `Tabel${tables.length + 1}`, range };
+          record({ kind: "tableAdd", address: range, hasHeaders });
+          tables.push(t);
+          return tableObj(t);
+        },
       }),
     });
     const workbook = strict("Excel.Workbook", {
@@ -744,7 +852,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     });
     w.Excel = strict("Excel", {
       RangeValueType: { error: "Error" },
-      ClearApplyTo: { contents: "Contents" },
+      ClearApplyTo: { contents: "Contents", formats: "Formats" },
+      DeleteShiftDirection: { up: "Up" },
+      InsertShiftDirection: { down: "Down" },
       RangeCopyType: { formats: "Formats" },
       run: async (fn: (c: unknown) => unknown) => fn(strict("Excel.RequestContext", { workbook, sync })),
     });

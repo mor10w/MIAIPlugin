@@ -202,6 +202,10 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] "Tilføj en total under tabellen": totalen får kolonnens talformat (fx kr.), ikke "Standard"
 - [ ] Skriv i celler, der allerede har formatering: formateringen er urørt
 - [ ] Fortryd: værdier, talformater, fed og fyld er som før, og tabellen har sin oprindelige størrelse
+- [ ] "Fjern de tomme rækker i tabellen": tabellen krymper, data under den rykker op; Fortryd sætter rækkerne ind igen med værdier og formater
+- [ ] Tomme rækker i et område uden tabel: kun områdets kolonner rykker op, data til højre står stille
+- [ ] "Gør tabellen pæn med et moderne layout": området bliver en Excel-tabel med en indbygget typografi (eller en eksisterende tabel skifter typografi), talformat og kolonnebredde passer; Fortryd gør det til et almindeligt område med de oprindelige formater og kolonnebredder
+- [ ] Samme ønske i **Chat**: svaret henviser til agenten (ingen VBA), og knappen "Gør det med agenten" vises
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
 - [ ] Erstat et tal i et punkt med fed tekst foran: kun tallet skifter, fed og farve bevares

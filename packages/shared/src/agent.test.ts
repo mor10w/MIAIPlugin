@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentPlan, cellCount, checkPlan, isDestructive, MAX_AGENT_ACTIONS } from "./agent.js";
+import { AgentPlan, cellCount, checkPlan, isDestructive, MAX_AGENT_ACTIONS, numberedRows, rangeBox } from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
 import { TaskRequest } from "./types.js";
 import { TASKS } from "./tasks.js";
@@ -251,6 +251,54 @@ describe("agent i PowerPoint og Excel", () => {
       ],
     });
     expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([undefined, "bad-table", "invalid", undefined]);
+  });
+
+  it("checkPlan (Excel): sletning af rækker og tabelformatering må ikke ødelægge en tabel", () => {
+    const excel = { tables: [{ name: "Salg", address: "Ark1!A1:C6", headers: ["Region", "Beløb", "Andel"] }], columnFormats: [] };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "deleteRows", address: "A3:C4", reason: "" },
+        { action: "deleteRows", address: "A1:C2", reason: "" },
+        { action: "deleteRows", address: "A6:C8", reason: "" },
+        { action: "deleteRows", address: "A10:C12", reason: "" },
+        { action: "deleteEmptyRows", target: "Salg", reason: "" },
+        { action: "deleteEmptyRows", target: "Findes", reason: "" },
+        { action: "deleteEmptyRows", target: "A1:F200", reason: "" },
+        { action: "formatTable", target: "Salg", style: "TableStyleMedium9", reason: "" },
+        { action: "formatTable", target: "B4:E9", style: "TableStyleLight1", reason: "" },
+        { action: "formatTable", target: "E1:G9", style: "TableStyleDark11", reason: "" },
+        { action: "setNumberFormat", address: "B2:B6", format: "#,##0", reason: "" },
+        { action: "autofitColumns", address: "A1:C6", reason: "" },
+        { action: "autofitColumns", address: "Salg", reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([
+      undefined,
+      "in-table", // overskriften
+      "in-table", // stikker ud under tabellen
+      undefined,
+      undefined,
+      "bad-table",
+      undefined,
+      undefined,
+      "in-table", // ny tabel oven i en eksisterende
+      undefined,
+      undefined,
+      undefined,
+      "bad-address",
+    ]);
+    // Kun Excels indbyggede tabeltypografier.
+    expect(() => AgentPlan.parse({ summary: "s", actions: [{ action: "formatTable", target: "Salg", style: "Lilla og guld", reason: "" }] })).toThrow();
+    expect(isDestructive(plan.actions[0])).toBe(true);
+    expect(isDestructive(plan.actions[4])).toBe(true);
+  });
+
+  it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {
+    expect(rangeBox("Ark1!$B$2:D4")).toEqual({ r0: 1, c0: 1, r1: 3, c1: 3 });
+    expect(rangeBox("AA10")).toEqual({ r0: 9, c0: 26, r1: 9, c1: 26 });
+    expect(numberedRows("Navn\tBeløb\nAnna\t1", "Ark1!A4:B5")).toBe("4\tNavn\tBeløb\n5\tAnna\t1");
+    expect(numberedRows("x", undefined)).toBe("x");
   });
 
   it("prompten viser slides med layout og figurer, og Excels tabeller og talformater", () => {

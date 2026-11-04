@@ -103,6 +103,16 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_setFormula", { address: a.address, formula: clip(a.formula) });
     case "clear":
       return t("agentAct_clear", { address: a.address });
+    case "deleteRows":
+      return t("agentAct_deleteRows", { address: a.address });
+    case "deleteEmptyRows":
+      return t("agentAct_deleteEmptyRows", { target: a.target });
+    case "formatTable":
+      return t("agentAct_formatTable", { target: a.target, style: a.style.replace(/^TableStyle/, "") });
+    case "setNumberFormat":
+      return t("agentAct_setNumberFormat", { address: a.address, format: a.format });
+    case "autofitColumns":
+      return t("agentAct_autofitColumns", { address: a.address });
   }
 }
 

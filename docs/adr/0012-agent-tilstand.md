@@ -69,7 +69,21 @@ Samme principper: modellen ser strukturen, handlingerne ændrer kun det nødvend
 - **`appendRows {table, values}`** bruger `table.rows.add`, så rækkerne får tabellens formatering og beregnede kolonner (`null` = lad Excel udfylde).
 - **Værdier som JSON-tal**, ikke tekst, så tal ikke tolkes efter landestandard.
 - **Naboformat:** celler, der var tomme, får formatet fra rækken over eller kolonnen til venstre (`copyFrom(…, formats)`, ExcelApi 1.9), før værdien skrives.
-- **Fortryd:** formler, talformat og celleegenskaber (`getCellProperties`/`setCellProperties`, ExcelApi 1.9) gendannes, og tilføjede tabelrækker slettes. Cellerne gendannes først og rækkerne bagefter, så adresserne passer.
+- **Udseende uden fri formatering** (tilføjet efter brugerfeedback: "gør tabellen pæn" gav kun en vejledning):
+  - `formatTable {target, style}` giver en eksisterende tabel en ny typografi eller gør et område til en Excel-tabel (`tables.add`). Kun Excels indbyggede tabeltypografier (`TableStyleLight1–21`, `Medium1–28`, `Dark1–11`) er tilladt. De følger projektmappens tema, så modellen aldrig vælger farver eller skrifttyper selv.
+  - `setNumberFormat {address, format}` og `autofitColumns {address}`.
+- **Sletning af rækker:**
+  - `deleteRows {address}` sletter rækker. Inde i en Excel-tabel sker det som tabelrækker, så tabellen krymper. Ellers slettes cellerne i områdets kolonner, og cellerne under rykker op; data til højre for området røres ikke.
+  - `deleteEmptyRows {target}` (tabelnavn eller område): add-in'et finder selv de helt tomme rækker. Små modeller tæller ofte forkert, når de skal angive rækker. Et område, der rammer en tabel, behandles som tabellen, og i et område tælles kun rækker inden for arkets data.
+  - Sletninger udføres **til sidst og nedefra**, så alle adresser i planen gælder arket før handlingerne. Hver række slettes for sig, så en afvisning fra Excel ikke efterlader en halvt udført sletning uden fortryd.
+  - `checkPlan` afviser sletninger, der rammer en tabels overskrift eller stikker ud af tabellen, og nye tabeller, der overlapper en eksisterende (`in-table`).
+- **Rækkenumre i konteksten:** de markerede værdier vises med arkets rækkenummer først, så modellen kan pege på rækker uden at tælle.
+- **Fortryd** i omvendt rækkefølge:
+  1. Slettede rækker sættes ind igen (`rows.add(index, …)` i tabeller, ellers `insert(down)`) med formler, talformat og celleegenskaber.
+  2. Nye tabeller bliver almindelige områder igen (`convertToRange` og ryd formater), og tidligere tabeltypografier sættes tilbage.
+  3. Formler, talformat og celleegenskaber (`getCellProperties`/`setCellProperties`, ExcelApi 1.9, nu også kanter) gendannes, og det samme gør kolonnebredderne.
+  4. Tilføjede tabelrækker slettes.
+- `formatTable` på et område kræver ExcelApi 1.9, for ellers kan formateringen ikke fortrydes.
 
 **PowerPoint**
 - **Kontekst:** alle slides med layout og figurer som `2.1 [title|body|text|other] navn: tekst`, plus præsentationens layouts.

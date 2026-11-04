@@ -9,7 +9,8 @@ import type { DocContext, HostKind } from "./types.js";
  * Bevidst ingen netværks- eller filværktøjer og ingen fri formatering (skrifttype, farve,
  * størrelse): dokumentindhold kan indeholde prompt injection, og det værste en kapret plan kan
  * gøre, er at foreslå ændringer, som brugeren ser, før de udføres. Formatering sker kun med
- * dokumentets egne typografier og begrænset Markdown (fed, kursiv, links, lister).
+ * dokumentets egne typografier og begrænset Markdown (fed, kursiv, links, lister) – i Excel med
+ * de indbyggede tabeltypografier, talformater og kolonnebredde.
  *
  * Formatering bevares: modellen ser afsnittene med typografi (¶-numre), strukturændringer
  * peger på afsnit (ikke tekstsøgning), og erstat ændrer kun de ord, der er forskellige.
@@ -23,6 +24,15 @@ export const MAX_AGENT_CELLS = 2_000;
 const reason = z.string().max(200).describe("Very short reason shown to the user, in the user's language");
 const find = z.string().min(1).max(255).describe("Exact text copied verbatim from ONE paragraph of the document (a few words up to one sentence)");
 const paragraph = z.number().int().min(1).max(100_000).describe("Paragraph number (¶) from the document structure");
+
+/**
+ * Excels indbyggede tabeltypografier. De følger projektmappens tema (farver og skrift), så agenten
+ * kan give en tabel et moderne udseende uden fri formatering.
+ */
+export const TableStyle = z
+  .string()
+  .regex(/^TableStyle(?:Light(?:[1-9]|1\d|2[01])|Medium(?:[1-9]|1\d|2[0-8])|Dark(?:[1-9]|1[01]))$/)
+  .describe("Built-in Excel table style, e.g. TableStyleMedium2 (banded rows, accent header – Excel's default) or TableStyleLight9 (light, accent header)");
 
 /** Indbyggede typografier, agenten må bruge (ingen fri formatering: skrifttype, farve og størrelse følger dokumentets typografier). */
 export const WordStyle = z.enum(["normal", "heading1", "heading2", "heading3", "bullet", "numbered", "quote"]);
@@ -122,6 +132,47 @@ export const AgentAction = z.discriminatedUnion("action", [
       .describe("Rows to add at the end of the table, one value per column (null for calculated columns)"),
     reason,
   }),
+  z.object({
+    action: z.literal("deleteRows"),
+    address: z
+      .string()
+      .min(2)
+      .max(40)
+      .describe(
+        "The rows to delete as a range across the data's full width, e.g. 'A5:D7'. Rows inside an Excel table are deleted as table rows; cells below move up",
+      ),
+    reason,
+  }),
+  z.object({
+    action: z.literal("deleteEmptyRows"),
+    target: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe("Excel table name from the structure, or a range such as 'A1:F200'. Every completely empty row in it is deleted"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("formatTable"),
+    target: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe("Existing Excel table name, or the data range INCLUDING its header row (e.g. 'A1:F20') to turn into a formatted Excel table"),
+    style: TableStyle,
+    reason,
+  }),
+  z.object({
+    action: z.literal("setNumberFormat"),
+    address: z.string().min(2).max(40).describe("Range on the active sheet, e.g. 'C2:C40'"),
+    format: z.string().min(1).max(80).describe('Excel number format code, e.g. "#,##0", "#,##0.00 kr.", "0%", "dd-mm-yyyy"'),
+    reason,
+  }),
+  z.object({
+    action: z.literal("autofitColumns"),
+    address: z.string().min(2).max(40).describe("Range whose columns get a width that fits their content, e.g. 'A1:F40'"),
+    reason,
+  }),
 ]);
 export type AgentAction = z.infer<typeof AgentAction>;
 export type AgentActionKind = AgentAction["action"];
@@ -133,7 +184,17 @@ export const AgentPlan = z.object({
 export type AgentPlan = z.infer<typeof AgentPlan>;
 
 export const WORD_ACTIONS: AgentActionKind[] = ["replace", "insert", "delete", "move", "setStyle", "comment"];
-export const EXCEL_ACTIONS: AgentActionKind[] = ["setValues", "setFormula", "appendRows", "clear"];
+export const EXCEL_ACTIONS: AgentActionKind[] = [
+  "setValues",
+  "setFormula",
+  "appendRows",
+  "clear",
+  "deleteRows",
+  "deleteEmptyRows",
+  "formatTable",
+  "setNumberFormat",
+  "autofitColumns",
+];
 export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide"];
 export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
   host === "word" ? WORD_ACTIONS : host === "excel" ? EXCEL_ACTIONS : host === "powerpoint" ? POWERPOINT_ACTIONS : [];
@@ -143,6 +204,8 @@ export const isDestructive = (a: AgentAction) =>
   a.action === "delete" ||
   a.action === "clear" ||
   a.action === "deleteSlide" ||
+  a.action === "deleteRows" ||
+  a.action === "deleteEmptyRows" ||
   (a.action === "replace" && !a.replace) ||
   (a.action === "setText" && !a.text.trim());
 
@@ -180,9 +243,15 @@ export function agentToolGuide(host: HostKind): string {
       '- setValues {address, values}: write a 2D array of values starting at address (e.g. "D2"). Use JSON numbers for numbers (1200.5, not "1.200,50"); null leaves a cell empty.',
       '- setFormula {address, formula}: put ONE formula in ONE cell (e.g. "F2"). For a column of formulas, use one action per cell (max 20 actions).',
       "- appendRows {table, values}: add rows at the end of an Excel table (listed under Tables). The rows get the table's formatting and calculated columns – always prefer this over setValues below a table. Use null for calculated columns.",
-      "- clear {address}: clear the contents of a range (formatting is kept). Only when the user asks to remove data.",
-      "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats (number format, font, fill). Do not try to format cells.",
-      "Use addresses that match the sheet overview. Never write over existing data unless the user asked for it.",
+      "- clear {address}: clear the contents of a range (formatting is kept). Use deleteRows instead when rows should disappear.",
+      "- deleteRows {address}: delete whole rows of data (e.g. 'A5:D7'); cells below move up. Inside an Excel table, the table shrinks.",
+      "- deleteEmptyRows {target}: delete every completely empty row in a table (by name) or range – use this for 'remove the empty rows' instead of listing rows yourself.",
+      "- formatTable {target, style}: give a table a modern, readable look with one of Excel's built-in table styles (they follow the workbook's theme). target = an existing table name, or the data range including its header row, which then becomes an Excel table with filter buttons and banded rows. Good choices: TableStyleMedium2 (default), TableStyleMedium9, TableStyleLight9, TableStyleLight1 (minimal).",
+      "- setNumberFormat {address, format}: number format for a range, e.g. '#,##0' (thousands separator), '#,##0.00 kr.', '0%', 'dd-mm-yyyy'.",
+      "- autofitColumns {address}: make the columns as wide as their content.",
+      "For 'make the table nice/modern/readable': formatTable, then setNumberFormat for number and date columns where needed, then autofitColumns. Do not change cell values for this.",
+      "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats. Fonts, colours and borders come only from the table style – there is no action for free formatting.",
+      "Use addresses that match the sheet overview; row numbers are shown in the first column of the selected values. Never write over existing data unless the user asked for it. Addresses refer to the sheet before any of your actions – the add-in deletes rows last, from the bottom up.",
     ].join("\n");
   if (host === "powerpoint")
     return [
@@ -245,6 +314,35 @@ export function cellCount(address: string): number {
   const col = (s: string) => [...s.replace(/\d+/g, "")].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
   const row = (s: string) => Number(s.replace(/[A-Z]+/g, ""));
   return (Math.abs(col(to) - col(from)) + 1) * (Math.abs(row(to) - row(from)) + 1);
+}
+
+/** Maks. antal rækker, én sletning må fjerne. */
+export const MAX_AGENT_ROWS = 1_000;
+
+/** "Ark1!B2:D4" → 0-baserede, inklusive række- og kolonneindeks (som Office.js' rowIndex/columnIndex). */
+export function rangeBox(address: string): { r0: number; c0: number; r1: number; c1: number } {
+  const a = address.split("!").pop()!.replace(/\$/g, "").toUpperCase();
+  const [from, to = from] = a.split(":");
+  const col = (x: string) => [...x.replace(/\d+/g, "")].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+  const row = (x: string) => Number(x.replace(/[A-Z]+/g, "")) - 1;
+  return { r0: Math.min(row(from), row(to)), c0: Math.min(col(from), col(to)), r1: Math.max(row(from), row(to)), c1: Math.max(col(from), col(to)) };
+}
+
+type Box = ReturnType<typeof rangeBox>;
+const overlaps = (a: Box, b: Box) => a.r0 <= b.r1 && b.r0 <= a.r1 && a.c0 <= b.c1 && b.c0 <= a.c1;
+const tablesOf = (ctx: Pick<DocContext, "excel">) => (ctx.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address) }));
+
+/**
+ * Markerede værdier med arkets rækkenummer først, så modellen kan pege på rækker (deleteRows)
+ * uden at tælle selv: "5\tJylland\t120".
+ */
+export function numberedRows(tsv: string, address?: string): string {
+  if (!address || !RANGE.test(address)) return tsv;
+  const first = rangeBox(address).r0 + 1;
+  return tsv
+    .split("\n")
+    .map((line, i) => `${first + i}\t${line}`)
+    .join("\n");
 }
 
 /**
@@ -319,8 +417,27 @@ export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text"
         return cells > MAX_AGENT_CELLS ? { action, problem: "too-large" } : { action };
       }
       case "clear":
+      case "setNumberFormat":
         if (!RANGE.test(action.address)) return { action, problem: "bad-address" };
         return cellCount(action.address) > MAX_AGENT_CELLS ? { action, problem: "too-large" } : { action };
+      case "autofitColumns":
+        return ok(action, RANGE.test(action.address) ? undefined : "bad-address");
+      case "deleteRows": {
+        if (!RANGE.test(action.address)) return ok(action, "bad-address");
+        const b = rangeBox(action.address);
+        if (b.r1 - b.r0 + 1 > MAX_AGENT_ROWS) return ok(action, "too-large");
+        // Kun hele tabelrækker i en tabels data: overskriften eller rækker, der stikker ud af tabellen, ville ødelægge den.
+        return ok(action, tablesOf(ctx).some((t) => overlaps(b, t.box) && !(b.r0 > t.box.r0 && b.r1 <= t.box.r1)) ? "in-table" : undefined);
+      }
+      case "deleteEmptyRows":
+      case "formatTable": {
+        if (tablesOf(ctx).some((t) => t.name === action.target)) return ok(action);
+        if (!RANGE.test(action.target)) return ok(action, ctx.excel?.tables.length ? "bad-table" : "bad-address");
+        if (action.action === "deleteEmptyRows") return ok(action);
+        // En ny tabel må ikke overlappe en eksisterende (Excel afviser det).
+        const b = rangeBox(action.target);
+        return ok(action, b.r1 === b.r0 ? "invalid" : tablesOf(ctx).some((t) => overlaps(b, t.box)) ? "in-table" : undefined);
+      }
     }
   });
 }
