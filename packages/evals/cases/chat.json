@@ -3,7 +3,7 @@
     "id": "chat-da-doc-question",
     "task": "chat",
     "lang": "da",
-    "feature": "F13",
+    "feature": "F4",
     "context": {
       "host": "word",
       "text": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
@@ -28,7 +28,7 @@
     "id": "chat-en-doc-question",
     "task": "chat",
     "lang": "en",
-    "feature": "F13",
+    "feature": "F4",
     "context": {
       "host": "word",
       "text": "Project Falcon – status update\n\nThe migration of the customer database to the new platform is 80% complete. Three of the five regional databases have been moved without downtime. The remaining two (APAC and LATAM) are scheduled for the weekend of 14 November.\n\nBudget: we have spent 1.2 million of the approved 1.5 million euros. The extra licence costs for the monitoring tool (about 60,000 euros) were not in the original budget.\n\nRisks: the LATAM database has an unsupported character encoding that must be converted first. If the conversion fails, the go-live date of 1 December may slip by up to two weeks. The team recommends a test conversion next week.",
@@ -53,7 +53,7 @@
     "id": "chat-da-not-in-doc",
     "task": "chat",
     "lang": "da",
-    "feature": "F13",
+    "feature": "F4",
     "context": {
       "host": "word",
       "text": "Kvartalsrapport Q3\n\nOmsætningen steg i tredje kvartal med 12 % til 48,3 mio. kr., primært drevet af salget i Norge, hvor vi åbnede to nye butikker i Bergen og Trondheim. Bruttomarginen faldt dog fra 41 % til 38 % på grund af stigende fragtpriser og en kampagne på vinterkollektionen.\n\nAntallet af medarbejdere er øget fra 112 til 127. Sygefraværet er faldet til 3,1 %, det laveste niveau i fem år.\n\nLedelsen forventer en omsætning for hele året på 185-190 mio. kr. og fastholder målet om et resultat før skat på 14 mio. kr. Den planlagte lancering af webshoppen i Sverige er udskudt til marts næste år på grund af forsinkelser hos leverandøren af betalingsløsningen.",
@@ -80,7 +80,7 @@
     "id": "chat-excel-scope",
     "task": "chat",
     "lang": "da",
-    "feature": "F13",
+    "feature": "F4",
     "context": {
       "host": "excel",
       "text": "Navn\tBeløb\nAnna\t1200\nBo\t800",
@@ -103,7 +103,7 @@
     "id": "chat-history-da",
     "task": "chat",
     "lang": "da",
-    "feature": "F13",
+    "feature": "F4",
     "context": {
       "host": "word",
       "text": ""
@@ -214,7 +214,7 @@
     "id": "chat-da-omdan-grafik",
     "task": "chat",
     "lang": "da",
-    "feature": "F13",
+    "feature": "F4",
     "note": "Regression: modellen skal levere et gærdet diagram (mermaid/svg), ikke rå tekst eller værktøjskald.",
     "context": {
       "host": "word",
