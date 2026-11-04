@@ -25,7 +25,7 @@ export function sanitizeSvg(svg: string): string {
 
 export type GraphicBlock = { kind: "mermaid" | "svg"; code: string };
 
-/** Fenced blocks in textual order (lang = the tag after ```; open = no closing fence). */
+/** Gærdede blokke i tekst-rækkefølge (lang = tagget efter ```; open = intet afsluttende gærde). */
 interface Fenced {
   lang: string;
   code: string;
@@ -50,10 +50,18 @@ function fencedBlocks(text: string): Fenced[] {
 }
 
 /**
+ * Første komplette <svg>…</svg> i teksten. En SVG uden </svg> (afbrudt svar) kan ikke
+ * rasteriseres og tæller ikke – ellers ville knappen "Indsæt som billede" altid fejle.
+ */
+function completeSvg(text: string): string | null {
+  return /<svg[\s>][\s\S]*?<\/svg>/i.exec(text)?.[0] ?? null;
+}
+
+/**
  * Finder den første ```mermaid- eller ```svg-blok i teksten (i tekst-rækkefølge).
- * Fallbacks for small models that fence loosely: an SVG in a fence with another tag (fx ```xml),
- * an unclosed mermaid/svg fence (truncated output) and bare <svg>…</svg> markup.
- * SVG-blocks are always sanitised by the caller (sanitizeSvg) before use.
+ * Fallbacks for små modeller, der gærder sløset: en SVG under et andet tag (fx ```xml eller ```html,
+ * også i en ulukket blok), en ulukket ```mermaid-blok (afbrudt svar) og rå <svg>…</svg> uden gærde.
+ * SVG renses altid af kalderen (sanitizeSvg) før brug.
  */
 export function extractGraphic(text: string): GraphicBlock | null {
   const mermaid = /```mermaid[ \t]*\r?\n([\s\S]*?)```/i.exec(text);
@@ -65,16 +73,14 @@ export function extractGraphic(text: string): GraphicBlock | null {
   if (svg) return { kind: "svg", code: svg[1].trim() };
 
   const blocks = fencedBlocks(text);
-  // SVG under et andet gærde-tag (fx ```xml) eller i en ulukket ```svg-blok.
   for (const b of blocks) {
-    if (/<svg[\s>]/i.test(b.code)) return { kind: "svg", code: b.code.trim() };
+    const code = completeSvg(b.code);
+    if (code) return { kind: "svg", code };
   }
-  // Ulukket ```mermaid-blok (afbrudt svar): koden er måske ufuldstændig, men prøv alligevel.
+  // Ulukket ```mermaid-blok: koden er måske ufuldstændig, men mermaid kan ofte tegne det, der er.
   for (const b of blocks) {
-    if (b.open && /^mermaid$/i.test(b.lang)) return { kind: "mermaid", code: b.code.trim() };
+    if (b.open && /^mermaid$/i.test(b.lang) && b.code.trim()) return { kind: "mermaid", code: b.code.trim() };
   }
-  // Rå <svg>-markup uden gærde.
-  const bare = /<svg[\s>][\s\S]*<\/svg>/i.exec(text);
-  if (bare) return { kind: "svg", code: bare[0].trim() };
-  return null;
+  const bare = completeSvg(text);
+  return bare ? { kind: "svg", code: bare } : null;
 }

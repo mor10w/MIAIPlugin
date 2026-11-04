@@ -71,13 +71,28 @@ describe("extractGraphic", () => {
   });
 
   it("finder SVG under et andet gærde-tag (fx ```xml)", () => {
-    const text = "Her er figuren:\n```xml\n<svg viewBox=\"0 0 10 5\"><rect/></svg>\n```";
+    const text = 'Her er figuren:\n```xml\n<svg viewBox="0 0 10 5"><rect/></svg>\n```';
     expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/></svg>' });
   });
 
-  it("finder SVG i en ulukket ```svg-blok (afbrudt svar)", () => {
-    const text = "Som SVG:\n```svg\n<svg viewBox=\"0 0 10 5\"><rect/>";
-    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/>' });
+  it("finder en komplet SVG i en ulukket ```svg-blok (afbrudt efter figuren)", () => {
+    const text = 'Som SVG:\n```svg\n<svg viewBox="0 0 10 5"><rect/></svg>\nForklaring, der blev afbrudt';
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/></svg>' });
+  });
+
+  it("ignorerer en afbrudt SVG uden </svg> (kan ikke rasteriseres)", () => {
+    expect(extractGraphic('Som SVG:\n```svg\n<svg viewBox="0 0 10 5"><rect/>')).toBeNull();
+    expect(extractGraphic('<svg viewBox="0 0 10 5"><rect/>')).toBeNull();
+  });
+
+  it("tager kun <svg>…</svg> fra en ```xml- eller ```html-blok med omgivende markup", () => {
+    const text = '```html\n<div><svg viewBox="0 0 10 5"><rect/></svg></div>\n```';
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/></svg>' });
+  });
+
+  it("tager kun den første af flere rå SVG'er", () => {
+    const text = '<svg viewBox="0 0 1 1"><rect/></svg> og <svg viewBox="0 0 2 2"><circle/></svg>';
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 1 1"><rect/></svg>' });
   });
 
   it("finder mermaid i en ulukket ```mermaid-blok (afbrudt svar)", () => {
@@ -86,8 +101,8 @@ describe("extractGraphic", () => {
   });
 
   it("finder rå <svg>-markup uden gærde", () => {
-    const text = "Her er din struktur:\n<svg viewBox=\"0 0 100 50\"><rect/></svg>\nhåb";
-    expect(extractGraphic(text)).toEqual({ kind: "svg", code: "<svg viewBox=\"0 0 100 50\"><rect/></svg>" });
+    const text = 'Her er din struktur:\n<svg viewBox="0 0 100 50"><rect/></svg>\nhåb';
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 100 50"><rect/></svg>' });
   });
 
   it("foretrækker lukkede blokke for fallbacks", () => {
