@@ -69,4 +69,37 @@ describe("extractGraphic", () => {
   it("returnerer null uden blok", () => {
     expect(extractGraphic("kun tekst")).toBeNull();
   });
+
+  it("finder SVG under et andet gærde-tag (fx ```xml)", () => {
+    const text = "Her er figuren:\n```xml\n<svg viewBox=\"0 0 10 5\"><rect/></svg>\n```";
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/></svg>' });
+  });
+
+  it("finder SVG i en ulukket ```svg-blok (afbrudt svar)", () => {
+    const text = "Som SVG:\n```svg\n<svg viewBox=\"0 0 10 5\"><rect/>";
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: '<svg viewBox="0 0 10 5"><rect/>' });
+  });
+
+  it("finder mermaid i en ulukket ```mermaid-blok (afbrudt svar)", () => {
+    const text = "```mermaid\ngraph TD; A-->B";
+    expect(extractGraphic(text)).toEqual({ kind: "mermaid", code: "graph TD; A-->B" });
+  });
+
+  it("finder rå <svg>-markup uden gærde", () => {
+    const text = "Her er din struktur:\n<svg viewBox=\"0 0 100 50\"><rect/></svg>\nhåb";
+    expect(extractGraphic(text)).toEqual({ kind: "svg", code: "<svg viewBox=\"0 0 100 50\"><rect/></svg>" });
+  });
+
+  it("foretrækker lukkede blokke for fallbacks", () => {
+    const text = `rå <svg></svg> markup først\n${mermaid}`;
+    expect(extractGraphic(text)).toEqual({ kind: "mermaid", code: "graph TD; A-->B;" });
+  });
+
+  it("ignorerer rå markup, der ikke er en komplet SVG", () => {
+    expect(extractGraphic("jeg kan hjælpe med <svg> og <rect>, hvis du vil")).toBeNull();
+  });
+
+  it("ignorerer ```-blokke uden SVG", () => {
+    expect(extractGraphic("```text\nbare tekst\n```")).toBeNull();
+  });
 });

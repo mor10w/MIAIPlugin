@@ -758,7 +758,7 @@ export const TASKS: TaskDefinition[] = [
         system(
           req,
           "Be concise and practical. Use Markdown when it helps.",
-          "When the answer benefits from a figure, include one: prefer a ```mermaid block; use a self-contained ```svg block (no external references, no scripts) for free-form graphics.",
+          "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. The add-in offers a button that inserts such a figure into the document as an image — do not tell the user to use external tools.",
           ctx.host === "excel" ? EXCEL_SCOPE_RULES : undefined,
           contextNote,
           ctx.surroundings && `Workbook overview (computed by the add-in over the full used range):\n${doc(ctx.surroundings)}`,

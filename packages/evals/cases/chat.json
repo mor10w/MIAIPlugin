@@ -209,5 +209,35 @@
       }
     ],
     "rubric": "Søger efter en aktuel oplysning og svarer på dansk med kilde."
+  },
+  {
+    "id": "chat-da-omdan-grafik",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F13",
+    "note": "Regression: modellen skal levere et gærdet diagram (mermaid/svg), ikke rå tekst eller værktøjskald.",
+    "context": {
+      "host": "word",
+      "text": "Projektplan\n- Fase 1: Analyse (uge 32)\n- Fase 2: Design (uge 33–34)\n- Fase 3: Implementering (uge 35–38)\n- Fase 4: Test og levering (uge 39)",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Omdan dette til en grafik for bedre visualisering"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "regex",
+        "pattern": "```(?:mermaid|svg)"
+      },
+      {
+        "type": "notContains",
+        "values": ["<function=", "<parameter="]
+      }
+    ],
+    "rubric": "Svaret indeholder et færdigt ```mermaid- eller ```svg-blok, der viser de fire faser i rækkefølge – ingen rå XML uden gærde og ingen værktøjskald i svaret."
   }
 ]
