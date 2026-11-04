@@ -78,7 +78,7 @@ Fra PLAN.md §5 og tilføjelserne i #2:
 
 ## Anbefalinger
 
-*Udfyldes efter første kørsel på rigtig hardware.* Indtil da gælder forslagene i PLAN.md §5. Notér hardware, værktøj og version, kvantisering og dato sammen med rapporten.
+*Udfyldes efter første kørsel på rigtig hardware; fremgangsmåden står i [TESTVEJLEDNING.md](TESTVEJLEDNING.md#2-eval-og-modelvalg).* Indtil da gælder forslagene i PLAN.md §5. Notér hardware, værktøj og version, kvantisering og dato sammen med rapporten.
 
 ## Udvid sættet
 

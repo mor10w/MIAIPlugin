@@ -41,6 +41,7 @@ Sideload derefter `packages/addin/manifest.dev.xml` med `npm run sideload:mac` e
 - [Brugerflade og designsystem](docs/ui/README.md)
 - [Eval-sæt og modelvalg](docs/EVAL.md)
 - [Udvikling og test](docs/UDVIKLING.md)
+- [Testvejledning: Office, webviews og modelvalg](docs/TESTVEJLEDNING.md)
 - [Arkitekturbeslutninger (ADR)](docs/adr/)
 
 ## Struktur

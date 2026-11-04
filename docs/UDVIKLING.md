@@ -140,7 +140,7 @@ Eller med søgning via organisationens egen SearXNG:
 ```
 
 ## Fase 0 – manuel testliste
-Skal afprøves i Office desktop.
+Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabeloner: [TESTVEJLEDNING.md](TESTVEJLEDNING.md).
 
 **Forbindelse**
 - [ ] Direkte, dev (`https://localhost:3000`) → Ollama uden CORS-opsætning, i Windows (WebView2) og Mac (WKWebView)
