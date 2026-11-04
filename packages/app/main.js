@@ -143,6 +143,27 @@ function officeInstallState() {
   }
 }
 
+/** Viser install-fejl. EPERM = macOS blokerede adgangen (TCC) – der gives en vej til Full Disk Access. */
+function showInstallError(err) {
+  if (err?.code === "EPERM") {
+    const target = app.isPackaged ? "MIAI-appen" : `Electron (${app.getAppPath()})`;
+    void dialog
+      .showMessageBox({
+        type: "warning",
+        title: "Adgang nægtet af macOS",
+        message: "macOS blokerede MIAI fra at skrive i Office-appernes mapper.",
+        detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Indstilling af privatliv og sikkerhed → Fuld diskadgang, og prøv igen.`,
+        buttons: ["Åbn Indstillinger", "Luk"],
+        defaultId: 0,
+      })
+      .then((r) => {
+        if (r.response === 0) void shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
+      });
+    return;
+  }
+  dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
+}
+
 function showCertResult(r) {
   dialog.showMessageBox({
     type: r.ok ? "info" : "warning",
@@ -172,7 +193,7 @@ function buildMenu() {
             detail: "Genstart de Office-apps, du vil bruge MIAI i. Siden da finder du MIAI under Indsæt → Tilføjelser (og som 'AI-assistent' på fanen Hjem).",
           });
         } catch (err) {
-          dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
+          showInstallError(err);
         }
       },
     },
@@ -337,7 +358,7 @@ if (!gotLock) {
                 detail: "Genstart Word, Excel og PowerPoint. Du finder MIAI som 'AI-assistent' på fanen Hjem.",
               });
             } catch (err) {
-              dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err.message}`);
+              showInstallError(err);
             }
           }
         }
