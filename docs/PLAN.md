@@ -136,6 +136,7 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af
 
 ### Fase 3
 - [x] F13: agent-tilstand (whitelisted Office-handlinger, plan → bekræft → udfør, fortryd af hele sessionen) – ADR-0012.
+- [x] Distribution (#5): MIAI App til Windows (NSIS pr. bruger) og Mac (arm64/x64), automatisk opdatering via electron-updater, release-workflow med signering og notarisering, når certifikater er sat op, og winget-skabelon – ADR-0016. Mangler: køb af certifikater (Apple Developer ID, Azure Trusted Signing).
 - [x] Outlook (læse- og skrivetilstand, Svar på mail) og Office på web via central udrulning med `miai-config.json` og intern inference-server – ADR-0015.
 
 ### Fase 4

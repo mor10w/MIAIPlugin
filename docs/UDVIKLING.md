@@ -66,6 +66,20 @@ npm test
 - `bridge`: streaming, `<think>`-filter, JSON-validering med genforsøg, politik, sikkerhedstjek, brugeropgaver og audit-log.
 - `addin`: hjælpefunktioner (SVG, billedstørrelser, Excel-oversigt).
 
+**Udgivelse af MIAI App (ADR-0016):**
+1. Ret `version` i `packages/app/package.json` og commit.
+2. Tag og push:
+   ```bash
+   git tag v0.2.0
+   ```
+   ```bash
+   git push origin v0.2.0
+   ```
+3. `release.yml` bygger macOS (dmg og zip, arm64 og x64) og Windows (NSIS, x64), signerer, hvis secrets er sat op, og laver en GitHub Release.
+4. Pages kopierer filerne og opdateringsfeedet (`latest*.yml`) til `<pages-url>/updates/`, hvor appen henter opdateringer.
+
+Lokalt: `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`, usigneret med mindre et certifikat findes. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
+
 **CI:** `ci.yml` bygger og tester på Linux og Windows og kører lint og e2e. Det er de tjek, der skal være grønne. macOS bygges i `ci-macos.yml` som et separat, ikke-blokerende tjek: GitHubs Mac-runnere er ofte optaget, og et job, der aldrig får en maskine, skal ikke gøre CI rødt. Fejler macOS-tjekket på selve koden, skal det rettes som alt andet. Står det i kø eller bliver annulleret, så kør det igen fra Actions.
 
 ### Browsertests (task pane)
@@ -153,6 +167,15 @@ Skal afprøves i Office desktop.
 - [ ] Central udrulning: add-in hostet internt, `miai-config.json` ved siden af, manifest uploadet i M365 Admin Center → add-in'et vises hos brugeren (også Office på web), politikken står som "Organisationen" og kan ikke ændres, og standard-endpointen er den interne server
 - [ ] Office på web: kald til den interne inference-server virker (CORS fra add-in'ets adresse)
 - [ ] Ugyldig `miai-config.json`: politikken låses, intet uden for standardhosts tillades
+
+**MIAI App (Windows)** (installer fra Release-workflowet):
+- [ ] Installation uden admin; MIAI starter og ligger i proceslinjen med farvet ikon
+- [ ] Første start: Windows' dialog om certifikatet vises, og efter "Ja" står det under certmgr → Betroede rodnøglecentre (Aktuel bruger)
+- [ ] Office: `HKCU\Software\Microsoft\Office\16.0\WEF\Developer` har MIAI's Id og stien til det personlige manifest; efter genstart findes AI-assistent på fanen Hjem i Word, Excel og PowerPoint
+- [ ] "Start automatisk ved login" virker efter log ud/ind
+- [ ] Outlook: "Vis Outlook-manifest i Stifinder" åbner mappen; filen kan tilføjes i Outlook
+- [ ] Opdatering: installér en ældre version, udgiv en nyere → menuen viser "Genstart og opdater til …", og den nye version kører bagefter
+- [ ] Signeret build (når Azure Trusted Signing er sat op): ingen SmartScreen-advarsel; udgiver vises korrekt
 
 **MIAI App (Mac)**
 - [ ] "Start automatisk ved login" til: MIAI står under Systemindstillinger → Generelt → Login-emner og starter efter log ud/ind (én instans, ingen dubletter)

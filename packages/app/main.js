@@ -5,18 +5,21 @@
 // Node's TLS-server, så håndskaber hænger. I en utility-process (uden Chromium) fungerer
 // TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
 import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
-import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
+import { configDir } from "@miai/bridge/dist/config.js";
+import { currentPlatform } from "./platform.js";
+import { setupUpdates, updateMenuItem } from "./updates.js";
 
 /** Den faktiske port meldes af bridge-processen (pr. bruger, #11). */
 let PORT = Number(process.env.MIAI_PORT ?? 44321);
 /** Brugerens personlige manifest (med port og adgangstoken), skrevet af bridge-processen. */
 let PERSONAL_MANIFEST = null;
-const MIAI_DIR = join(homedir(), "Library", "Application Support", "MIAI");
+/** Samme mappe som bridgen bruger (macOS: ~/Library/Application Support/MIAI, Windows: %APPDATA%\\MIAI). */
+const MIAI_DIR = configDir();
 const CERT_FILE = join(MIAI_DIR, "tls", "localhost.crt");
 
 /** Fillog: Electron svulger console-output i pakker, så fejl kan ellers ikke ses. */
@@ -97,59 +100,31 @@ function startBridge() {
   });
 }
 
-// --- Office -----------------------------------------------------------------
-const OFFICE_APPS = ["Word", "Excel", "Powerpoint"];
+// --- Office og certifikat (pr. platform – platform.js) --------------------------
+const platform = currentPlatform();
 
-/** Sideloader bridge-manifestet i de tre Office-apps (som scripts/sideload-mac.mjs). */
+/** Installerer brugerens personlige manifest i Word, Excel og PowerPoint. */
 function installInOffice() {
   if (!PERSONAL_MANIFEST) throw new Error("Bridgen har ikke skrevet dit manifest endnu.");
-  const xml = readFileSync(PERSONAL_MANIFEST, "utf8");
-  const id = xml.match(/<Id>([^<]+)<\/Id>/)?.[1];
-  if (!id) throw new Error("Fandt ikke <Id> i manifestet");
-  for (const app_ of OFFICE_APPS) {
-    const dir = join(homedir(), "Library", "Containers", `com.microsoft.${app_}`, "Data", "Documents", "wef");
-    mkdirSync(dir, { recursive: true });
-    copyFileSync(PERSONAL_MANIFEST, join(dir, `miai-${id}.xml`));
-  }
+  platform.installInOffice(PERSONAL_MANIFEST);
 }
 
-/**
- * Betror certifikatet i login-keychain. Kræver ikke admin-adgang (egen login-keychain),
- * så der vises ingen macOS-dialog. Returnerer { ok, message } med den reelle fejl ved fiasko.
- */
-function trustCert() {
-  const keychain = join(homedir(), "Library", "Keychains", "login.keychain-db");
-  const r = spawnSync("security", ["add-trusted-cert", "-d", "-r", "trustRoot", "-k", keychain, CERT_FILE], { encoding: "utf8" });
-  return { ok: r.status === 0, message: (r.stderr ?? "").trim() };
-}
-
-/** Er certifikatet betroet til SSL for localhost? (Ingen dialog; læser kun trust settings.) */
-function isCertTrusted() {
-  const r = spawnSync("security", ["verify-cert", "-c", CERT_FILE, "-p", "ssl", "-s", "localhost", "-q"], { encoding: "utf8" });
-  return r.status === 0;
-}
-
-/** Er manifestet allerede lagt i alle tre Office-apps? */
-/**
- * Er brugerens personlige manifest installeret i alle tre Office-apps?
- * "stale" = installeret, men med en anden port/token (fx efter opdatering til #11) – opdateres automatisk.
- */
+/** ok · stale (anden port/token) · missing */
 function officeInstallState() {
-  try {
-    const xml = readFileSync(PERSONAL_MANIFEST, "utf8");
-    const id = xml.match(/<Id>([^<]+)<\/Id>/)?.[1];
-    if (!id) return "missing";
-    const files = OFFICE_APPS.map((a) => join(homedir(), "Library", "Containers", `com.microsoft.${a}`, "Data", "Documents", "wef", `miai-${id}.xml`));
-    if (!files.every((f) => existsSync(f))) return "missing";
-    return files.every((f) => readFileSync(f, "utf8") === xml) ? "ok" : "stale";
-  } catch {
-    return "missing";
-  }
+  return PERSONAL_MANIFEST ? platform.officeInstallState(PERSONAL_MANIFEST) : "missing";
+}
+
+function trustCert() {
+  return platform.trustCert(CERT_FILE);
+}
+
+function isCertTrusted() {
+  return platform.isCertTrusted(CERT_FILE);
 }
 
 /** Viser install-fejl. EPERM = macOS blokerede adgangen (TCC) – der gives en vej til Full Disk Access. */
 function showInstallError(err) {
-  if (err?.code === "EPERM") {
+  if (err?.code === "EPERM" && process.platform === "darwin") {
     // I dev er det Electron-programmet selv, der skal have adgangen.
     const target = app.isPackaged ? "MIAI" : `Electron (${process.execPath})`;
     void dialog
@@ -209,7 +184,7 @@ function buildMenu() {
     { label: `Åbn https://localhost:${PORT}`, click: () => void shell.openExternal(`https://localhost:${PORT}`) },
     {
       // Outlook kan ikke installeres automatisk som Word/Excel/PowerPoint: brugeren tilføjer filen i Outlook.
-      label: "Vis Outlook-manifest i Finder…",
+      label: `Vis Outlook-manifest i ${platform.fileManager}…`,
       click: () => shell.showItemInFolder(join(MIAI_DIR, "manifest-outlook.xml")),
     },
     {
@@ -219,6 +194,7 @@ function buildMenu() {
       checked: startAtLoginEnabled(),
       click: (item) => void setStartAtLogin(item.checked),
     },
+    ...updateMenuItem(),
     { type: "separator" },
     { label: "Afslut MIAI", click: () => app.quit() },
   ]);
@@ -277,7 +253,7 @@ function startAtLoginEnabled() {
 async function setStartAtLogin(enabled) {
   // Fra en DMG eller Overførsler kører appen fra en midlertidig sti (App Translocation),
   // som et login-element ikke kan pege på – flyt først appen til Programmer.
-  if (enabled && !app.isInApplicationsFolder()) {
+  if (enabled && process.platform === "darwin" && !app.isInApplicationsFolder()) {
     const r = await dialog.showMessageBox({
       type: "question",
       message: "Flyt MIAI til mappen Programmer?",
@@ -297,7 +273,7 @@ async function setStartAtLogin(enabled) {
   }
   app.setLoginItemSettings({ openAtLogin: enabled });
   const status = app.getLoginItemSettings().status;
-  if (enabled && status === "requires-approval") {
+  if (enabled && process.platform === "darwin" && status === "requires-approval") {
     const r = await dialog.showMessageBox({
       type: "info",
       message: "Godkend MIAI under Login-emner",
@@ -336,11 +312,13 @@ if (!gotLock) {
         return;
       }
 
-      const icon = nativeImage.createFromPath(join(app.getAppPath(), "assets", "tray.png"));
-      icon.setTemplateImage(true);
+      const icon = nativeImage.createFromPath(join(app.getAppPath(), "assets", platform.trayIcon.file));
+      if (platform.trayIcon.template) icon.setTemplateImage(true);
       tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
       log("tray oprettet");
-      if (app.isPackaged) migrateOldLaunchAgent();
+      if (app.isPackaged && process.platform === "darwin") migrateOldLaunchAgent();
+      // Automatiske opdateringer (kun den installerede app; menuen viser, når en er klar).
+      setupUpdates({ log, onChange: refreshMenu });
 
       // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
       // Tidligere blev velkomstdialogen vist ved hver start.
@@ -371,8 +349,11 @@ if (!gotLock) {
         const r = await dialog.showMessageBox({
           type: "info",
           title: "Velkommen til MIAI",
-          message: "MIAI Bridge kører nu på https://localhost:44321",
-          detail: `MIAI skal ${steps.join(" og ")}.\n\nVælg derefter dit inference-værktøj og model under Indstillinger i add-in'et.`,
+          message: `MIAI Bridge kører nu på https://localhost:${PORT}`,
+          detail:
+            `MIAI skal ${steps.join(" og ")}.` +
+            (needTrust && process.platform === "win32" ? "\n\nWindows spørger, om du vil installere certifikatet – vælg Ja." : "") +
+            "\n\nVælg derefter dit inference-værktøj og model under Indstillinger i add-in'et.",
           buttons: ["Gør det nu", "Senere"],
           defaultId: 0,
         });

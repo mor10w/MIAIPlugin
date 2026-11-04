@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: MIAI.MIAI
+PackageVersion: "{{VERSION}}"
+PackageLocale: da-DK
+Publisher: M. Wiingaard
+PackageName: MIAI
+License: Proprietary
+ShortDescription: AI-assistent til Word, Excel, PowerPoint og Outlook med modeller, der kører lokalt eller hos din organisation.
+Tags:
+  - ai
+  - office
+  - word
+  - excel
+  - powerpoint
+  - outlook
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

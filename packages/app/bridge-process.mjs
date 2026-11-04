@@ -3,10 +3,10 @@
 // forstyrrer Node's TLS-server, så håndskaber hænger. I en utility-process
 // (uden Chromium) fungerer TLS som i almindelig Node – verificeret med curl.
 import "@miai/bridge/dist/quiet.js";
-import { execFileSync } from "node:child_process";
+import { X509Certificate } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import selfsigned from "selfsigned";
 import { ConfigStore, configDir } from "@miai/bridge/dist/config.js";
 import { loadIdentity, writePersonalManifest } from "@miai/bridge/dist/identity.js";
 import { buildServer, VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
@@ -16,7 +16,8 @@ let PORT;
 let TOKEN;
 // parentPort eksisterer kun i en utility-process (ikke export fra 'electron').
 const parentPort = process.parentPort;
-const MIAI_DIR = join(homedir(), "Library", "Application Support", "MIAI");
+/** Samme mappe som bridgen (macOS: ~/Library/Application Support/MIAI, Windows: %APPDATA%\\MIAI). */
+const MIAI_DIR = configDir();
 const TLS_DIR = join(MIAI_DIR, "tls");
 const CERT_FILE = join(TLS_DIR, "localhost.crt");
 
@@ -37,9 +38,9 @@ const RENEW_BEFORE_DAYS = 30;
 function certNeedsRenewal(keyFile) {
   if (!existsSync(CERT_FILE) || !existsSync(keyFile)) return true;
   try {
-    const out = execFileSync("/usr/bin/openssl", ["x509", "-in", CERT_FILE, "-noout", "-startdate", "-enddate"], { encoding: "utf8" });
-    const start = Date.parse(/notBefore=(.+)/.exec(out)?.[1] ?? "");
-    const end = Date.parse(/notAfter=(.+)/.exec(out)?.[1] ?? "");
+    const c = new X509Certificate(readFileSync(CERT_FILE));
+    const start = Date.parse(c.validFrom);
+    const end = Date.parse(c.validTo);
     const day = 86_400_000;
     return !(end > start) || (end - start) / day > CERT_DAYS || (end - Date.now()) / day < RENEW_BEFORE_DAYS;
   } catch {
@@ -48,37 +49,37 @@ function certNeedsRenewal(keyFile) {
 }
 
 /**
- * Genererer et selvsigneret certifikat for localhost (CN=localhost, SAN: DNS+IP).
- * Office kræver HTTPS; certifikatet skal derefter betroes i keychain (menuen).
- * Et fornyet certifikat skal betroes igen – main-processen opdager det via `security verify-cert`.
+ * Genererer et selvsigneret certifikat for localhost (CN=localhost, SAN: DNS+IP) med ren
+ * JavaScript (selfsigned), så det virker ens på macOS og Windows uden openssl.
+ * Office kræver HTTPS; certifikatet skal derefter betroes (menuen). Et fornyet certifikat skal
+ * betroes igen – main-processen opdager det (platform.isCertTrusted).
  */
-function ensureTls() {
+async function ensureTls() {
   const keyFile = join(TLS_DIR, "localhost.key");
   if (certNeedsRenewal(keyFile)) {
     log("opretter nyt TLS-certifikat");
     mkdirSync(TLS_DIR, { recursive: true });
-    const cnf = join(TLS_DIR, "openssl.cnf");
-    writeFileSync(
-      cnf,
-      [
-        "[req]",
-        "distinguished_name = dn",
-        "x509_extensions = v3_req",
-        "prompt = no",
-        "[dn]",
-        "CN = localhost",
-        "[v3_req]",
-        "subjectAltName = DNS:localhost,IP:127.0.0.1",
-        "keyUsage = digitalSignature, keyEncipherment",
-        "extendedKeyUsage = serverAuth",
-      ].join("\n"),
-    );
-    // /usr/bin/openssl (LibreSSL) medleveres på macOS.
-    execFileSync(
-      "/usr/bin/openssl",
-      ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", String(CERT_DAYS), "-sha256", "-keyout", keyFile, "-out", CERT_FILE, "-config", cnf],
-      { stdio: "ignore" },
-    );
+    const now = new Date();
+    const pems = await selfsigned.generate([{ name: "commonName", value: "localhost" }], {
+      keySize: 2048,
+      algorithm: "sha256",
+      notBeforeDate: now,
+      notAfterDate: new Date(now.getTime() + CERT_DAYS * 86_400_000),
+      extensions: [
+        { name: "basicConstraints", cA: false },
+        { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
+        { name: "extKeyUsage", serverAuth: true },
+        {
+          name: "subjectAltName",
+          altNames: [
+            { type: 2, value: "localhost" },
+            { type: 7, ip: "127.0.0.1" },
+          ],
+        },
+      ],
+    });
+    writeFileSync(keyFile, pems.private, { mode: 0o600 });
+    writeFileSync(CERT_FILE, pems.cert);
   }
   return { cert: readFileSync(CERT_FILE), key: readFileSync(keyFile) };
 }
@@ -108,7 +109,7 @@ async function reportStatus() {
 try {
   log("starter");
   const store = new ConfigStore();
-  const tls = ensureTls();
+  const tls = await ensureTls();
   log(`TLS OK (cert ${tls.cert.length} bytes)`);
   const id = await loadIdentity(configDir(), process.env.MIAI_PORT ? Number(process.env.MIAI_PORT) : undefined);
   PORT = id.port;

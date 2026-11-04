@@ -9,22 +9,27 @@
   "scripts": {
     "icons": "node scripts/make-icons.mjs",
     "start": "electron .",
-    "dist:mac": "npm run icons && electron-builder --mac"
+    "dist:mac": "npm run icons && electron-builder --mac --publish never",
+    "dist:win": "npm run icons && electron-builder --win --publish never",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/static": "^10.0.0",
     "@miai/bridge": "0.1.0",
     "@miai/shared": "0.1.0",
     "@napi-rs/keyring": "^2.1.2",
+    "electron-updater": "^6.8.11",
     "fastify": "^5.6.0",
     "jszip": "^3.10.2",
     "mammoth": "^1.13.0",
+    "selfsigned": "^5.5.0",
     "unpdf": "~1.9.1",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "electron": "45.2.1",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "vitest": "^5.1.0"
   },
   "build": {
     "appId": "dk.miai.app",
@@ -32,6 +37,8 @@
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "files": [
       "main.js",
+      "platform.js",
+      "updates.js",
       "bridge-process.mjs",
       "assets/**/*"
     ],
@@ -41,35 +48,62 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ],
       "icon": "build/icon.icns",
-      "identity": null,
-      "extraResources": [
-        {
-          "from": "../addin/dist",
-          "to": "addin"
-        },
-        {
-          "from": "../addin/manifest.xml",
-          "to": "manifest.xml"
-        },
-        {
-          "from": "../addin/manifest.outlook.xml",
-          "to": "manifest.outlook.xml"
-        }
-      ]
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
     },
     "dmg": {
       "title": "${productName} ${version}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "../addin/dist",
+        "to": "addin"
+      },
+      {
+        "from": "../addin/manifest.xml",
+        "to": "manifest.xml"
+      },
+      {
+        "from": "../addin/manifest.outlook.xml",
+        "to": "manifest.outlook.xml"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "shortcutName": "MIAI",
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://mor10w.github.io/MIAIPlugin/updates/"
+      }
+    ]
   }
 }

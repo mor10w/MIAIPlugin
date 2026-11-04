@@ -8,6 +8,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 concurrency:
@@ -28,6 +29,16 @@ jobs:
       - run: npm run build -w @miai/shared && npm run build -w @miai/addin
       - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest.xml
       - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest-outlook.xml outlook
+      # MIAI App: installationsfiler og opdateringsfeed (latest*.yml) fra seneste release (#5, ADR-0016).
+      # Repoet er privat, så filerne serveres herfra, hvor appens opdateringstjek kan nå dem.
+      - name: Downloads og opdateringsfeed fra seneste release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p packages/addin/dist/updates
+          gh release download --repo "$GITHUB_REPOSITORY" --dir packages/addin/dist/updates \
+            --pattern '*.yml' --pattern '*.zip' --pattern '*.exe' --pattern '*.dmg' --pattern '*.blockmap' \
+            || echo "Ingen release endnu – ingen downloads eller opdateringer."
       - uses: actions/upload-pages-artifact@v3
         with:
           path: packages/addin/dist

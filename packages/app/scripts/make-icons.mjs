@@ -2,6 +2,8 @@
 //   assets/tray.png        menu-bar-ikon (template: sort glyph + alpha)
 //   build/MIAI.iconset/    app-ikoner (16–1024 px)
 //   build/icon.icns        via `iconutil` (kun macOS)
+//   build/icon.png         512 px app-ikon (electron-builder laver .ico til Windows ud fra det)
+//   assets/tray-color.png  proceslinje-ikon til Windows (farvet – proceslinjen kan være lys eller mørk)
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -198,6 +200,8 @@ const master = drawAppIcon(MASTER);
 
 writePng(join(root, "assets", "tray.png"), 44, drawTray(44));
 console.log("✓ assets/tray.png");
+writePng(join(root, "assets", "tray-color.png"), 32, downscale(master, MASTER, 32));
+console.log("✓ assets/tray-color.png");
 
 const iconset = join(root, "build", "MIAI.iconset");
 rmSync(iconset, { recursive: true, force: true });
@@ -218,6 +222,8 @@ for (const [name, size] of targets) {
   writePng(join(iconset, name), size, size === MASTER ? master : downscale(master, MASTER, size));
 }
 console.log(`✓ ${iconset}`);
+writePng(join(root, "build", "icon.png"), 512, downscale(master, MASTER, 512));
+console.log("✓ build/icon.png");
 
 if (process.platform === "darwin") {
   execFileSync("iconutil", ["-c", "icns", iconset, "-o", join(root, "build", "icon.icns")]);

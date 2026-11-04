@@ -69,7 +69,7 @@ Add-in'et hostes på GitHub Pages, og add-in'et kalder selv dit inference-værkt
 
 Tilstanden (direkte vs. bridge) vælges automatisk ved start; task pane viser den i overskriften.
 
-### D. MIAI App (.dmg) – uden Node.js, til salgs
+### D. MIAI App (Mac .dmg / Windows .exe) – uden Node.js, til salgs
 
 MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hverken Node.js eller at drive en web-side ([ADR-0008](adr/0008-distribution-af-solgte-loesninger.md)):
 
@@ -78,6 +78,10 @@ MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hve
 3. Genstart Word/Excel/PowerPoint. Begge trin findes også i menuen (**Betro certifikat…**, **Installer i Office…**).
 4. Vælg endpoint (model-URL) og model i add-in'ets fanen **Indstillinger**.
 5. Valgfrit: **Start automatisk ved login** i menuen. Appen bliver så et login-emne i macOS. Første gang skal du måske godkende det under Systemindstillinger → Generelt → Login-emner, og appen skal ligge i Programmer.
+
+**Windows:** hent `MIAI-Setup-X.Y.Z-x64.exe` fra `https://<bruger>.github.io/<repo>/updates/`. Installationen sker pr. bruger og kræver ikke administrator. Ved første start tilbyder appen at betro certifikatet og installere MIAI i Word, Excel og PowerPoint. Windows spørger, om certifikatet må installeres; vælg Ja. MIAI ligger i proceslinjen ved uret. Er installeren ikke signeret endnu, viser SmartScreen en advarsel: vælg *Flere oplysninger → Kør alligevel*.
+
+**Opdateringer** hentes automatisk i baggrunden og installeres næste gang appen startes, eller fra menuen *Genstart og opdater til …*. På Mac kræver det en signeret app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)).
 
 Blokerer macOS installationen i Office ("Adgang nægtet"), skal MIAI have **Fuld diskadgang** under Systemindstillinger → Anonymitet og sikkerhed. Appen tilbyder at åbne stedet.
 

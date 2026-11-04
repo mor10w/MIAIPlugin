@@ -1,0 +1,138 @@
+# Bygger MIAI App til macOS og Windows (#5, ADR-0016) og udgiver den.
+#
+#   git tag v0.2.0 && git push origin v0.2.0   → bygger, signerer (hvis sat op) og laver en GitHub Release
+#   Actions → Release → Run workflow           → bygger kun (artefakter på kørslen), ingen release
+#
+# Signering slås til ved at lægge secrets ind (Settings → Secrets and variables → Actions):
+#   macOS (Developer ID + notarisering): MAC_CERT_P12_BASE64, MAC_CERT_PASSWORD,
+#                                        APPLE_API_KEY_P8, APPLE_API_KEY_ID, APPLE_API_ISSUER
+#   Windows (Azure Trusted Signing):     AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET
+#                                        + variabler AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT,
+#                                          AZURE_SIGNING_PROFILE, AZURE_SIGNING_PUBLISHER
+# Uden dem bygges usigneret (med en advarsel), så pipelinen kan bruges, før certifikaterne findes.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tagget skal matche appens version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v=$(node -p "require('./packages/app/package.json').version")
+          if [ "v$v" != "${GITHUB_REF_NAME}" ]; then echo "::error::Tag ${GITHUB_REF_NAME} matcher ikke packages/app/package.json ($v)"; exit 1; fi
+
+  mac:
+    needs: version
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Byg (signeret og notariseret, hvis sat op)
+        working-directory: packages/app
+        env:
+          CSC_LINK: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          npm run icons
+          ARGS="--mac --publish never"
+          if [ -z "$CSC_LINK" ]; then
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "::warning::macOS-appen er IKKE signeret (MAC_CERT_P12_BASE64 mangler) – Gatekeeper advarer, og automatisk opdatering virker ikke på Mac."
+          fi
+          if [ -n "$CSC_LINK" ] && [ -n "$APPLE_API_KEY_ID" ]; then
+            printf '%s' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/apple_api_key.p8"
+            export APPLE_API_KEY="$RUNNER_TEMP/apple_api_key.p8"
+            ARGS="$ARGS -c.mac.notarize=true"
+          fi
+          npx electron-builder $ARGS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miai-mac
+          path: |
+            packages/app/dist/*.dmg
+            packages/app/dist/*.zip
+            packages/app/dist/*.blockmap
+            packages/app/dist/latest-mac.yml
+          retention-days: 30
+
+  win:
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Byg (signeret med Azure Trusted Signing, hvis sat op)
+        working-directory: packages/app
+        shell: bash
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          SIGN_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          SIGN_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          SIGN_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+          SIGN_PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}
+        run: |
+          npm run icons
+          ARGS=(--win --publish never)
+          if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$SIGN_ENDPOINT" ]; then
+            ARGS+=("-c.win.azureSignOptions.endpoint=$SIGN_ENDPOINT" "-c.win.azureSignOptions.codeSigningAccountName=$SIGN_ACCOUNT" "-c.win.azureSignOptions.certificateProfileName=$SIGN_PROFILE" "-c.win.azureSignOptions.publisherName=$SIGN_PUBLISHER")
+          else
+            echo "::warning::Windows-installeren er IKKE signeret (Azure Trusted Signing er ikke sat op) – SmartScreen advarer ved installation."
+          fi
+          npx electron-builder "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miai-win
+          path: |
+            packages/app/dist/*.exe
+            packages/app/dist/*.blockmap
+            packages/app/dist/latest.yml
+          retention-days: 30
+
+  publish:
+    # Mac-runnere kan være optaget; en release med kun Windows er bedre end ingen.
+    needs: [mac, win]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && needs.win.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la out
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "MIAI $GITHUB_REF_NAME" --generate-notes
+      - name: Opdatér Pages (downloads og opdateringsfeed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

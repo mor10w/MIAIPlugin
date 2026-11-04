@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+PackageIdentifier: MIAI.MIAI
+PackageVersion: "{{VERSION}}"
+DefaultLocale: da-DK
+ManifestType: version
+ManifestVersion: 1.6.0
