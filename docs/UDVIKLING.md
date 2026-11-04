@@ -66,6 +66,8 @@ npm test
 - `bridge`: streaming, `<think>`-filter, JSON-validering med genforsøg, politik, sikkerhedstjek, brugeropgaver og audit-log.
 - `addin`: hjælpefunktioner (SVG, billedstørrelser, Excel-oversigt).
 
+**CI:** `ci.yml` bygger og tester på Linux og Windows og kører lint og e2e. Det er de tjek, der skal være grønne. macOS bygges i `ci-macos.yml` som et separat, ikke-blokerende tjek: GitHubs Mac-runnere er ofte optaget, og et job, der aldrig får en maskine, skal ikke gøre CI rødt. Fejler macOS-tjekket på selve koden, skal det rettes som alt andet. Står det i kø eller bliver annulleret, så kør det igen fra Actions.
+
 ### Browsertests (task pane)
 ```bash
 npm run build

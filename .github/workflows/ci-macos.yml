@@ -1,0 +1,26 @@
+# Build og unit-tests på macOS – ikke-blokerende: et separat workflow, så CI forbliver grønt,
+# når GitHubs macOS-runnere er optaget (jobbet bliver så aldrig startet og annulleres).
+# Vises som sit eget tjek; kan køres igen fra Actions, når der er kapacitet.
+name: CI (macOS)
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  # Kun det nyeste push venter i køen.
+  group: ci-macos-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
