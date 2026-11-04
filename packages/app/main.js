@@ -33,6 +33,10 @@ function log(msg) {
 const ADDIN_DIR = app.isPackaged ? join(process.resourcesPath, "addin") : fileURLToPath(new URL("../addin/dist", import.meta.url));
 /** Bridge-manifestet, som det personlige manifest laves ud fra. */
 const MANIFEST = app.isPackaged ? join(process.resourcesPath, "manifest.xml") : fileURLToPath(new URL("../addin/manifest.xml", import.meta.url));
+/** Outlooks eget manifest (MailApp, #7) – installeres manuelt i Outlook (se BRUG.md). */
+const OUTLOOK_MANIFEST = app.isPackaged
+  ? join(process.resourcesPath, "manifest.outlook.xml")
+  : fileURLToPath(new URL("../addin/manifest.outlook.xml", import.meta.url));
 
 let bridgeProc = null;
 let tray = null;
@@ -50,7 +54,7 @@ function startBridge() {
     join(app.getAppPath(), "bridge-process.mjs"),
     [],
     // MIAI_PORT sendes kun videre, hvis brugeren selv har sat den; ellers vælger bridgen en ledig port pr. bruger.
-    { env: { ...process.env, MIAI_ADDIN_DIR: ADDIN_DIR, MIAI_MANIFEST: MANIFEST } },
+    { env: { ...process.env, MIAI_ADDIN_DIR: ADDIN_DIR, MIAI_MANIFEST: MANIFEST, MIAI_OUTLOOK_MANIFEST: OUTLOOK_MANIFEST } },
   );
 
   bridgeProc.on("message", (msg) => {
@@ -203,6 +207,11 @@ function buildMenu() {
       click: () => showCertResult(trustCert()),
     },
     { label: `Åbn https://localhost:${PORT}`, click: () => void shell.openExternal(`https://localhost:${PORT}`) },
+    {
+      // Outlook kan ikke installeres automatisk som Word/Excel/PowerPoint: brugeren tilføjer filen i Outlook.
+      label: "Vis Outlook-manifest i Finder…",
+      click: () => shell.showItemInFolder(join(MIAI_DIR, "manifest-outlook.xml")),
+    },
     {
       type: "checkbox",
       label: app.isPackaged ? "Start automatisk ved login" : "Start automatisk ved login (kun i den installerede app)",

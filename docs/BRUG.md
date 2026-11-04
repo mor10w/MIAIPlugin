@@ -187,6 +187,21 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
   - **Erstat de nuværende slides** fjerner de gamle bagefter (Microsoft 365). Billeder, diagrammer og noter på de gamle slides flyttes ikke med, så kontrollér resultatet. Med **Fortryd** kommer de gamle slides tilbage med al formatering.
   - Layoutene ligger derefter under **Nyt slide**, og agenten bruger dem, når den laver nye slides, så præsentationen bliver ved med at følge designet.
 
+### Outlook
+
+MIAI virker i Outlook (Windows, Mac, nyt Outlook og Outlook på web) med et eget manifest.
+
+**Installation:** Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug en af disse filer:
+- **Hostet:** `https://<bruger>.github.io/<repo>/manifest-outlook.xml`.
+- **MIAI App:** menuen → **Vis Outlook-manifest i Finder…**.
+- **Bridgen:** `manifest-outlook.xml` i konfigurationsmappen; stien vises, når bridgen starter.
+
+Knappen **AI-assistent** findes derefter i mailen og i udkastet.
+- **Når du læser en mail:**
+  - **Svar på mail**: fortæl evt., hvad svaret skal sige, fx *"takker ja, men foreslår torsdag"*. Svaret åbnes som et udkast (**Svar** eller **Svar alle**), som du retter og sender selv. MIAI sender aldrig noget. Mangler der oplysninger, skriver MIAI `[pladsholdere]` i stedet for at opfinde dem.
+  - **Opsummér**, **Oversæt** og **chat** om mailen, fx *"Er der frister eller åbne spørgsmål?"*. Emne og afsender er med som kontekst.
+- **Når du skriver en mail:** **Omskriv i anden tone**, **Ret stavning og grammatik**, **Forenkl**, **Oversæt** og **Salgstekst** virker på markeringen eller hele udkastet. **Erstat** indsætter resultatet med formatering (HTML) i udkastet. Outlooks egen fortryd (Ctrl+Z) virker bagefter.
+
 ### Chat (alle tre apps)
 
 Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument som kontekst** (til som udgangspunkt) giver modellen din aktuelle markering – i Excel dit markerede område – med. De seneste 20 beskeder medsendes som historik. Svar kan indsættes **efter** markeringen, **erstattes** eller indsættes **som kommentar**. **Ny samtale** nulstiller historikken. Enter sender, Shift+Enter linjeskift.
@@ -337,6 +352,35 @@ To salgsveje på samme kodebase – se [ADR-0008](adr/0008-distribution-af-solgt
 | **Lokal app** (.dmg/.msi) | Kunden installerer MIAI App (Installation D ovenfor); bridgen kører lokalt, manifest sideloades automatisk | Ingen – alt lokalt, ingen internet |
 
 Model-URL og valg af model sker i add-in'ets fanen **Indstillinger** i begge udgaver.
+
+### Central udrulning i en organisation (også Office på web)
+
+Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015](adr/0015-outlook-og-central-udrulning.md)):
+
+1. **Host add-in'et selv:** læg indholdet af `packages/addin/dist` (fra `npm run build`) på en intern HTTPS-server, fx `https://miai.firma.local/`.
+2. **Lav manifester til jeres adresse:**
+   ```bash
+   node scripts/make-manifest.mjs hosted https://miai.firma.local/ manifest.xml
+   ```
+   ```bash
+   node scripts/make-manifest.mjs hosted https://miai.firma.local/ manifest-outlook.xml outlook
+   ```
+3. **Læg `miai-config.json` ved siden af `taskpane.html`**, med organisationens politik og standardindstillinger:
+   ```json
+   {
+     "policy": { "allowedHosts": ["llm.firma.local"], "webSearch": false, "knowledge": false },
+     "settings": {
+       "endpoints": [{ "id": "firma", "name": "Firmaets model", "baseUrl": "https://llm.firma.local/v1" }],
+       "activeEndpoint": "firma",
+       "auditLog": true
+     }
+   }
+   ```
+   - Politikken er altid låst. Brugerne kan ikke ændre den, og Indstillinger viser "Organisationen (central udrulning)".
+   - Indstillingerne er standard for alle, der ikke selv har gemt noget.
+   - Kan filen ikke læses, låses politikken til standardens hosts, så en fejl i filen aldrig åbner for mere.
+4. **Tillad CORS fra add-in'ets adresse på inference-serveren**, fx `OLLAMA_ORIGINS=https://miai.firma.local` eller vLLM `--allowed-origins`.
+5. **Udrul i M365 Admin Center** → Indstillinger → Integrated apps → Upload custom apps. Upload `manifest.xml` (Word, Excel, PowerPoint) og `manifest-outlook.xml` (Outlook), og vælg brugere eller grupper. Add-in'et vises så hos brugerne, også i Office på web, uden lokal installation.
 
 ## Fejlfinding
 

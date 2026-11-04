@@ -61,6 +61,10 @@
         {
           "from": "../addin/manifest.xml",
           "to": "manifest.xml"
+        },
+        {
+          "from": "../addin/manifest.outlook.xml",
+          "to": "manifest.outlook.xml"
         }
       ]
     },

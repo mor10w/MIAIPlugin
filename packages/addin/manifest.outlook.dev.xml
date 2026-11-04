@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  MIAI til Outlook (#7, ADR-0015) – XML-manifest af typen MailApp. Outlook kræver sit eget
+  manifest; task pane og koden er de samme som i Word, Excel og PowerPoint.
+  Variant: dev: Vite-udviklingsserver, direkte forbindelse (https://localhost:3000/)
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="MailApp">
+  <Id>a7d3e5f1-8c2b-4b9e-a061-3f5d9c8e2b17</Id>
+  <Version>0.1.0.0</Version>
+  <ProviderName>M. Wiingaard</ProviderName>
+  <DefaultLocale>da-DK</DefaultLocale>
+  <DisplayName DefaultValue="MIAI – lokal AI-assistent (dev)">
+    <Override Locale="en-US" Value="MIAI – local AI assistant (dev)"/>
+  </DisplayName>
+  <Description DefaultValue="Opsummér, besvar og omskriv mails med AI-modeller, der kører på din egen maskine eller hos din organisation.">
+    <Override Locale="en-US" Value="Summarize, reply to and rewrite emails with AI models running on your own machine or at your organisation."/>
+  </Description>
+  <IconUrl DefaultValue="https://localhost:3000/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://localhost:3000/assets/icon-64.png"/>
+  <SupportUrl DefaultValue="https://localhost:3000/"/>
+  <AppDomains>
+    <AppDomain>https://localhost:3000</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Mailbox"/>
+  </Hosts>
+  <Requirements>
+    <Sets>
+      <Set Name="Mailbox" MinVersion="1.5"/>
+    </Sets>
+  </Requirements>
+  <FormSettings>
+    <Form xsi:type="ItemRead">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+        <RequestedHeight>450</RequestedHeight>
+      </DesktopSettings>
+    </Form>
+    <Form xsi:type="ItemEdit">
+      <DesktopSettings>
+        <SourceLocation DefaultValue="https://localhost:3000/taskpane.html"/>
+      </DesktopSettings>
+    </Form>
+  </FormSettings>
+  <Permissions>ReadWriteItem</Permissions>
+  <Rule xsi:type="RuleCollection" Mode="Or">
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
+  </Rule>
+  <DisableEntityHighlighting>true</DisableEntityHighlighting>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Requirements>
+      <bt:Sets DefaultMinVersion="1.5">
+        <bt:Set Name="Mailbox"/>
+      </bt:Sets>
+    </Requirements>
+    <Hosts>
+      <Host xsi:type="MailHost">
+        <DesktopFormFactor>
+          <FunctionFile resid="MIAI.Taskpane.Url"/>
+          <!-- Læsetilstand: opsummér, svar, chat om mailen. -->
+          <ExtensionPoint xsi:type="MessageReadCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="MIAI.ReadGroup">
+                <Label resid="MIAI.Group.Label"/>
+                <Control xsi:type="Button" id="MIAI.ReadOpen">
+                  <Label resid="MIAI.OpenPane.Label"/>
+                  <Supertip>
+                    <Title resid="MIAI.OpenPane.Label"/>
+                    <Description resid="MIAI.OpenPane.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="MIAI.Icon.16"/>
+                    <bt:Image size="32" resid="MIAI.Icon.32"/>
+                    <bt:Image size="80" resid="MIAI.Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="MIAI.Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+          <!-- Skrivetilstand: omskriv, ret og oversæt udkastet. -->
+          <ExtensionPoint xsi:type="MessageComposeCommandSurface">
+            <OfficeTab id="TabDefault">
+              <Group id="MIAI.ComposeGroup">
+                <Label resid="MIAI.Group.Label"/>
+                <Control xsi:type="Button" id="MIAI.ComposeOpen">
+                  <Label resid="MIAI.OpenPane.Label"/>
+                  <Supertip>
+                    <Title resid="MIAI.OpenPane.Label"/>
+                    <Description resid="MIAI.OpenPane.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="MIAI.Icon.16"/>
+                    <bt:Image size="32" resid="MIAI.Icon.32"/>
+                    <bt:Image size="80" resid="MIAI.Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <SourceLocation resid="MIAI.Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="MIAI.Icon.16" DefaultValue="https://localhost:3000/assets/icon-16.png"/>
+        <bt:Image id="MIAI.Icon.32" DefaultValue="https://localhost:3000/assets/icon-32.png"/>
+        <bt:Image id="MIAI.Icon.80" DefaultValue="https://localhost:3000/assets/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="https://localhost:3000/taskpane.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="MIAI.Group.Label" DefaultValue="MIAI"/>
+        <bt:String id="MIAI.OpenPane.Label" DefaultValue="AI-assistent">
+          <bt:Override Locale="en-US" Value="AI assistant"/>
+        </bt:String>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="MIAI.OpenPane.Tooltip" DefaultValue="Åbn MIAI – opsummér, besvar og omskriv mails med AI">
+          <bt:Override Locale="en-US" Value="Open MIAI – summarize, reply to and rewrite emails with AI"/>
+        </bt:String>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

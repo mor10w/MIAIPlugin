@@ -4,7 +4,7 @@
 
 ## 1. Vision
 
-En AI-assistent til Microsoft Word, Excel og PowerPoint (senere Outlook). Den
+En AI-assistent til Microsoft Word, Excel, PowerPoint og Outlook. Den
 dækker samme funktioner som kommercielle "AI writing assistants", men **al
 inferens sker på en OpenAI-kompatibel endpoint, som brugeren selv kontrollerer**.
 Som standard er det et lokalt inference-værktøj på brugerens egen maskine.
@@ -136,7 +136,7 @@ Reasoning-modeller: `<think>…</think>` og `reasoning_content` filtreres fra af
 
 ### Fase 3
 - [x] F13: agent-tilstand (whitelisted Office-handlinger, plan → bekræft → udfør, fortryd af hele sessionen) – ADR-0012.
-- Outlook. Office på web via central udrulning plus on-prem endpoint.
+- [x] Outlook (læse- og skrivetilstand, Svar på mail) og Office på web via central udrulning med `miai-config.json` og intern inference-server – ADR-0015.
 
 ### Fase 4
 - [x] F15: lokal RAG (node:sqlite + vektorsøgning i bridgen, embeddings via `/v1/embeddings` på samme endpoint, kilder i chatten) – ADR-0013.

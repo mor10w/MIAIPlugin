@@ -85,3 +85,24 @@ describe("tokenkontrol i API'et", () => {
     expect((await a.inject({ url: "/", headers: { host: H.host } })).statusCode).toBe(200);
   });
 });
+
+describe("Outlook-manifest (#7)", () => {
+  it("det personlige Outlook-manifest får port og adgangstoken overalt, hvor task pane indlæses", async () => {
+    const { readFileSync, mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join, resolve } = await import("node:path");
+    const { writePersonalManifest } = await import("../src/identity.js");
+    const base = resolve(__dirname, "../../addin/manifest.outlook.xml");
+    const dir = mkdtempSync(join(tmpdir(), "miai-outlook-"));
+    const out = writePersonalManifest(dir, base, { port: 45123, token: "hemmelig" }, "manifest-outlook.xml")!;
+    expect(out).toBe(join(dir, "manifest-outlook.xml"));
+    const xml = readFileSync(out, "utf8");
+    expect(xml).toContain('xsi:type="MailApp"');
+    expect(xml).not.toContain("44321");
+    // ItemRead, ItemEdit og knappernes URL.
+    expect(xml.match(/https:\/\/localhost:45123\/taskpane\.html\?token=hemmelig"/g)).toHaveLength(3);
+    // Ikke samme Id som Word/Excel/PowerPoint-manifestet.
+    const office = readFileSync(resolve(__dirname, "../../addin/manifest.xml"), "utf8");
+    expect(xml.match(/<Id>([^<]+)<\/Id>/)![1]).not.toBe(office.match(/<Id>([^<]+)<\/Id>/)![1]);
+  });
+});

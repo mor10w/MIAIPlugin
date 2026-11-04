@@ -15,7 +15,9 @@ export type ApplyMode =
   | "cells" // skriv TSV ind i markerede celler (Excel)
   | "diagram" // indsæt diagram (billede i Word, figurer i PowerPoint)
   | "agent" // udfør de valgte handlinger fra agentens plan (#6)
-  | "design"; // opret præsentationens master og slides ud fra designet (PowerPoint, ADR-0014)
+  | "design" // opret præsentationens master og slides ud fra designet (PowerPoint, ADR-0014)
+  | "reply" // åbn et svar på mailen med teksten (Outlook, læsetilstand)
+  | "replyAll"; // åbn et svar til alle (Outlook, læsetilstand)
 
 export type Localized = { da: string; en: string };
 
@@ -120,7 +122,9 @@ export function doc(text: string): string {
 }
 
 export function hostName(host: HostKind): string {
-  return { word: "Microsoft Word", excel: "Microsoft Excel", powerpoint: "Microsoft PowerPoint", unknown: "Microsoft Office" }[host];
+  return { word: "Microsoft Word", excel: "Microsoft Excel", powerpoint: "Microsoft PowerPoint", outlook: "Microsoft Outlook", unknown: "Microsoft Office" }[
+    host
+  ];
 }
 
 export function system(req: ParsedTaskRequest, ...extra: (string | undefined)[]): ChatMessage {
@@ -192,6 +196,8 @@ export type FormulaResult = z.infer<typeof FormulaResult>;
 
 const TEXT_HOSTS: HostKind[] = ["word", "powerpoint"];
 const ALL_HOSTS: HostKind[] = ["word", "excel", "powerpoint"];
+/** Tekstopgaver, der også giver mening på mails (Outlook, #7). */
+const MAIL_TEXT: HostKind[] = [...TEXT_HOSTS, "outlook"];
 
 export const TASKS: TaskDefinition[] = [
   {
@@ -201,7 +207,7 @@ export const TASKS: TaskDefinition[] = [
       da: "Finder fejl og foreslår rettelser, som kan indsættes som sporede ændringer.",
       en: "Finds errors and suggests fixes that can be inserted as tracked changes.",
     },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "selection",
     output: { kind: "json", schema: GrammarResult, schemaName: "grammar_edits" },
     params: [],
@@ -221,7 +227,7 @@ export const TASKS: TaskDefinition[] = [
     id: "rewrite",
     label: { da: "Omskriv i anden tone", en: "Rewrite in another tone" },
     description: { da: "Omskriver teksten i den valgte tone.", en: "Rewrites the text in the chosen tone." },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "selection",
     output: { kind: "text", format: "plain" },
     params: [{ name: "tone", label: { da: "Tone", en: "Tone" }, kind: "select", options: TONE_OPTIONS, default: "professional" }],
@@ -240,7 +246,7 @@ export const TASKS: TaskDefinition[] = [
     id: "paraphrase",
     label: { da: "Parafrasér", en: "Paraphrase" },
     description: { da: "Siger det samme med andre ord.", en: "Says the same thing in different words." },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "selection",
     output: { kind: "text", format: "plain" },
     params: [],
@@ -255,7 +261,7 @@ export const TASKS: TaskDefinition[] = [
     id: "simplify",
     label: { da: "Forenkl", en: "Simplify" },
     description: { da: "Gør teksten lettere at læse.", en: "Makes the text easier to read." },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "selection",
     output: { kind: "text", format: "plain" },
     params: [],
@@ -270,7 +276,7 @@ export const TASKS: TaskDefinition[] = [
     id: "translate",
     label: { da: "Oversæt", en: "Translate" },
     description: { da: "Oversætter markeringen til det valgte sprog.", en: "Translates the selection into the chosen language." },
-    hosts: ALL_HOSTS,
+    hosts: [...ALL_HOSTS, "outlook"],
     input: "selection",
     output: { kind: "text", format: "plain", tsvForExcelRanges: true },
     params: [{ name: "targetLanguage", label: { da: "Til sprog", en: "Target language" }, kind: "select", options: LANG_OPTIONS, default: "English" }],
@@ -303,7 +309,7 @@ export const TASKS: TaskDefinition[] = [
     id: "summarize",
     label: { da: "Opsummér", en: "Summarize" },
     description: { da: "Kort resumé af markeringen eller hele dokumentet.", en: "Short summary of the selection or the whole document." },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "selectionOrDocument",
     output: { kind: "text", format: "markdown" },
     params: [
@@ -371,7 +377,7 @@ export const TASKS: TaskDefinition[] = [
     id: "sales-copy",
     label: { da: "Salgstekst", en: "Sales copy" },
     description: { da: "Skriver overbevisende salgstekst ud fra produktet eller budskabet.", en: "Writes persuasive sales copy from the product or message." },
-    hosts: TEXT_HOSTS,
+    hosts: MAIL_TEXT,
     input: "prompt",
     output: { kind: "text", format: "plain" },
     params: [
@@ -700,10 +706,42 @@ export const TASKS: TaskDefinition[] = [
     },
   },
   {
+    id: "reply-mail",
+    label: { da: "Svar på mail", en: "Reply to email" },
+    description: {
+      da: "Skriver et svar på den åbne mail – du ser og retter det, før det sendes.",
+      en: "Drafts a reply to the open email – you review and edit it before sending.",
+    },
+    hosts: ["outlook"],
+    input: "selectionOrDocument",
+    output: { kind: "text", format: "markdown" },
+    params: [
+      {
+        name: "prompt",
+        label: { da: "Hvad skal svaret sige? (valgfrit)", en: "What should the reply say? (optional)" },
+        kind: "text",
+        placeholder: { da: "Fx: takker ja, men foreslår torsdag i stedet", en: "E.g. accept, but suggest Thursday instead" },
+      },
+      { name: "tone", label: { da: "Tone", en: "Tone" }, kind: "select", options: TONE_OPTIONS, default: "professional" },
+    ],
+    applyModes: ["reply", "replyAll"],
+    temperature: 0.4,
+    buildMessages: (req) => [
+      system(
+        req,
+        `Write a ${req.params.tone ?? "professional"} reply to the email below, from the user to the sender.`,
+        "Answer what the email asks; be concise; no subject line; end with a short closing but no signature block (the user's signature is added by Outlook).",
+        "Write in the language of the email unless the user asks otherwise. Do not invent facts, dates or commitments the user did not ask for – leave a [placeholder] instead.",
+        ONLY_RESULT,
+      ),
+      user(req.params.prompt?.trim() && `What the reply should say: ${req.params.prompt.trim()}`, doc(req.context.text)),
+    ],
+  },
+  {
     id: "chat",
     label: { da: "Chat", en: "Chat" },
     description: { da: "Stil spørgsmål om dokumentet eller få hjælp.", en: "Ask about the document or get help." },
-    hosts: ALL_HOSTS,
+    hosts: [...ALL_HOSTS, "outlook"],
     input: "prompt",
     output: { kind: "text", format: "markdown" },
     params: [{ name: "prompt", label: { da: "Besked", en: "Message" }, kind: "text" }],

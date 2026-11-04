@@ -17,6 +17,8 @@ export interface TaskpaneOptions extends FakeOfficeOptions {
   models?: string[];
   /** Fast port til mock-modellen (fx 11434 for at ligne Ollama). Standard: tilfældig. */
   modelPort?: number;
+  /** Direkte tilstand: organisationens miai-config.json på add-in'ets adresse (#7). Streng = råt indhold (fx ugyldig JSON). */
+  orgConfig?: Record<string, unknown> | string;
   /** Bridge: åbn task pane uden adgangstoken (som med et gammelt manifest). */
   omitToken?: boolean;
 }
@@ -79,6 +81,10 @@ export const test = base.extend<{ open: Open }>({
         await page.addInitScript((s) => localStorage.setItem("miai.settings.v1", s), JSON.stringify(settings));
       }
 
+      if (opts.orgConfig !== undefined) {
+        const body = typeof opts.orgConfig === "string" ? opts.orgConfig : JSON.stringify(opts.orgConfig);
+        await page.route(`${origin}/miai-config.json`, (r) => r.fulfill({ contentType: "application/json", body }));
+      }
       await page.goto(`${origin}/taskpane.html${query}`);
       await expect(page.getByText(opts.mode === "bridge" ? "Via MIAI Bridge" : "Direkte forbindelse")).toBeVisible();
 

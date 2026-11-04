@@ -90,10 +90,16 @@ Browsertestene erstatter ikke den manuelle test i rigtig Office (testlisten nede
 ```bash
 npm run manifests
 ```
-Regenererer `manifest.xml` (bridge) og `manifest.dev.xml` fra `manifest.template.xml`. Hostet variant:
+Regenererer `manifest.xml` (bridge) og `manifest.dev.xml` fra `manifest.template.xml`, og `manifest.outlook.xml` og `manifest.outlook.dev.xml` fra `manifest.outlook.template.xml` (Outlook, MailApp). Hostede varianter:
 ```bash
 node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 ```
+```bash
+node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest-outlook.xml outlook
+```
+Outlook sideloades fra fil: Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug `manifest.outlook.dev.xml` med `npm run dev`.
+
+**Central konfiguration (direkte tilstand):** en `miai-config.json` ved siden af `taskpane.html` giver organisationens låste politik og standardindstillinger (ADR-0015). I dev kan filen lægges i `packages/addin/public/`.
 
 ## Konfiguration
 **Direkte tilstand**: indstillinger gemmes i add-in'ets `localStorage` på maskinen, og de redigeres under fanen Indstillinger.
@@ -138,6 +144,15 @@ Skal afprøves i Office desktop.
 - [ ] Endpoint uden for politik afvises; låst maskinpolitik (bridge) kan ikke ændres
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
+
+**Outlook og central udrulning (#7)**
+- [ ] Outlook (Windows, Mac, nyt Outlook, web): manifestet tilføjes fra fil; knappen AI-assistent vises i en læst mail og i et udkast
+- [ ] Læst mail: Svar på mail åbner et udkast med formateret svar (fed, punkter); Svar alle virker; intet sendes automatisk
+- [ ] Udkast: Omskriv med markering erstatter kun markeringen, med formatering; uden markering bruges hele udkastet
+- [ ] Udkast i ren tekst (ikke HTML): indsættes som ren tekst uden HTML-koder
+- [ ] Central udrulning: add-in hostet internt, `miai-config.json` ved siden af, manifest uploadet i M365 Admin Center → add-in'et vises hos brugeren (også Office på web), politikken står som "Organisationen" og kan ikke ændres, og standard-endpointen er den interne server
+- [ ] Office på web: kald til den interne inference-server virker (CORS fra add-in'ets adresse)
+- [ ] Ugyldig `miai-config.json`: politikken låses, intet uden for standardhosts tillades
 
 **MIAI App (Mac)**
 - [ ] "Start automatisk ved login" til: MIAI står under Systemindstillinger → Generelt → Login-emner og starter efter log ud/ind (én instans, ingen dubletter)

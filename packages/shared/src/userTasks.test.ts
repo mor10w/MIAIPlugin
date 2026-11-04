@@ -66,9 +66,9 @@ describe("toTaskDefinition", () => {
 });
 
 describe("nye indbyggede opgaver (F6, F12)", () => {
-  it("sales-copy findes til Word og PowerPoint", () => {
+  it("sales-copy findes til Word, PowerPoint og Outlook (#7)", () => {
     const t = TASKS.find((x) => x.id === "sales-copy");
-    expect(t?.hosts).toEqual(["word", "powerpoint"]);
+    expect(t?.hosts).toEqual(["word", "powerpoint", "outlook"]);
     const msgs = t!.buildMessages({
       context: { ...ctx, text: "spec-sheet" },
       params: { prompt: "espressomaskine", tone: "bold and direct", length: "about 100 words" },

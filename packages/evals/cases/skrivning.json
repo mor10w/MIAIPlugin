@@ -322,5 +322,77 @@
       }
     ],
     "rubric": "Outline with about eight slides covering why, what changes, how to submit, deadlines, Q&A."
+  },
+  {
+    "id": "reply-mail-da",
+    "task": "reply-mail",
+    "lang": "da",
+    "feature": "Outlook",
+    "context": {
+      "host": "outlook",
+      "text": "Subject: Møde i næste uge\nFrom: Bo Jensen <bo@firma.dk>\n\nHej\n\nKan vi mødes onsdag kl. 10 om budgettet for 2027? Jeg har brug for et svar inden fredag.\n\nVh Bo",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Takker ja, men foreslår torsdag i stedet",
+      "tone": "friendly and warm"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "regex",
+        "pattern": "torsdag",
+        "flags": "i"
+      },
+      {
+        "type": "notContains",
+        "values": ["Subject:", "Emne:"]
+      },
+      {
+        "type": "noPreamble"
+      },
+      {
+        "type": "length",
+        "maxWords": 120
+      }
+    ],
+    "rubric": "Kort, venligt dansk svar til Bo: takker, foreslår torsdag (uden at opfinde et klokkeslæt, eller med [pladsholder]); ingen emnelinje, ingen signaturblok."
+  },
+  {
+    "id": "reply-mail-en-no-invent",
+    "task": "reply-mail",
+    "lang": "en",
+    "feature": "Outlook",
+    "note": "Must not invent a payment date the user did not give.",
+    "context": {
+      "host": "outlook",
+      "text": "Subject: Invoice 4471 overdue\nFrom: Sarah Miller <sarah@supplier.com>\n\nHello,\n\nOur records show invoice 4471 (EUR 3,200) is 14 days overdue. Could you confirm when payment will be made?\n\nKind regards,\nSarah",
+      "isWholeDocument": true
+    },
+    "params": {
+      "tone": "professional"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "regex",
+        "pattern": "\\[[^\\]]+\\]"
+      },
+      {
+        "type": "notContains",
+        "values": ["Subject:"]
+      },
+      {
+        "type": "length",
+        "maxWords": 120
+      }
+    ],
+    "rubric": "Polite professional reply acknowledging invoice 4471; uses a [placeholder] for the payment date instead of inventing one; no subject line."
   }
 ]

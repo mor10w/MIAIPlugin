@@ -142,7 +142,9 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
       ? [t("suggestExcel1"), t("suggestExcel2"), t("suggestExcel3")]
       : adapter.host === "powerpoint"
         ? [t("suggestPpt1"), t("suggestPpt2"), t("suggestPpt3")]
-        : [t("suggestWord1"), t("suggestWord2"), t("suggestWord3")];
+        : adapter.host === "outlook"
+          ? [t("suggestMail1"), t("suggestMail2"), t("suggestMail3")]
+          : [t("suggestWord1"), t("suggestWord2"), t("suggestWord3")];
 
   return (
     <div className={s.root}>

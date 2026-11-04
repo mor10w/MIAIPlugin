@@ -30,9 +30,9 @@ export const UserTaskFile = z.object({
   label: UserLocalized,
   description: UserLocalized.optional(),
   hosts: z
-    .array(z.enum(["word", "excel", "powerpoint"]))
+    .array(z.enum(["word", "excel", "powerpoint", "outlook"]))
     .min(1)
-    .max(3),
+    .max(4),
   /** formula kræver JSON-output og kan derfor ikke bruges i filer. */
   input: z.enum(["selection", "selectionOrDocument", "prompt"]),
   output: z.object({ format: z.enum(["plain", "markdown", "tsv"]) }),

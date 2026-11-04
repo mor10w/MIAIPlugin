@@ -31,6 +31,8 @@ import {
   type TaskEvent,
   type TaskView,
   type UserTaskFile,
+  OrgConfig,
+  ORG_CONFIG_FILE,
 } from "@miai/shared";
 import type { Backend, UserTaskInfo } from "./types";
 
@@ -85,16 +87,61 @@ export function corsHint(origin = window.location.origin): string {
   );
 }
 
+/**
+ * Henter organisationens konfiguration fra add-in'ets egen adresse (#7, ADR-0015). Ingen fil
+ * (404) = ingen central konfiguration. Findes filen, men kan den ikke læses, lukkes der ned:
+ * en låst politik med standardens tilladte hosts – en ødelagt fil må aldrig åbne for mere.
+ */
+export async function loadOrgConfig(base = window.location.href): Promise<OrgConfig | undefined> {
+  let res: Response;
+  try {
+    res = await fetch(new URL(ORG_CONFIG_FILE, base), { cache: "no-store", signal: AbortSignal.timeout(3_000) });
+  } catch {
+    return undefined; // offline eller blokeret: som uden fil
+  }
+  if (res.status === 404) return undefined;
+  try {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return OrgConfig.parse(await res.json());
+  } catch (err) {
+    console.warn(`[miai] ${ORG_CONFIG_FILE} kunne ikke læses – politikken låses: ${(err as Error).message}`);
+    return { policy: Policy.parse({ locked: true }) };
+  }
+}
+
 /** Add-in'et taler selv med endpointens OpenAI-API. Ingen lokal service nødvendig. */
 export class DirectBackend implements Backend {
   readonly mode = "direct" as const;
   private client: ClientOptions = { unreachableHint: corsHint() };
+  /** Organisationens politik (låst) og standardindstillinger, hvis add-in'et er udrullet centralt. */
+  private orgPolicy: Policy | undefined;
+  private orgSettings: Settings | undefined;
+
+  constructor(org?: OrgConfig) {
+    if (org?.policy) this.orgPolicy = Policy.parse({ ...org.policy, locked: true });
+    if (org?.settings) {
+      try {
+        this.orgSettings = Settings.parse({ ...defaultSettings(), ...org.settings });
+      } catch (err) {
+        console.warn(`[miai] Ugyldige standardindstillinger i ${ORG_CONFIG_FILE}: ${(err as Error).message}`);
+      }
+    }
+  }
+
+  /** Opretter backenden med organisationens konfiguration, hvis den findes. */
+  static async create(): Promise<DirectBackend> {
+    return new DirectBackend(await loadOrgConfig());
+  }
 
   private get settingsNow(): Settings {
-    return load(KEY_SETTINGS, (r) => Settings.parse(r), defaultSettings);
+    return load(
+      KEY_SETTINGS,
+      (r) => Settings.parse(r),
+      () => this.orgSettings ?? defaultSettings(),
+    );
   }
   private get policyNow(): Policy {
-    return load(KEY_POLICY, (r) => Policy.parse(r), defaultPolicy);
+    return this.orgPolicy ?? load(KEY_POLICY, (r) => Policy.parse(r), defaultPolicy);
   }
 
   async health(): Promise<HealthInfo> {
@@ -126,11 +173,12 @@ export class DirectBackend implements Backend {
 
   async settings(): Promise<SettingsView> {
     const hasPolicy = !!store.get(KEY_POLICY);
-    return { settings: this.settingsNow, policy: this.policyNow, policySource: hasPolicy ? "browser" : "default" };
+    return { settings: this.settingsNow, policy: this.policyNow, policySource: this.orgPolicy ? "organization" : hasPolicy ? "browser" : "default" };
   }
 
   async saveSettings(settings: Settings, policy?: Policy): Promise<void> {
     const s = Settings.parse(settings);
+    if (policy && (this.orgPolicy || this.policyNow.locked)) throw new Error("Politikken er låst af din organisation og kan ikke ændres.");
     const p = policy ? Policy.parse(policy) : this.policyNow;
     const problem = checkSettings(s, p, isUrlAllowed);
     if (problem) throw new Error(problem);

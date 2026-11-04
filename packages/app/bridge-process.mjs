@@ -115,6 +115,8 @@ try {
   TOKEN = id.token;
   // Brugerens personlige manifest med port og token – det er dét, der installeres i Office.
   const manifest = process.env.MIAI_MANIFEST ? writePersonalManifest(configDir(), process.env.MIAI_MANIFEST, id) : undefined;
+  // Outlook installeres manuelt (Hent tilføjelsesprogrammer → Mine → Tilføj fra fil) med dette manifest.
+  if (process.env.MIAI_OUTLOOK_MANIFEST) writePersonalManifest(configDir(), process.env.MIAI_OUTLOOK_MANIFEST, id, "manifest-outlook.xml");
   server = await buildServer({ store, port: PORT, token: TOKEN, addinDir: process.env.MIAI_ADDIN_DIR, https: tls });
   const addr = await server.listen({ host: "127.0.0.1", port: PORT });
   log(`lytter på ${addr}`);

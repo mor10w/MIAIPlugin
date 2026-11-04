@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const HostKind = z.enum(["word", "excel", "powerpoint", "unknown"]);
+export const HostKind = z.enum(["word", "excel", "powerpoint", "outlook", "unknown"]);
 export type HostKind = z.infer<typeof HostKind>;
 
 /** Det udsnit af dokumentet, som en opgave arbejder på. Bygges af add-in'ets host-adapter. */
@@ -272,12 +272,25 @@ export function effectiveSearch(settings: Settings, policy: Policy): SearchConfi
   return policy.search ?? settings.search;
 }
 
+/**
+ * Organisationens konfiguration til et centralt udrullet, hostet add-in (#7, ADR-0015): filen
+ * `miai-config.json` ligger ved siden af taskpane.html på add-in'ets egen adresse og hentes ved
+ * start. Politikken har forrang og kan ikke ændres i add-in'et; indstillingerne er standard for
+ * brugere, der ikke selv har gemt nogen (fx organisationens interne inference-server).
+ */
+export const OrgConfig = z.object({
+  policy: Policy.optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+});
+export type OrgConfig = z.infer<typeof OrgConfig>;
+export const ORG_CONFIG_FILE = "miai-config.json";
+
 /** Det, add-in'et får fra GET /api/settings (API-nøgler maskeres). */
 export interface SettingsView {
   settings: Settings;
   policy: Policy;
   /** browser = gemt i add-in'et (direkte tilstand); machine = låst af organisationen (kun bridge). */
-  policySource: "default" | "user" | "machine" | "browser";
+  policySource: "default" | "user" | "machine" | "browser" | "organization";
 }
 
 export interface ModelInfo {

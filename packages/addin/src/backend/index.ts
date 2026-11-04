@@ -8,7 +8,8 @@ import type { Backend } from "./types";
  * Ellers (fx hostet statisk på GitHub Pages) taler add-in'et direkte med modellen.
  */
 export async function createBackend(): Promise<Backend> {
-  return (await detectBridge()) ? new BridgeBackend() : new DirectBackend();
+  // Hostet add-in: organisationens konfiguration (miai-config.json) hentes fra samme adresse (#7).
+  return (await detectBridge()) ? new BridgeBackend() : DirectBackend.create();
 }
 
 export const BackendContext = createContext<Backend | null>(null);

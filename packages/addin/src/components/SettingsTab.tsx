@@ -177,9 +177,15 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     const preset = PENALTY_PRESETS.find((p) => (p.value ? Number(p.value) : undefined) === v);
     return preset ? t(preset.label) : String(v);
   };
-  const locked = policy.locked || policySource === "machine";
+  const locked = policy.locked || policySource === "machine" || policySource === "organization";
   const policySourceLabel =
-    { default: t("policySrcDefault"), user: t("policySrcUser"), machine: t("policySrcMachine"), browser: t("policySrcBrowser") }[policySource] ?? policySource;
+    {
+      default: t("policySrcDefault"),
+      user: t("policySrcUser"),
+      machine: t("policySrcMachine"),
+      browser: t("policySrcBrowser"),
+      organization: t("policySrcOrganization"),
+    }[policySource] ?? policySource;
   const setEp = (id: string, patch: Partial<Endpoint>) =>
     setSettings({ ...settings, endpoints: settings.endpoints.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
 

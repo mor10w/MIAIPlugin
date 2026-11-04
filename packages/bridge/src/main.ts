@@ -12,6 +12,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const addinDir = process.env.MIAI_ADDIN_DIR ?? resolve(here, "../../addin/dist");
 /** Bridge-manifestet (https://localhost:44321), som brugerens personlige manifest laves ud fra. */
 const baseManifest = process.env.MIAI_MANIFEST ?? resolve(here, "../../addin/manifest.xml");
+/** Outlook har sit eget manifest (MailApp, #7). */
+const baseOutlookManifest = process.env.MIAI_OUTLOOK_MANIFEST ?? resolve(here, "../../addin/manifest.outlook.xml");
 
 /**
  * TLS-certifikat. Office kræver HTTPS for add-ins. I udvikling bruges certifikatet fra
@@ -33,6 +35,7 @@ const store = new ConfigStore();
 // Token og port pr. bruger (#11). MIAI_PORT låser porten; ellers huskes en ledig port.
 const { token, port } = await loadIdentity(configDir(), process.env.MIAI_PORT ? Number(process.env.MIAI_PORT) : undefined);
 const manifest = writePersonalManifest(configDir(), baseManifest, { token, port });
+const outlookManifest = writePersonalManifest(configDir(), baseOutlookManifest, { token, port }, "manifest-outlook.xml");
 const app = await buildServer({ store, port, addinDir, token, https: loadTls(), fastify: { logger: { level: process.env.MIAI_LOG ?? "info" } } });
 
 try {
@@ -44,6 +47,7 @@ try {
   console.log(`[miai] API-nøgler: ${store.keyStorage === "keyring" ? "OS'ets nøglering" : "config.json (ingen nøglering)"}`);
   console.log(`[miai] Aktiv endpoint: ${ep.name} (${ep.baseUrl}) · politik: ${store.policySource}`);
   if (manifest) console.log(`[miai] Dit manifest (med adgangstoken): ${manifest}`);
+  if (outlookManifest) console.log(`[miai] Dit Outlook-manifest: ${outlookManifest}`);
   else console.warn(`[miai] Fandt ikke ${baseManifest} – intet manifest skrevet. Sæt MIAI_MANIFEST.`);
 } catch (err) {
   console.error(err);

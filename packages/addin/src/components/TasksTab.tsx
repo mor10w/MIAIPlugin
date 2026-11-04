@@ -64,7 +64,7 @@ interface FormState {
   labelEn: string;
   descDa: string;
   descEn: string;
-  hosts: ("word" | "excel" | "powerpoint")[];
+  hosts: ("word" | "excel" | "powerpoint" | "outlook")[];
   input: "selection" | "selectionOrDocument" | "prompt";
   format: "plain" | "markdown" | "tsv";
   applyModes: FileApplyMode[];
@@ -178,7 +178,7 @@ export function TasksTab() {
   const patch = (p: Partial<FormState>) => setForm((f) => ({ ...f!, ...p }));
   const patchParam = (i: number, p: Partial<ParamEdit>) => setForm((f) => ({ ...f!, params: f!.params.map((x, j) => (j === i ? { ...x, ...p } : x)) }));
 
-  const appLabel = { word: t("appWord"), excel: t("appExcel"), powerpoint: t("appPowerPoint") };
+  const appLabel = { word: t("appWord"), excel: t("appExcel"), powerpoint: t("appPowerPoint"), outlook: t("appOutlook") };
 
   const save = async () => {
     if (!form) return;
@@ -305,7 +305,7 @@ export function TasksTab() {
           </div>
           <Field label={t("taskApps")}>
             <div className={s.row}>
-              {(["word", "excel", "powerpoint"] as const).map((h) => (
+              {(["word", "excel", "powerpoint", "outlook"] as const).map((h) => (
                 <Checkbox key={h} label={appLabel[h]} checked={form.hosts.includes(h)} onChange={() => patch({ hosts: toggle(form.hosts, h) })} />
               ))}
             </div>

@@ -108,9 +108,9 @@ export function personalizeManifest(baseXml: string, id: BridgeIdentity): string
 }
 
 /** Skriver brugerens manifest i konfigurationsmappen (kun læsbart af brugeren) og returnerer stien. */
-export function writePersonalManifest(configDir: string, baseManifestFile: string, id: BridgeIdentity): string | undefined {
+export function writePersonalManifest(configDir: string, baseManifestFile: string, id: BridgeIdentity, fileName = "manifest.xml"): string | undefined {
   if (!existsSync(baseManifestFile)) return undefined;
-  const out = join(configDir, "manifest.xml");
+  const out = join(configDir, fileName);
   const xml = personalizeManifest(readFileSync(baseManifestFile, "utf8"), id);
   const current = existsSync(out) ? readFileSync(out, "utf8") : "";
   if (current !== xml) {

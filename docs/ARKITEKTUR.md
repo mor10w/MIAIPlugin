@@ -48,9 +48,11 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 - **`policy.ts`**: `allowedHosts` med `*.domæne`-wildcards.
 
 ### 2. Office Add-in (`packages/addin`)
+
+Host-adaptere: Word, Excel, PowerPoint og Outlook (`hosts/outlook.ts`, Mailbox-API'et i læse- og skrivetilstand, eget MailApp-manifest – ADR-0015).
 - Task pane (React 19 + Fluent UI v9) med fanerne Handlinger, Opgaver, Chat og Indstillinger.
 - **Backends** (`src/backend`) med samme interface:
-  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin.
+  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin. Ved central udrulning henter den `miai-config.json` fra add-in'ets egen adresse: organisationens låste politik og standardindstillinger (ADR-0015).
   - `BridgeBackend`: kalder `/api/*` på samme origin og læser SSE-strømmen.
 - **Host-adaptere**:
 
@@ -116,9 +118,9 @@ Manifester genereres fra `packages/addin/manifest.template.xml` af `scripts/make
 
 | Variant | Add-in hentes fra | Tilstand | Fil |
 |---|---|---|---|
-| hosted | GitHub Pages (`.github/workflows/pages.yml`) | Direkte | `<pages-url>/manifest.xml` |
-| dev | Vite på `https://localhost:3000` | Direkte | `packages/addin/manifest.dev.xml` |
-| bridge | MIAI Bridge på `https://localhost:44321` | Bridge | `packages/addin/manifest.xml` |
+| hosted | GitHub Pages (`.github/workflows/pages.yml`) | Direkte | `<pages-url>/manifest.xml` og `<pages-url>/manifest-outlook.xml` |
+| dev | Vite på `https://localhost:3000` | Direkte | `packages/addin/manifest.dev.xml` og `manifest.outlook.dev.xml` |
+| bridge | MIAI Bridge på `https://localhost:44321` | Bridge | `packages/addin/manifest.xml` og `manifest.outlook.xml` (personlige udgaver med token i konfigurationsmappen) |
 
 En organisation kan hoste `dist/` på en intern HTTPS-server og generere sit eget manifest med `node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml`.
 

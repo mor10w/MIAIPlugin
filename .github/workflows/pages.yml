@@ -1,5 +1,5 @@
 # Hoster add-in'et statisk på GitHub Pages (direkte forbindelse, ADR-0007) og
-# publicerer et færdigt manifest på <pages-url>/manifest.xml.
+# publicerer færdige manifester på <pages-url>/manifest.xml og <pages-url>/manifest-outlook.xml.
 # Kræver: Settings → Pages → Source: "GitHub Actions".
 name: Pages
 on:
@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run build -w @miai/shared && npm run build -w @miai/addin
       - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest.xml
+      - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest-outlook.xml outlook
       - uses: actions/upload-pages-artifact@v3
         with:
           path: packages/addin/dist

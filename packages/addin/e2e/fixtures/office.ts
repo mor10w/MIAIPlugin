@@ -11,7 +11,7 @@
  * Alt, hvad adapterne gør ved dokumentet, registreres i `window.__miai.calls`.
  */
 
-export type HostName = "Word" | "Excel" | "PowerPoint";
+export type HostName = "Word" | "Excel" | "PowerPoint" | "Outlook";
 
 export interface FakeOfficeOptions {
   host: HostName;
@@ -43,6 +43,8 @@ export interface FakeOfficeOptions {
     tables?: { name: string; range: string }[];
   };
   displayLanguage?: string;
+  /** Outlook: mailen i læsetilstand (read) eller et udkast i skrivetilstand (compose). */
+  mail?: { mode: "read" | "compose"; subject: string; from?: { name: string; email: string }; body: string; selection?: string; html?: boolean };
   /** PowerPoint med præsentationsmodel (agent-tilstand): slides med layout og figurer. */
   slides?: {
     layout: string;
@@ -121,17 +123,58 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     return true;
   }
 
+  // --- Outlook: mailen i læse- eller skrivetilstand (#7) ------------------------
+  // Ikke en "strict" proxy: adapteren afgør tilstanden med typeof item.displayReplyForm.
+  const ok = (cb: (r: unknown) => void, value?: unknown) => cb({ status: "succeeded", value });
+  let mailItem: Record<string, unknown> | undefined;
+  if (o.host === "Outlook") {
+    const m = o.mail ?? { mode: "read", subject: "", body: "" };
+    let body = m.body;
+    let sel = m.selection ?? "";
+    mailItem =
+      m.mode === "read"
+        ? {
+            itemType: "message",
+            subject: m.subject,
+            from: m.from ? { displayName: m.from.name, emailAddress: m.from.email } : undefined,
+            body: { getAsync: (_t: string, cb: (r: unknown) => void) => ok(cb, body) },
+            displayReplyForm: (f: { htmlBody: string }) => record({ kind: "replyForm", all: false, html: f.htmlBody }),
+            displayReplyAllForm: (f: { htmlBody: string }) => record({ kind: "replyForm", all: true, html: f.htmlBody }),
+          }
+        : {
+            itemType: "message",
+            displayReplyForm: undefined,
+            subject: { getAsync: (cb: (r: unknown) => void) => ok(cb, m.subject) },
+            getSelectedDataAsync: (type: string, cb: (r: unknown) => void) => ok(cb, { data: type === "html" ? `<b>${sel}</b>` : sel }),
+            body: {
+              getAsync: (_t: string, cb: (r: unknown) => void) => ok(cb, body),
+              getTypeAsync: (cb: (r: unknown) => void) => ok(cb, m.html === false ? "text" : "html"),
+              setAsync: (v: string, opts: { coercionType: string }, cb: (r: unknown) => void) => {
+                record({ kind: "setBody", value: v, coercionType: opts.coercionType });
+                body = v;
+                ok(cb);
+              },
+              setSelectedDataAsync: (v: string, opts: { coercionType: string }, cb: (r: unknown) => void) => {
+                record({ kind: "setSelectedData", text: v, coercionType: opts.coercionType });
+                sel = "";
+                ok(cb);
+              },
+            },
+          };
+  }
+
   // --- Fælles Office-objekt -------------------------------------------------
   let selection = o.selection ?? "";
   w.Office = strict("Office", {
-    HostType: { Word: "Word", Excel: "Excel", PowerPoint: "PowerPoint" },
-    CoercionType: { Text: "text" },
+    HostType: { Word: "Word", Excel: "Excel", PowerPoint: "PowerPoint", Outlook: "Outlook" },
+    CoercionType: { Text: "text", Html: "html" },
     AsyncResultStatus: { Succeeded: "succeeded", Failed: "failed" },
     EventType: { OfficeThemeChanged: "officeThemeChanged" },
     context: strict("Office.context", {
       displayLanguage: o.displayLanguage ?? "da-DK",
       officeTheme,
       requirements: { isSetSupported: (name: string, v = "1.1") => versionAtLeast(o.apiSets?.[name], v) },
+      mailbox: { item: mailItem },
       document: strict("Office.context.document", {
         getSelectedDataAsync: (_t: string, cb: (r: unknown) => void) => cb({ status: "succeeded", value: selection }),
         addHandlerAsync: (type: string, handler: (e: unknown) => void, cb?: (r: unknown) => void) => {

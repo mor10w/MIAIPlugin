@@ -1,5 +1,6 @@
 import type { HostAdapter } from "./types";
 import { ExcelAdapter } from "./excel";
+import { OutlookAdapter } from "./outlook";
 import { PowerPointAdapter } from "./powerpoint";
 import { WordAdapter } from "./word";
 
@@ -11,6 +12,8 @@ export function createAdapter(host: Office.HostType): HostAdapter | undefined {
       return new ExcelAdapter();
     case Office.HostType.PowerPoint:
       return new PowerPointAdapter();
+    case Office.HostType.Outlook:
+      return new OutlookAdapter();
     default:
       return undefined;
   }
