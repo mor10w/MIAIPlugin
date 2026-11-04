@@ -6,7 +6,7 @@
 // TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
 import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
 import { spawnSync } from "node:child_process";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -181,6 +181,7 @@ function buildMenu() {
       click: () => showCertResult(trustCert()),
     },
     { label: `Åbn https://localhost:${PORT}`, click: () => void shell.openExternal(`https://localhost:${PORT}`) },
+    { type: "checkbox", label: "Start ved genstart", checked: startAtLoginEnabled(), click: (item) => setStartAtLogin(item.checked) },
     { type: "separator" },
     { label: "Afslut MIAI", click: () => app.quit() },
   ]);
@@ -203,6 +204,60 @@ function statusFromEndpoint(ep) {
   if (!ep) return bridgeState.listening ? "Bridgen kører" : "Bridgen svarer ikke";
   if (ep.reachable) return `Forbundet · ${ep.baseUrl}`;
   return `Modellen svarer ikke (${ep.error ?? "ukendt fejl"})`;
+}
+
+// --- Start ved genstart (LaunchAgent) -------------------------------------------------
+const LAUNCH_AGENT_LABEL = "dk.miai.app";
+const LAUNCH_AGENT_FILE = join(homedir(), "Library", "LaunchAgents", `${LAUNCH_AGENT_LABEL}.plist`);
+const LOG_DIR = join(homedir(), "Library", "Logs");
+
+function launchctl(args) {
+  const r = spawnSync("launchctl", args, { encoding: "utf8" });
+  return { ok: r.status === 0, stderr: (r.stderr ?? "").trim() };
+}
+
+/** Kommando der starter appen – pakket: selve app-binæret; dev: Electron + app-mappen. */
+function loginItemCommand() {
+  return app.isPackaged ? [process.execPath] : [process.execPath, app.getAppPath()];
+}
+
+function startAtLoginEnabled() {
+  return existsSync(LAUNCH_AGENT_FILE);
+}
+
+/**
+ * Slår LaunchAgenten til/fra, så appen (og dermed bridgen) starter ved login.
+ * Ved "til" skrives plisten og servicen bootstrappes, hvilket også starter den med det samme.
+ */
+function setStartAtLogin(enabled) {
+  const domain = `gui/${process.getuid()}`;
+  // Fjern evt. kørende service først, så ny konfiguration træder i kraft (ignorér fejl ved "frakobling").
+  launchctl(["bootout", `${domain}/${LAUNCH_AGENT_LABEL}`]);
+  if (enabled) {
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${LAUNCH_AGENT_LABEL}</string>
+  <key>ProgramArguments</key><array>
+${loginItemCommand().map((a) => `    <string>${a}</string>`).join("\n")}
+  </array>
+  <key>WorkingDirectory</key><string>${app.getAppPath()}</string>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>${join(LOG_DIR, "miai-app.log")}</string>
+  <key>StandardErrorPath</key><string>${join(LOG_DIR, "miai-app-err.log")}</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>`;
+    mkdirSync(join(homedir(), "Library", "LaunchAgents"), { recursive: true });
+    writeFileSync(LAUNCH_AGENT_FILE, plist);
+    const r = launchctl(["bootstrap", domain, LAUNCH_AGENT_FILE]);
+    if (!r.ok) log(`launchctl bootstrap fejlede: ${r.stderr}`);
+  } else if (existsSync(LAUNCH_AGENT_FILE)) {
+    unlinkSync(LAUNCH_AGENT_FILE);
+  }
 }
 
 // --- Livscyklus -----------------------------------------------------------------
