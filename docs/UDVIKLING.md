@@ -206,6 +206,12 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Tomme rækker i et område uden tabel: kun områdets kolonner rykker op, data til højre står stille
 - [ ] "Gør tabellen pæn med et moderne layout": området bliver en Excel-tabel med en indbygget typografi (eller en eksisterende tabel skifter typografi), talformat og kolonnebredde passer; Fortryd gør det til et almindeligt område med de oprindelige formater og kolonnebredder
 - [ ] Samme ønske i **Chat**: svaret henviser til agenten (ingen VBA), og knappen "Gør det med agenten" vises
+- [ ] Sortér en tabel og et område efter en kolonne (overskrift og bogstav): rækkerne følger med inkl. formater; Fortryd giver den oprindelige rækkefølge
+- [ ] Betinget formatering (farveskala, datalinjer, større end, dubletter, top 10), diagram ved siden af data og frys overskrift; Fortryd fjerner dem og sætter frysningen tilbage
+- [ ] Kodetilstand slået fra: et script fra modellen er fravalgt med "Kodetilstanden er slået fra"
+- [ ] Kodetilstand slået til: "Lav en pivottabel med omsætning pr. region": koden kan ses, scriptet kører, og Fortryd fjerner pivottabellen og gendanner arket
+- [ ] Et script, der fejler midtvejs: arket er som før, og "Bed modellen rette scriptet" giver et nyt script med fejlen rettet
+- [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
 - [ ] Erstat et tal i et punkt med fed tekst foran: kun tallet skifter, fed og farve bevares

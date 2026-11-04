@@ -22,6 +22,7 @@ import { ArrowLeft20Regular, ChevronRight20Regular, Play20Filled, SearchInfo20Re
 import {
   diagramToSvg,
   formatForView,
+  agentScriptsAllowed,
   parseTsv,
   stripEmphasis,
   type AgentPlan,
@@ -192,7 +193,16 @@ export function ActionsTab({
     reset();
   };
 
-  const run = async () => {
+  // Kodetilstand (ADR-0017): slået til af brugeren og tilladt af politikken.
+  const [scripts, setScripts] = useState(false);
+  useEffect(() => {
+    api.settings().then(
+      (v) => setScripts(agentScriptsAllowed(v.settings, v.policy)),
+      () => setScripts(false),
+    );
+  }, [api, taskId]);
+
+  const run = async (extra: Record<string, string> = {}) => {
     if (!task) return;
     setInputError(undefined);
     try {
@@ -207,7 +217,7 @@ export function ActionsTab({
         maxChars: task.chunking === "map-reduce" ? MAX_CHUNKED_CHARS : undefined,
       });
       ctxRef.current = ctx;
-      await start(task.id, { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params } });
+      await start(task.id, { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params, ...extra } });
     } catch (err) {
       setInputError((err as Error).message);
     }
@@ -383,7 +393,14 @@ export function ActionsTab({
           </div>
           <div className={mergeClasses(s.resultBody, (isAgent || isDesign) && s.agentBody)} aria-live="polite" aria-busy={running}>
             {isAgent && state.status === "done" && state.result !== undefined && ctxRef.current ? (
-              <AgentPlanView key={JSON.stringify(state.result)} plan={state.result as AgentPlan} ctx={ctxRef.current} adapter={adapter} />
+              <AgentPlanView
+                key={JSON.stringify(state.result)}
+                plan={state.result as AgentPlan}
+                ctx={ctxRef.current}
+                adapter={adapter}
+                scripts={scripts}
+                onRetry={(r) => void run({ previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900) })}
+              />
             ) : isDesign && state.status === "done" && state.result !== undefined && ctxRef.current ? (
               <DesignPreview key={JSON.stringify(state.result)} plan={state.result as DesignPlan} ctx={ctxRef.current} adapter={adapter} />
             ) : hasResult && !isAgent && !isDesign ? (

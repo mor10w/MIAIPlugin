@@ -417,5 +417,87 @@
       }
     ],
     "rubric": "formatTable på A1:C6 med en indbygget typografi, evt. talformat på C (tusindtalsseparator) og autofitColumns; ingen værdier ændres, intet slettes."
+  },
+  {
+    "id": "agent-excel-sorter-diagram-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent",
+    "note": "Faste værktøjer: sortering og diagram frem for kode eller klikvejledning.",
+    "context": {
+      "host": "excel",
+      "text": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "table": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "address": "Ark1!A1:C5",
+      "excel": {
+        "tables": [
+          {
+            "name": "Salg",
+            "address": "Ark1!A1:C5",
+            "headers": ["Region", "Måned", "Omsætning"]
+          }
+        ],
+        "columnFormats": ["C: #,##0"]
+      }
+    },
+    "params": {
+      "prompt": "Sortér tabellen efter omsætning, største først, og lav et søjlediagram"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 2,
+        "max": 3,
+        "include": ["sortRange", "addChart"],
+        "exclude": ["runScript", "setValues"],
+        "valid": true
+      }
+    ],
+    "rubric": "sortRange på Salg efter Omsætning (desc) og addChart (column) af Salg; intet andet."
+  },
+  {
+    "id": "agent-excel-script-pivot-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (kodetilstand)",
+    "note": "Kodetilstand: en pivottabel findes ikke som fast handling, så modellen skal skrive et Office.js-script, der består sandkassen.",
+    "context": {
+      "host": "excel",
+      "text": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "table": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "address": "Ark1!A1:C5",
+      "excel": {
+        "tables": [
+          {
+            "name": "Salg",
+            "address": "Ark1!A1:C5",
+            "headers": ["Region", "Måned", "Omsætning"]
+          }
+        ],
+        "columnFormats": ["C: #,##0"]
+      }
+    },
+    "params": {
+      "prompt": "Lav en pivottabel med omsætning pr. region i E1",
+      "agentScripts": "on"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 1,
+        "include": ["runScript"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "pivotTables\\.add"
+      },
+      {
+        "type": "notContains",
+        "values": ["fetch(", "window.", "document."]
+      }
+    ],
+    "rubric": "Ét runScript, der bruger context.workbook.worksheets.getActiveWorksheet() (eller arket) og pivotTables.add med kildeområdet A1:C5 (eller tabellen) og E1 som destination, tilføjer Region som række og Omsætning som data, og kalder context.sync(). Koden er komplet og bruger kun context/Excel."
   }
 ]

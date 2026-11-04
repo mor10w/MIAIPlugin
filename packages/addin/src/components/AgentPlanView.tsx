@@ -15,6 +15,7 @@ import {
   tokens,
 } from "@fluentui/react-components";
 import { ArrowUndo16Regular, CheckmarkCircle16Regular, ErrorCircle16Regular, Play16Filled } from "@fluentui/react-icons";
+import { ui } from "../theme";
 import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext } from "@miai/shared";
 import type { AgentOutcome, HostAdapter } from "../hosts/types";
 import { useI18n, type T } from "../i18n";
@@ -34,6 +35,20 @@ const useStyles = makeStyles({
   itemText: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXXS, minWidth: 0, flex: 1, paddingTop: tokens.spacingVerticalXS },
   what: { overflowWrap: "anywhere" },
   muted: { color: tokens.colorNeutralForeground3 },
+  code: {
+    marginTop: tokens.spacingVerticalXXS,
+    "& summary": { cursor: "pointer", color: tokens.colorBrandForeground1, fontSize: tokens.fontSizeBase200 },
+    "& pre": {
+      margin: `${tokens.spacingVerticalXS} 0 0`,
+      padding: tokens.spacingHorizontalS,
+      maxHeight: ui.codeMaxHeight,
+      overflow: "auto",
+      fontSize: tokens.fontSizeBase100,
+      backgroundColor: tokens.colorNeutralBackground3,
+      borderRadius: tokens.borderRadiusMedium,
+      whiteSpace: "pre-wrap",
+    },
+  },
   badges: { display: "flex", flexWrap: "wrap", gap: tokens.spacingHorizontalXS },
   status: { display: "inline-flex", alignItems: "center", gap: tokens.spacingHorizontalXXS },
   ok: { color: tokens.colorPaletteGreenForeground1 },
@@ -113,6 +128,16 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_setNumberFormat", { address: a.address, format: a.format });
     case "autofitColumns":
       return t("agentAct_autofitColumns", { address: a.address });
+    case "sortRange":
+      return t(a.order === "desc" ? "agentAct_sortDesc" : "agentAct_sortAsc", { target: a.target, by: a.by });
+    case "conditionalFormat":
+      return t("agentAct_conditionalFormat", { address: a.address, rule: t(`agentCf_${a.rule}` as const, { value: a.value ?? "" }) });
+    case "addChart":
+      return t("agentAct_addChart", { type: t(`agentChart_${a.type}` as const), source: a.source }) + (a.title ? ` “${clip(a.title, 40)}”` : "");
+    case "freezeRows":
+      return a.rows === 0 ? t("agentAct_unfreeze") : t("agentAct_freezeRows", { n: a.rows });
+    case "runScript":
+      return t("agentAct_runScript", { description: clip(a.description, 200) });
   }
 }
 
@@ -123,10 +148,24 @@ type Phase = { kind: "review" } | { kind: "running" } | { kind: "done"; outcome:
  * og trykket Udfør. Handlinger, der ikke kan udføres (tekst findes ikke osv.), vises fravalgt
  * med årsagen. Efter udførelsen kan hele sessionen fortrydes.
  */
-export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: DocContext; adapter: HostAdapter }) {
+export function AgentPlanView({
+  plan,
+  ctx,
+  adapter,
+  scripts = false,
+  onRetry,
+}: {
+  plan: AgentPlan;
+  ctx: DocContext;
+  adapter: HostAdapter;
+  /** Kodetilstanden er slået til og tilladt (ADR-0017). */
+  scripts?: boolean;
+  /** Et script fejlede: lad modellen rette det med fejlbeskeden. */
+  onRetry?: (retry: { error: string; code: string }) => void;
+}) {
   const { t } = useI18n();
   const s = useStyles();
-  const checked = useMemo(() => checkPlan(plan, ctx), [plan, ctx]);
+  const checked = useMemo(() => checkPlan(plan, ctx, { scripts }), [plan, ctx, scripts]);
   const [selected, setSelected] = useState<boolean[]>(() => checked.map((c) => !c.problem));
   const canTrack = adapter.agentTracking?.() ?? false;
   const [track, setTrack] = useState(canTrack);
@@ -142,7 +181,7 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
       const outcome = await adapter.applyAgent!(
         ran.map((i) => checked[i].action),
         ctx,
-        { trackChanges: track },
+        { trackChanges: track, scripts },
       );
       setPhase({ kind: "done", outcome, ran });
     } catch (err) {
@@ -189,6 +228,12 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
                   <span className={s.itemText}>
                     <Text className={s.what}>{label}</Text>
                     {c.action.reason && <Caption1 className={s.muted}>{c.action.reason}</Caption1>}
+                    {c.action.action === "runScript" && (
+                      <details className={s.code}>
+                        <summary>{t("agentShowCode")}</summary>
+                        <pre>{c.action.code}</pre>
+                      </details>
+                    )}
                     <span className={s.badges}>
                       {isDestructive(c.action) && (
                         <Badge size="small" appearance="tint" color="warning">
@@ -205,9 +250,11 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
                       <Caption1 className={mergeClasses(s.status, r.ok ? s.ok : s.fail)}>
                         {r.ok ? <CheckmarkCircle16Regular aria-hidden /> : <ErrorCircle16Regular aria-hidden />}
                         {r.ok
-                          ? r.count && r.count > 1
-                            ? t("agentCount", { n: r.count })
-                            : t("agentOk")
+                          ? r.detail
+                            ? r.detail
+                            : r.count && r.count > 1
+                              ? t("agentCount", { n: r.count })
+                              : t("agentOk")
                           : t(`agentErr_${r.error ?? "failed"}` as const, { detail: r.detail ?? "" })}
                       </Caption1>
                     )}
@@ -235,9 +282,15 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
             <MessageBarBody>{t("agentDone", { ok: phase.outcome.results.filter((r) => r.ok).length, n: phase.outcome.results.length })}</MessageBarBody>
           </MessageBar>
           <div className={s.bar}>
-            <Button size="small" icon={<ArrowUndo16Regular />} onClick={() => void undo()}>
-              {t("agentUndo")}
-            </Button>
+            {phase.outcome.retry && onRetry ? (
+              <Button size="small" appearance="primary" onClick={() => onRetry(phase.outcome.retry!)}>
+                {t("agentRetryScript")}
+              </Button>
+            ) : (
+              <Button size="small" icon={<ArrowUndo16Regular />} onClick={() => void undo()}>
+                {t("agentUndo")}
+              </Button>
+            )}
           </div>
           <Caption1 className={s.muted}>
             {t(
@@ -249,7 +302,11 @@ export function AgentPlanView({ plan, ctx, adapter }: { plan: AgentPlan; ctx: Do
                     ? "agentUndoSlides"
                     : phase.outcome.undoKind === "text"
                       ? "agentUndoText"
-                      : "agentUndoCells",
+                      : phase.outcome.undoKind === "script"
+                        ? phase.outcome.retry
+                          ? "agentScriptRolledBack"
+                          : "agentUndoScript"
+                        : "agentUndoCells",
             )}
           </Caption1>
         </>

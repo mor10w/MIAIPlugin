@@ -1,6 +1,8 @@
 import { fitGrid, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
-import type { AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
+import { runExcelScript } from "../script";
+import { FORMAT_PROPS } from "./excelFormats";
+import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
 
 const MAX_ROWS = 200;
 const MAX_COLS = 30;
@@ -286,10 +288,17 @@ export class ExcelAdapter implements HostAdapter {
    * formater, tilføjede tabelrækker fjernes, nye tabeller bliver almindelige områder igen, og formler,
    * talformater, formater og kolonnebredder får deres tidligere værdier.
    */
-  async applyAgent(actions: AgentAction[], dc: DocContext): Promise<AgentOutcome> {
+  async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
     if (!dc.address) throw new Error("Ingen markering.");
     const sheetName = splitAddress(dc.address).sheet;
-    const formats = Office.context.requirements.isSetSupported("ExcelApi", "1.9");
+    const script = actions.find((a) => a.action === "runScript");
+    if (script?.action === "runScript") {
+      if (!opts.scripts) throw new Error("Kodetilstanden er ikke slået til (Indstillinger → Avanceret).");
+      if (actions.length > 1) throw new Error("Et script skal stå alene i planen.");
+      return runExcelScript(script, sheetName);
+    }
+    const has = (v: string) => Office.context.requirements.isSetSupported("ExcelApi", v);
+    const formats = has("1.9");
     return Excel.run(async (ctx) => {
       const sheet = ctx.workbook.worksheets.getItem(sheetName);
       const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
@@ -337,9 +346,26 @@ export class ExcelAdapter implements HostAdapter {
             const r = local(i, a.target);
             return r ? sheet.getRange(r) : undefined;
           }
+          case "sortRange": {
+            if (isTableName(a.target)) return sheet.tables.getItem(a.target).getRange();
+            const r = local(i, a.target);
+            return r ? sheet.getRange(r) : undefined;
+          }
+          case "conditionalFormat": {
+            if (!has("1.6")) {
+              fail(i, "Kræver ExcelApi 1.6");
+              return undefined;
+            }
+            const r = local(i, a.address);
+            return r ? sheet.getRange(r) : undefined;
+          }
+          case "freezeRows":
+            if (!has("1.7")) fail(i, "Kræver ExcelApi 1.7");
+            return undefined;
           case "appendRows":
           case "deleteRows":
           case "deleteEmptyRows":
+          case "addChart":
             return undefined;
           default:
             fail(i, `${a.action} findes ikke i Excel`);
@@ -352,6 +378,9 @@ export class ExcelAdapter implements HostAdapter {
       for (const t of styled) t?.load("name,style");
       const appendTables = actions.map((a) => (a.action === "appendRows" ? sheet.tables.getItem(a.table) : undefined));
       for (const t of appendTables) t?.rows.load("count");
+      // Frysning før ændringen (til fortryd).
+      const freezeBefore = actions.some((a, i) => a.action === "freezeRows" && results[i].ok) ? sheet.freezePanes.getLocationOrNullObject() : undefined;
+      freezeBefore?.load("address");
       // Kolonnebredder før autofit (højst 50 kolonner pr. handling).
       const widths = actions.map((a, i) => {
         if (a.action !== "autofitColumns" || !targets[i]) return undefined;
@@ -399,10 +428,37 @@ export class ExcelAdapter implements HostAdapter {
       const isEmpty = (f: unknown[][]) => f.every((row) => row.every((v) => v === "" || v === null));
       const hasData = (r?: Excel.Range) => !!r && !isEmpty(r.formulas);
 
-      // 2) Værdier, formler, talformater, kolonnebredder og tabeltypografier.
+      // 2) Værdier, formler, talformater, kolonnebredder, tabeltypografier, sortering, diagrammer …
       const created: { name?: string; table: Excel.Table; box: ReturnType<typeof rangeBox>; i: number }[] = [];
+      const charts: { chart: Excel.Chart; name?: string }[] = [];
+      const condFormats: { address: string; cf: Excel.ConditionalFormat; id?: string }[] = [];
+      let froze = false;
       actions.forEach((a, i) => {
         const t = targets[i];
+        if (!results[i].ok) return;
+        if (a.action === "addChart") {
+          const tbl = isTableName(a.source) ? knownTables.find((x) => x.name === a.source) : undefined;
+          const r = tbl ? undefined : local(i, a.source);
+          if (!tbl && !r) return;
+          const box = tbl?.box ?? rangeBox(r!);
+          const chart = sheet.charts.add(
+            CHART_TYPES[a.type] as Excel.ChartType,
+            tbl ? sheet.tables.getItem(a.source).getRange() : sheet.getRange(r!),
+            Excel.ChartSeriesBy.auto,
+          );
+          if (a.title) chart.title.text = a.title;
+          // Ved siden af data: én kolonne fri til højre, øverst ud for overskriften.
+          chart.setPosition(sheet.getRange(`${colName(box.c1 + 2)}${box.r0 + 1}`));
+          chart.load("name");
+          charts.push({ chart });
+          return;
+        }
+        if (a.action === "freezeRows") {
+          if (a.rows === 0) sheet.freezePanes.unfreeze();
+          else sheet.freezePanes.freezeRows(a.rows);
+          froze = true;
+          return;
+        }
         if (a.action === "formatTable" && styled[i]) {
           styled[i]!.style = a.style;
           return;
@@ -456,10 +512,32 @@ export class ExcelAdapter implements HostAdapter {
             created.push({ table, box: rangeBox(t.address), i });
             break;
           }
+          case "sortRange": {
+            // Kolonnen efter overskrift (uden forskel på store/små bogstaver) eller bogstav.
+            const headers = (t.formulas[0] ?? []).map((h) => String(h).trim().toLowerCase());
+            let key = headers.indexOf(a.by.trim().toLowerCase());
+            if (key < 0 && /^[A-Z]{1,3}$/i.test(a.by.trim())) key = colIndex(a.by.trim().toUpperCase()) - t.columnIndex;
+            if (key < 0 || key >= t.columnCount) {
+              fail(i, `Kolonnen "${a.by}" findes ikke`);
+              break;
+            }
+            const fields = [{ key, ascending: a.order !== "desc" }];
+            if (isTableName(a.target)) sheet.tables.getItem(a.target).sort.apply(fields);
+            else t.sort.apply(fields, false, true);
+            break;
+          }
+          case "conditionalFormat": {
+            const cf = addConditionalFormat(t, a);
+            cf.load("id");
+            condFormats.push({ address: t.address, cf });
+            break;
+          }
         }
       });
       await ctx.sync();
       for (const c of created) c.name = c.table.name;
+      for (const c of charts) c.name = c.chart.name;
+      for (const c of condFormats) c.id = c.cf.id;
 
       // 3) Formelfejl (#VALUE!, #NAME? …) meldes pr. handling – før sletninger flytter cellerne.
       const formulaCells = actions.map((a, i) => (a.action === "setFormula" ? targets[i] : undefined));
@@ -575,6 +653,13 @@ export class ExcelAdapter implements HostAdapter {
             if (snap.props) r.setCellProperties(snap.props);
           }
           for (const w of oldWidths) ws.getRange(splitAddress(w.address).range).getColumn(w.column).format.columnWidth = w.width;
+          // Diagrammer og betinget formatering, agenten har lavet, fjernes; frysningen sættes tilbage.
+          for (const ch of charts) if (ch.name) ws.charts.getItem(ch.name).delete();
+          for (const cf of condFormats) if (cf.id) ws.getRange(splitAddress(cf.address).range).conditionalFormats.getItem(cf.id).delete();
+          if (froze) {
+            if (!freezeBefore || freezeBefore.isNullObject) ws.freezePanes.unfreeze();
+            else ws.freezePanes.freezeAt(ws.getRange(splitAddress(freezeBefore.address).range));
+          }
           await c.sync();
           // Tilføjede tabelrækker (bagfra, så indeks ikke flytter sig).
           for (const t of [...added].reverse()) {
@@ -590,19 +675,6 @@ export class ExcelAdapter implements HostAdapter {
   }
 }
 
-/** Formater, der gemmes til fortryd (ExcelApi 1.9). Kanter med, fordi tabeltypografier kan sætte dem. */
-const FORMAT_PROPS = {
-  format: {
-    fill: { color: true },
-    font: { bold: true, italic: true, color: true, name: true, size: true, underline: true, strikethrough: true },
-    borders: { style: true, color: true, weight: true },
-    horizontalAlignment: true,
-    verticalAlignment: true,
-    wrapText: true,
-    indentLevel: true,
-  },
-} as Excel.CellPropertiesLoadOptions;
-
 /** En adresse som "B2" eller "Ark1!B2:D9" (ellers er det et tabelnavn). */
 const ADDRESS = /^(?:(?:'[^']+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$/i;
 
@@ -617,4 +689,57 @@ function groups(rows: number[]): [number, number][] {
     else out.push([r, r]);
   }
   return out;
+}
+
+/** Agentens diagramtyper → Excels. */
+const CHART_TYPES: Record<string, string> = {
+  column: "ColumnClustered",
+  bar: "BarClustered",
+  line: "Line",
+  pie: "Pie",
+  area: "Area",
+  scatter: "XYScatter",
+};
+
+/**
+ * Excels standardformater til betinget formatering: farveskala (rød-gul-grøn), datalinjer og
+ * "lys rød udfyldning med mørkerød tekst" til fremhævning – de samme forvalg som i Excels menu.
+ */
+function addConditionalFormat(r: Excel.Range, a: Extract<AgentAction, { action: "conditionalFormat" }>): Excel.ConditionalFormat {
+  const highlight = (f: { fill: { color: string }; font: { color: string } }) => {
+    f.fill.color = "#FFC7CE";
+    f.font.color = "#9C0006";
+  };
+  switch (a.rule) {
+    case "colorScale": {
+      const cf = r.conditionalFormats.add(Excel.ConditionalFormatType.colorScale);
+      cf.colorScale.criteria = {
+        minimum: { formula: undefined, type: Excel.ConditionalFormatColorCriterionType.lowestValue, color: "#F8696B" },
+        midpoint: { formula: "50", type: Excel.ConditionalFormatColorCriterionType.percentile, color: "#FFEB84" },
+        maximum: { formula: undefined, type: Excel.ConditionalFormatColorCriterionType.highestValue, color: "#63BE7B" },
+      };
+      return cf;
+    }
+    case "dataBar":
+      return r.conditionalFormats.add(Excel.ConditionalFormatType.dataBar);
+    case "greaterThan":
+    case "lessThan": {
+      const cf = r.conditionalFormats.add(Excel.ConditionalFormatType.cellValue);
+      highlight(cf.cellValue.format);
+      cf.cellValue.rule = { formula1: String(a.value ?? 0), operator: a.rule === "greaterThan" ? "GreaterThan" : "LessThan" };
+      return cf;
+    }
+    case "duplicates": {
+      const cf = r.conditionalFormats.add(Excel.ConditionalFormatType.presetCriteria);
+      highlight(cf.preset.format);
+      cf.preset.rule = { criterion: Excel.ConditionalFormatPresetCriterion.duplicateValues };
+      return cf;
+    }
+    case "top10": {
+      const cf = r.conditionalFormats.add(Excel.ConditionalFormatType.topBottom);
+      highlight(cf.topBottom.format);
+      cf.topBottom.rule = { rank: 10, type: "TopItems" };
+      return cf;
+    }
+  }
 }

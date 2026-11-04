@@ -480,6 +480,15 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
             {t("secPrivacy")}
           </AccordionHeader>
           <AccordionPanel className={s.panel}>
+            {/* Kodetilstand (ADR-0017): fra som standard, kan forbydes af politikken. */}
+            <Field hint={policy.agentScripts === false ? t("agentScriptsForbidden") : t("agentScriptsHint")}>
+              <Switch
+                label={t("agentScripts")}
+                disabled={policy.agentScripts === false}
+                checked={settings.agentScripts && policy.agentScripts !== false}
+                onChange={(_, d) => setSettings({ ...settings, agentScripts: d.checked })}
+              />
+            </Field>
             {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
             {api.mode === "bridge" && (
               <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>

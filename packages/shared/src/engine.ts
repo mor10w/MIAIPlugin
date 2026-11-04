@@ -16,7 +16,16 @@ import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
-import type { Endpoint, ParsedTaskRequest, Policy, ProbeResult, Settings, TaskEvent, TaskWarning } from "./types.js";
+import {
+  agentScriptsAllowed,
+  type Endpoint,
+  type ParsedTaskRequest,
+  type Policy,
+  type ProbeResult,
+  type Settings,
+  type TaskEvent,
+  type TaskWarning,
+} from "./types.js";
 
 /**
  * Opgavemotoren: bygger prompts, kalder endpointen, filtrerer <think>, validerer strukturerede svar.
@@ -237,6 +246,9 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     emit({ type: "progress", chars: 0, step: { done: parts.length, total: parts.length } });
     inputReq = { ...req, context: { ...req.context, text: partials.join("\n\n") } };
   }
+  // Kodetilstand (ADR-0017): agenten får kun script-værktøjet at vide, når brugeren har slået det
+  // til, og politikken tillader det. Det afgøres her, så bridge og direkte tilstand er ens.
+  inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "" } };
   const built = task.buildMessages(inputReq);
   const messages: ApiMessage[] = mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built;
 

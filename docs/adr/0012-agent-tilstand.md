@@ -97,3 +97,5 @@ Samme principper: modellen ser strukturen, handlingerne ændrer kun det nødvend
 - **Agenten kræver PowerPointApi 1.4** (PowerPoint 2019/Microsoft 365).
 
 Tests: simuleret Excel med formater og tabeller og simuleret PowerPoint med slides, layouts og formateret tekst. Testene tjekker formatering efter handlinger og efter fortryd. Tjeklister til rigtig Office står i UDVIKLING.md.
+
+**Opfølgning:** flere faste Excel-værktøjer (sortering, betinget formatering, diagram og frysning) og en kodetilstand med Office.js-scripts i en sandkasse er beskrevet i [ADR-0017](0017-agent-kodetilstand.md).

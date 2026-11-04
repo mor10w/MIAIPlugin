@@ -15,6 +15,10 @@ export interface Answer {
   host?: HostKind;
   /** Word: dokumentets afsnit, som modellen så dem – til tjek af afsnitsnumre i agent-planer. */
   paragraphs?: DocContext["paragraphs"];
+  /** Excel: arkets tabeller – til tjek af tabelnavne i agent-planer. */
+  excel?: DocContext["excel"];
+  /** Kodetilstanden er slået til i casen. */
+  scripts?: boolean;
 }
 
 const STOPWORDS: Record<"da" | "en" | "de", string[]> = {
@@ -119,7 +123,9 @@ export function runCheck(check: Check, a: Answer): CheckResult {
         ...(check.exclude ?? []).filter((k) => kinds.includes(k)).map((k) => `indeholder ${k}`),
       ];
       if (check.valid) {
-        const bad = checkPlan(parsed.data, { host: a.host ?? "word", text: a.input, paragraphs: a.paragraphs }).filter((c) => c.problem);
+        const bad = checkPlan(parsed.data, { host: a.host ?? "word", text: a.input, paragraphs: a.paragraphs, excel: a.excel }, { scripts: a.scripts }).filter(
+          (c) => c.problem,
+        );
         if (bad.length) problems.push(`${bad.length} handlinger kan ikke udføres (${bad.map((b) => b.problem).join(", ")})`);
       }
       const list = problems.filter(Boolean);

@@ -73,6 +73,8 @@ export async function runCase(c: EvalCase, model: string, ep: EndpointConfig, ju
     ],
     activeEndpoint: "eval",
     defaultModel: model,
+    // Kodetilstand (ADR-0017) kun i de cases, der tester den (params.agentScripts = "on").
+    agentScripts: c.params.agentScripts === "on",
     webSearch: c.tools,
   });
   const req = TaskRequest.parse({ context: c.context, params: c.params, history: c.history, model });
@@ -119,7 +121,20 @@ export async function runCase(c: EvalCase, model: string, ep: EndpointConfig, ju
   const durationMs = Date.now() - started;
 
   const input = [c.context.text, c.context.table, c.params.prompt].filter(Boolean).join("\n");
-  const checks = error ? [] : c.checks.map((ch) => runCheck(ch, { output, result, input, toolCalls, host: c.context.host, paragraphs: c.context.paragraphs }));
+  const checks = error
+    ? []
+    : c.checks.map((ch) =>
+        runCheck(ch, {
+          output,
+          result,
+          input,
+          toolCalls,
+          host: c.context.host,
+          paragraphs: c.context.paragraphs,
+          excel: c.context.excel,
+          scripts: c.params.agentScripts === "on",
+        }),
+      );
   const res: CaseResult = {
     caseId: c.id,
     task: c.task,

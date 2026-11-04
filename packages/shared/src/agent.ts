@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checkScript } from "./script.js";
 import type { DocContext, HostKind } from "./types.js";
 
 /**
@@ -169,6 +170,42 @@ export const AgentAction = z.discriminatedUnion("action", [
     reason,
   }),
   z.object({
+    action: z.literal("sortRange"),
+    target: z.string().min(1).max(255).describe("Excel table name, or the data range INCLUDING its header row (e.g. 'A1:F40')"),
+    by: z.string().min(1).max(255).describe("Column to sort by: header text (e.g. 'Dato') or column letter (e.g. 'C')"),
+    order: z.enum(["asc", "desc"]).default("asc"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("conditionalFormat"),
+    address: z.string().min(2).max(40).describe("Range of values, without the header, e.g. 'C2:C40'"),
+    rule: z
+      .enum(["colorScale", "dataBar", "greaterThan", "lessThan", "duplicates", "top10"])
+      .describe(
+        "colorScale = red-yellow-green scale; dataBar = bars in the cells; greaterThan/lessThan = highlight cells compared with value; duplicates; top10 = highlight the 10 largest",
+      ),
+    value: z.number().optional().describe("Only for greaterThan/lessThan"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("addChart"),
+    source: z.string().min(1).max(255).describe("Excel table name or data range including headers, e.g. 'A1:B13'"),
+    type: z.enum(["column", "bar", "line", "pie", "area", "scatter"]),
+    title: z.string().max(120).optional(),
+    reason,
+  }),
+  z.object({
+    action: z.literal("freezeRows"),
+    rows: z.number().int().min(0).max(50).describe("Number of top rows to keep visible when scrolling (1 = the header row); 0 removes freezing"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("runScript"),
+    description: z.string().min(1).max(300).describe("What the script does, in the user's language – shown to the user before it runs"),
+    code: z.string().min(1).max(8_000).describe("Body of an async function with `context` (Excel.RequestContext) and `Excel` in scope"),
+    reason,
+  }),
+  z.object({
     action: z.literal("autofitColumns"),
     address: z.string().min(2).max(40).describe("Range whose columns get a width that fits their content, e.g. 'A1:F40'"),
     reason,
@@ -194,6 +231,11 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "formatTable",
   "setNumberFormat",
   "autofitColumns",
+  "sortRange",
+  "conditionalFormat",
+  "addChart",
+  "freezeRows",
+  "runScript",
 ];
 export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide"];
 export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
@@ -206,6 +248,7 @@ export const isDestructive = (a: AgentAction) =>
   a.action === "deleteSlide" ||
   a.action === "deleteRows" ||
   a.action === "deleteEmptyRows" ||
+  a.action === "runScript" ||
   (a.action === "replace" && !a.replace) ||
   (a.action === "setText" && !a.text.trim());
 
@@ -236,7 +279,19 @@ export function renderParagraphs(paras: NonNullable<DocContext["paragraphs"]>): 
 }
 
 /** Beskrivelse af værktøjerne til systemprompten – kun dem, der gælder for værten. */
-export function agentToolGuide(host: HostKind): string {
+/**
+ * Kodetilstand (ADR-0017): beskrivelsen af runScript til prompten – kun når den er slået til.
+ * Reglerne svarer til sandkassens (checkScript): ingen globale objekter ud over de sikre, ingen
+ * this/klasser/import, og egenskaber, der starter med _, er spærret.
+ */
+export const SCRIPT_GUIDE = [
+  "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. pivot tables, data validation, named ranges, sorting by several columns, chart settings). It must be the ONLY action in the plan.",
+  "  `code` is the body of an async function with `context` (Excel.RequestContext) and `Excel` in scope. Use Office.js (ExcelApi): `const sheet = context.workbook.worksheets.getActiveWorksheet();`, call `.load(...)` and `await context.sync()` before reading properties, and finish with `await context.sync()`.",
+  "  Only these globals exist: Math, JSON, Number, String, Boolean, Array, Object, Date, Map, Set, Promise, Error, isNaN, parseInt, parseFloat, console. No fetch, window, document, eval, this, classes or import; property names starting with _ are blocked.",
+  "  Write complete, working code (no placeholders). Optionally `return` a short text describing what changed – it is shown to the user. Never change other sheets than the active one unless asked.",
+].join("\n");
+
+export function agentToolGuide(host: HostKind, opts: { scripts?: boolean } = {}): string {
   if (host === "excel")
     return [
       "Available actions (Excel, active sheet only):",
@@ -249,10 +304,17 @@ export function agentToolGuide(host: HostKind): string {
       "- formatTable {target, style}: give a table a modern, readable look with one of Excel's built-in table styles (they follow the workbook's theme). target = an existing table name, or the data range including its header row, which then becomes an Excel table with filter buttons and banded rows. Good choices: TableStyleMedium2 (default), TableStyleMedium9, TableStyleLight9, TableStyleLight1 (minimal).",
       "- setNumberFormat {address, format}: number format for a range, e.g. '#,##0' (thousands separator), '#,##0.00 kr.', '0%', 'dd-mm-yyyy'.",
       "- autofitColumns {address}: make the columns as wide as their content.",
+      "- sortRange {target, by, order}: sort a table (by name) or a data range with its header row by one column (header text or letter), asc or desc.",
+      "- conditionalFormat {address, rule, value?}: highlight values with Excel's standard formats – colorScale, dataBar, greaterThan/lessThan (with value), duplicates, top10. Address = the values without the header.",
+      "- addChart {source, type, title?}: a chart (column, bar, line, pie, area, scatter) of a table or a range with headers; it is placed next to the data.",
+      "- freezeRows {rows}: keep the top rows visible when scrolling (1 = the header row; 0 = remove).",
       "For 'make the table nice/modern/readable': formatTable, then setNumberFormat for number and date columns where needed, then autofitColumns. Do not change cell values for this.",
       "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats. Fonts, colours and borders come only from the table style – there is no action for free formatting.",
       "Use addresses that match the sheet overview; row numbers are shown in the first column of the selected values. Never write over existing data unless the user asked for it. Addresses refer to the sheet before any of your actions – the add-in deletes rows last, from the bottom up.",
-    ].join("\n");
+      opts.scripts ? SCRIPT_GUIDE : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n");
   if (host === "powerpoint")
     return [
       "Available actions (PowerPoint). The presentation is shown slide by slide with layout and shapes referenced as slide.shape (e.g. 2.1); [title]/[body] are placeholders from the layout, [text] is a free text box.",
@@ -296,7 +358,13 @@ export type AgentProblem =
   | "bad-shape"
   | "bad-layout"
   /** Excel: tabellen findes ikke på arket. */
-  | "bad-table";
+  | "bad-table"
+  /** Kodetilstanden er ikke slået til (eller forbudt af politikken). */
+  | "scripts-off"
+  /** Et script skal stå alene i planen (fortryd gendanner arket fra før scriptet). */
+  | "with-script"
+  /** Scriptet bruger noget, sandkassen ikke tillader (se checkScript). */
+  | "unsafe-script";
 
 export interface CheckedAction {
   action: AgentAction;
@@ -349,8 +417,13 @@ export function numberedRows(tsv: string, address?: string): string {
  * Tjekker planen mod værten og dokumentet, før den vises: handlinger til den forkerte vært,
  * tekst, der ikke findes i dokumentet, ugyldige adresser og for store skrivninger markeres.
  */
-export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text" | "paragraphs" | "slides" | "layouts" | "excel">): CheckedAction[] {
+export function checkPlan(
+  plan: AgentPlan,
+  ctx: Pick<DocContext, "host" | "text" | "paragraphs" | "slides" | "layouts" | "excel">,
+  opts: { scripts?: boolean } = {},
+): CheckedAction[] {
   const allowed = agentActionsFor(ctx.host);
+  const hasScript = plan.actions.some((a) => a.action === "runScript");
   const paras = ctx.paragraphs;
   const slides = ctx.slides;
   const text = paras ? paras.map((p) => p.text).join("\n") : (ctx.text ?? "");
@@ -372,7 +445,24 @@ export function checkPlan(plan: AgentPlan, ctx: Pick<DocContext, "host" | "text"
   const ok = (action: AgentAction, problem?: AgentProblem): CheckedAction => (problem ? { action, problem } : { action });
   return plan.actions.slice(0, MAX_AGENT_ACTIONS).map((action): CheckedAction => {
     if (!allowed.includes(action.action)) return { action, problem: "wrong-host" };
+    if (hasScript && plan.actions.length > 1 && action.action !== "runScript") return { action, problem: "with-script" };
     switch (action.action) {
+      case "runScript": {
+        if (!opts.scripts) return ok(action, "scripts-off");
+        return ok(action, checkScript(action.code).ok ? undefined : "unsafe-script");
+      }
+      case "sortRange":
+      case "addChart": {
+        const target = action.action === "sortRange" ? action.target : action.source;
+        if (tablesOf(ctx).some((t) => t.name === target)) return ok(action);
+        if (!RANGE.test(target)) return ok(action, ctx.excel?.tables.length ? "bad-table" : "bad-address");
+        return ok(action, rangeBox(target).r1 === rangeBox(target).r0 ? "invalid" : undefined);
+      }
+      case "conditionalFormat":
+        if (!RANGE.test(action.address)) return ok(action, "bad-address");
+        return ok(action, (action.rule === "greaterThan" || action.rule === "lessThan") && action.value === undefined ? "invalid" : undefined);
+      case "freezeRows":
+        return ok(action);
       case "replace":
       case "comment":
         return ok(action, inDoc(action.find) ? undefined : "not-found");

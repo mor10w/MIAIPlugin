@@ -219,7 +219,10 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 
 1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
    - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit og kommentér.
-   - Excel: skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område, giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat og tilpas kolonnebredden.
+   - Excel:
+     - **Data:** skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område og sortér.
+     - **Udseende:** giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat, tilpas kolonnebredden og brug betinget formatering (farveskala, datalinjer, fremhæv over/under en værdi, dubletter, top 10).
+     - **Visning:** lav et diagram og frys overskriftsrækken.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
@@ -240,6 +243,13 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - Tomme celler, der fyldes ud lige under eller ved siden af data, får naboens format. En ny total-række får altså kolonnens valuta- eller procentformat.
 - Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
 - *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
+
+**Kodetilstand (Excel, avanceret).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx pivottabeller, datavalidering og navngivne områder.
+- **Før kørslen:** du ser, hvad scriptet gør, og kan se koden.
+- **Sandkassen:** scriptet kører uden adgang til netværk, filer eller MIAI's indstillinger.
+- **Hvis det fejler:** arket sættes straks tilbage, og du kan bede modellen rette scriptet ud fra fejlen.
+- **Fortryd:** gendanner det aktive ark og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.
+- **Begrænsninger:** kodetilstanden virker kun på ark med højst 50.000 celler, og den kræver en stærk model (14B eller større). Din organisation kan have slået den fra.
 
 **Chatten ændrer ikke dokumentet.** Beder du chatten om at formatere, sortere eller slette, henviser den til agenten. Der vises en knap, **Gør det med agenten**, der tager din besked med. MIAI kan ikke køre VBA eller makroer.
 

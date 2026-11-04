@@ -30,7 +30,9 @@ export interface AgentOutcome extends ApplyOutcome {
    * Hvordan fortryd virker: tracked = afviser sessionens sporede ændringer (resten af dokumentet
    * røres ikke); snapshot = gendanner dokumentets indhold fra før sessionen; cells = Excel-celler.
    */
-  undoKind: "tracked" | "snapshot" | "cells" | "slides" | "text";
+  undoKind: "tracked" | "snapshot" | "cells" | "slides" | "text" | "script";
+  /** Kodetilstand: scriptet fejlede (og er rullet tilbage) – fejlen og koden kan sendes til modellen. */
+  retry?: { error: string; code: string };
 }
 
 export interface DesignOutcome {
@@ -46,6 +48,8 @@ export interface DesignOutcome {
 export interface AgentOptions {
   /** Word: udfør som sporede ændringer, så de også kan gennemgås i Word. */
   trackChanges?: boolean;
+  /** Excel: kodetilstanden er slået til og tilladt af politikken (ADR-0017). */
+  scripts?: boolean;
 }
 
 export interface ContextOptions {

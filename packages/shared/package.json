@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "acorn": "^8.19.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {

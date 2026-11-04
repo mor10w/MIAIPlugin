@@ -294,6 +294,51 @@ describe("agent i PowerPoint og Excel", () => {
     expect(isDestructive(plan.actions[4])).toBe(true);
   });
 
+  it("checkPlan (Excel): sortering, betinget formatering, diagram og frysning", () => {
+    const excel = { tables: [{ name: "Salg", address: "Ark1!A1:C5", headers: ["Region", "Måned", "Omsætning"] }], columnFormats: [] };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "sortRange", target: "Salg", by: "Omsætning", order: "desc", reason: "" },
+        { action: "sortRange", target: "Findes", by: "A", reason: "" },
+        { action: "sortRange", target: "A1:C1", by: "A", reason: "" },
+        { action: "conditionalFormat", address: "C2:C5", rule: "greaterThan", reason: "" },
+        { action: "conditionalFormat", address: "C2:C5", rule: "greaterThan", value: 100, reason: "" },
+        { action: "addChart", source: "Salg", type: "pie", reason: "" },
+        { action: "freezeRows", rows: 1, reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([
+      undefined,
+      "bad-table",
+      "invalid", // kun en overskrift
+      "invalid", // mangler værdi
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(plan.actions[1]).toMatchObject({ order: "asc" });
+  });
+
+  it("checkPlan (Excel): runScript kræver kodetilstand, et sikkert script og at stå alene", () => {
+    const script = {
+      action: "runScript",
+      description: "Pivot",
+      code: "const s = context.workbook.worksheets.getActiveWorksheet(); await context.sync();",
+      reason: "",
+    };
+    const alone = AgentPlan.parse({ summary: "s", actions: [script] });
+    expect(checkPlan(alone, { host: "excel", text: "" })[0].problem).toBe("scripts-off");
+    expect(checkPlan(alone, { host: "excel", text: "" }, { scripts: true })[0].problem).toBeUndefined();
+    const unsafe = AgentPlan.parse({ summary: "s", actions: [{ ...script, code: "await fetch('https://x')" }] });
+    expect(checkPlan(unsafe, { host: "excel", text: "" }, { scripts: true })[0].problem).toBe("unsafe-script");
+    const mixed = AgentPlan.parse({ summary: "s", actions: [script, { action: "freezeRows", rows: 1, reason: "" }] });
+    expect(checkPlan(mixed, { host: "excel", text: "" }, { scripts: true }).map((c) => c.problem)).toEqual([undefined, "with-script"]);
+    // Kun i Excel.
+    expect(checkPlan(alone, { host: "word", text: "" }, { scripts: true })[0].problem).toBe("wrong-host");
+    expect(isDestructive(alone.actions[0])).toBe(true);
+  });
+
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {
     expect(rangeBox("Ark1!$B$2:D4")).toEqual({ r0: 1, c0: 1, r1: 3, c1: 3 });
     expect(rangeBox("AA10")).toEqual({ r0: 9, c0: 26, r1: 9, c1: 26 });
