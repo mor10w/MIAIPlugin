@@ -49,7 +49,14 @@ function svgToDataUrl(svg: string): string {
  * visuelt via mermaid.js, og ```svg-blokke vises som billede (data-url – SVG'en
  * køres ikke, og renses først). Ved fejl forbliver kodeblokken synlig.
  */
-export function Markdown({ text }: { text: string }) {
+export function Markdown({
+  text,
+  onDiagramError,
+}: {
+  text: string;
+  /** Et mermaid-diagram kunne ikke tegnes (heller ikke efter reparation) – med mermaids fejl. */
+  onDiagramError?: (error: string | null) => void;
+}) {
   const s = useStyles();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -66,6 +73,7 @@ export function Markdown({ text }: { text: string }) {
     };
 
     const renderMermaid = async () => {
+      let failed: string | null = null;
       for (const block of Array.from(root.querySelectorAll("code.language-mermaid"))) {
         try {
           const svg = await mermaidToSvg(block.textContent ?? "");
@@ -75,10 +83,12 @@ export function Markdown({ text }: { text: string }) {
           // SVG'en kommer fra mermaid.js (securityLevel: strict), ikke fra modeloutput.
           wrap.innerHTML = svg;
           replaceBlock(block, wrap);
-        } catch {
-          // Ugyldigt diagram: vis kodeblokken som den er.
+        } catch (err) {
+          // Ugyldigt diagram: vis kodeblokken som den er, og meld fejlen (chatten kan bede modellen rette den).
+          failed ??= String((err as Error)?.message ?? err).slice(0, 600);
         }
       }
+      if (!cancelled) onDiagramError?.(failed);
     };
 
     const renderSvg = () => {

@@ -270,5 +270,36 @@
       }
     ],
     "rubric": "Henviser kort til agenten (Agent: redigér dokumentet), evt. med 2–4 punkter om hvad den ville ændre; ingen VBA, ingen lang klikvejledning."
+  },
+  {
+    "id": "chat-da-diagram-citerede-etiketter",
+    "task": "chat",
+    "lang": "da",
+    "feature": "F4",
+    "note": "Regression: modellen skrev etiketter med parenteser og <b> uden anførselstegn (mermaid-syntaksfejl) og forklarede, hvordan man indsætter figuren via Mermaid Live.",
+    "context": {
+      "host": "word",
+      "text": "Dataarkitekt: hvad betyder data, hvem ejer og bruger data.\n- Domænearkitekt / modellør: forretningsbegreber, historik, datakontrakter\n- Platformarkitekt (eksisterende arkitekturgruppe): dataplatform, indlæsning, drift\n- Metadata- og lineage-ansvarlig (Dataoverblik): katalog, dataejere, kvalitetsregler",
+      "isWholeDocument": true
+    },
+    "params": {
+      "prompt": "Visualisér arkitektur-oversigten som en figur"
+    },
+    "checks": [
+      {
+        "type": "regex",
+        "pattern": "```mermaid"
+      },
+      {
+        "type": "notContains",
+        "values": ["mermaid.live", "Mermaid Live", "plugin", "<b>", "<i>"]
+      },
+      {
+        "type": "regex",
+        "pattern": "\\[[^\"\\]\\n]*\\([^\\]\\n]*\\]",
+        "negate": true
+      }
+    ],
+    "rubric": "Ét ```mermaid-diagram med alle etiketter i anførselstegn (også dem med parenteser), uden HTML-mærker; højst en kort billedtekst og ingen vejledning i at indsætte eller eksportere figuren."
   }
 ]

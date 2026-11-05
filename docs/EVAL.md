@@ -6,7 +6,7 @@ Harnesset kalder `executeTask` fra `@miai/shared`. Det er samme motor, som add-i
 
 ## Indhold
 
-59 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 18 indbyggede opgaver (F1–F13, agent-tilstand, præsentationsdesign, svar på mail og web-søgning):
+60 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 18 indbyggede opgaver (F1–F13, agent-tilstand, præsentationsdesign, svar på mail og web-søgning):
 
 | Fil | Opgaver | Hvad der især testes |
 |---|---|---|

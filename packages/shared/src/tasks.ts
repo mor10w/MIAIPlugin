@@ -771,7 +771,9 @@ export const TASKS: TaskDefinition[] = [
         system(
           req,
           "Be concise and practical. Use Markdown when it helps.",
-          "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. The add-in offers a button that inserts such a figure into the document as an image — do not tell the user to use external tools.",
+          "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. " +
+            'Mermaid rules: put EVERY node and subgraph label in double quotes, e.g. A["Platformarkitekt (eksisterende gruppe)"] – unquoted parentheses, brackets or braces break the diagram; use <br/> for line breaks and no other HTML (no <b> or <i>). ' +
+            "The add-in shows the figure and has a button that inserts it into the document as an image – never explain how to insert or export it, and never mention copy/paste, Mermaid Live, plugins or other external tools.",
           ctx.host === "excel" ? EXCEL_SCOPE_RULES : undefined,
           ctx.host === "outlook" ? undefined : CHAT_EDIT_RULES,
           contextNote,

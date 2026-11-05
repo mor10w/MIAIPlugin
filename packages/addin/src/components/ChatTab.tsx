@@ -134,7 +134,10 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));
   // "Indsæt som billede" kun når svaret faktisk indeholder en ```mermaid- eller ```svg-figur.
-  const modesFor = (content: string): ApplyMode[] => (adapter.supports("image") && extractGraphic(content) ? ["image", ...modes] : modes);
+  // Et diagram, mermaid ikke kan tegne, kan heller ikke indsættes – så vises knappen ikke.
+  const [diagramErrors, setDiagramErrors] = useState<Record<number, string>>({});
+  const modesFor = (content: string, i: number): ApplyMode[] =>
+    adapter.supports("image") && extractGraphic(content) && !diagramErrors[i] ? ["image", ...modes] : modes;
   const lastAssistant = messages.map((m) => m.role).lastIndexOf("assistant");
 
   const suggestions =
@@ -176,13 +179,38 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 <Sparkle16Regular aria-hidden />
                 <Caption1>{m.model ?? "MIAI"}</Caption1>
               </div>
-              <Markdown text={m.content} />
+              <Markdown
+                text={m.content}
+                onDiagramError={(err) =>
+                  setDiagramErrors((d) => {
+                    if ((d[i] ?? null) === err) return d;
+                    const next = { ...d };
+                    if (err) next[i] = err;
+                    else delete next[i];
+                    return next;
+                  })
+                }
+              />
+              {diagramErrors[i] && (
+                <div className={s.agentSuggest}>
+                  <span>
+                    <Text weight="semibold">{t("diagramErrorTitle")}</Text>
+                    <br />
+                    <Caption1 className={s.muted}>{diagramErrors[i]}</Caption1>
+                  </span>
+                  {i === lastAssistant && !running && (
+                    <Button size="small" appearance="primary" onClick={() => void send(t("diagramFixPrompt", { error: diagramErrors[i] }))}>
+                      {t("diagramFixCta")}
+                    </Button>
+                  )}
+                </div>
+              )}
               {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
               {i === lastAssistant && !running && (
                 <div className={s.applyZone}>
                   <ApplyBar
                     label={t("applyLabel")}
-                    modes={modesFor(m.content)}
+                    modes={modesFor(m.content, i)}
                     apply={(mode) => {
                       return mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current);
                     }}

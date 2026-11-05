@@ -28,6 +28,59 @@ test("Mermaid i svaret vises som figur, teksten bevares, og kan indsættes som b
   expect(pic.width / pic.height).toBeGreaterThan(3);
 });
 
+test("diagram med parenteser og <b> i etiketterne repareres og kan indsættes (regression fra Word-chatten)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  const answer = [
+    "Her er arkitekturen:",
+    "",
+    "```mermaid",
+    "graph TD",
+    "    A[<b>Dataarkitekt</b><br/>Hvem ejer data?]:::header",
+    "    subgraph P2 [Platform & Integration]",
+    "        R2[<b>Platformarkitekt</b><br/><i>(eksisterende arkitekturgruppe)</i>]:::role",
+    "        T4[Dataplatform og lagring]",
+    "    end",
+    "    A --> P2",
+    "    R2 --- T4",
+    "    classDef header fill:#1f4e79,color:white",
+    "    classDef role fill:#2e75b6,color:white",
+    "```",
+  ].join("\n");
+  tp.model.reply = () => ({ stream: chunks(answer) });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Visualisér arkitekturen");
+  await tp.page.keyboard.press("Enter");
+
+  const figure = tp.page.locator(".figure svg").first();
+  await expect(figure).toBeVisible({ timeout: 15_000 });
+  await expect(figure).toContainText("(eksisterende arkitekturgruppe)");
+  // <b> bliver til rigtig fed skrift, ikke synlige mærker.
+  expect(await figure.textContent()).not.toContain("<b>");
+  await expect(tp.page.getByText("Diagrammet kunne ikke tegnes")).toHaveCount(0);
+  await tp.page.getByRole("button", { name: "Indsæt som billede" }).click();
+  await expect(tp.page.getByText("Figuren er indsat efter markeringen.")).toBeVisible();
+});
+
+test("et diagram, der ikke kan tegnes, kan ikke indsættes, og modellen kan bede om at rette det", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  tp.model.reply = () => ({ stream: chunks("```mermaid\ngraph TD\n  A --> --> B\n```") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Tegn det");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Diagrammet kunne ikke tegnes")).toBeVisible({ timeout: 15_000 });
+  await expect(tp.page.getByRole("button", { name: "Indsæt som billede" })).toHaveCount(0);
+
+  tp.model.reply = () => ({ stream: chunks('```mermaid\ngraph TD\n  A["Start"] --> B["Slut"]\n```') });
+  await tp.page.getByRole("button", { name: "Bed modellen rette diagrammet" }).click();
+  await expect(tp.page.locator(".figure svg").first()).toContainText("Slut", { timeout: 15_000 });
+  const last = tp.model.lastRequest!.messages.at(-1)!.content;
+  expect(last).toContain("kan ikke tegnes");
+  expect(last).toMatch(/Parse error|Syntax error/i);
+  // Det nye svar kan tegnes, så den gamle fejl står kun ved det første svar.
+  await expect(tp.page.getByRole("button", { name: "Bed modellen rette diagrammet" })).toHaveCount(0);
+  await expect(tp.page.getByRole("button", { name: "Indsæt som billede" })).toBeVisible();
+});
+
 test("gentagelsessløjfe afbrydes med advarsel – uden note i selve teksten", async ({ open }) => {
   const tp = await open({ host: "Word" });
   tp.model.reply = () => ({ stream: ["Jeg kigger på indholdet. ", ...Array(10).fill("side 6 tabel ")] });

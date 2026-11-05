@@ -70,6 +70,10 @@ const da = {
   agentSuggestTitle: "Vil du have ændringerne sat ind i dokumentet?",
   agentSuggestText: "Agenten foreslår konkrete handlinger, som du godkender én for én – først derefter ændres dokumentet.",
   agentSuggestCta: "Gør det med agenten",
+  diagramErrorTitle: "Diagrammet kunne ikke tegnes",
+  diagramFixCta: "Bed modellen rette diagrammet",
+  diagramFixPrompt:
+    'Mermaid-diagrammet i dit svar kan ikke tegnes. Fejlen er: {error}\nSend hele diagrammet igen, rettet, i én ```mermaid-blok. Sæt alle etiketter i anførselstegn, fx A["Tekst (note)"], og brug ingen HTML-mærker.',
   agentMaterial: "Bruger chatsvaret som indhold.",
   agentMaterialRemove: "Fjern",
   noEdits: "Ingen fejl fundet.",
@@ -454,6 +458,10 @@ const en: Dict = {
   agentSuggestTitle: "Want to apply these changes to your document?",
   agentSuggestText: "The agent proposes concrete actions you approve one by one – only then is the document changed.",
   agentSuggestCta: "Do it with the agent",
+  diagramErrorTitle: "The diagram could not be drawn",
+  diagramFixCta: "Ask the model to fix the diagram",
+  diagramFixPrompt:
+    'The Mermaid diagram in your answer cannot be drawn. The error is: {error}\nSend the whole diagram again, fixed, in one ```mermaid block. Put every label in double quotes, e.g. A["Text (note)"], and use no HTML tags.',
   agentMaterial: "Uses the chat answer as content.",
   agentMaterialRemove: "Remove",
   noEdits: "No errors found.",
