@@ -60,6 +60,10 @@ export function Markdown({
   const s = useStyles();
   const ref = useRef<HTMLDivElement>(null);
 
+  // Ref: kalderen giver en ny funktion ved hver rendering, og effekten skal kun køre, når teksten ændres.
+  const onErrorRef = useRef(onDiagramError);
+  onErrorRef.current = onDiagramError;
+
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
@@ -88,7 +92,7 @@ export function Markdown({
           failed ??= String((err as Error)?.message ?? err).slice(0, 600);
         }
       }
-      if (!cancelled) onDiagramError?.(failed);
+      if (!cancelled) onErrorRef.current?.(failed);
     };
 
     const renderSvg = () => {
