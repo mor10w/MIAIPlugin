@@ -82,11 +82,38 @@ function anySignal(signals: AbortSignal[]): AbortSignal {
   return ctrl.signal;
 }
 
-function timeoutSignal(ms: number): AbortSignal {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(new Error("timeout")), ms) as unknown as { unref?: () => void };
-  t.unref?.(); // Node: hold ikke processen i live
-  return ctrl.signal;
+/**
+ * Timeout som "tid uden svar" (#timeout): uret startes ved forespørgslen og nulstilles, hver gang
+ * serveren sender noget. Et langt svar, der strømmer jævnt, afbrydes derfor ikke – kun en server,
+ * der har været tavs i `ms` (fx mens en stor prompt behandles på CPU, eller hvis den er gået i stå).
+ */
+export class IdleDeadline {
+  private readonly ctrl = new AbortController();
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  constructor(readonly ms: number) {
+    this.touch();
+  }
+  get signal(): AbortSignal {
+    return this.ctrl.signal;
+  }
+  get expired(): boolean {
+    return this.ctrl.signal.aborted;
+  }
+  /** Serveren har sendt noget: start forfra. */
+  touch(): void {
+    if (this.expired) return;
+    if (this.timer) clearTimeout(this.timer);
+    const t = setTimeout(() => this.ctrl.abort(new Error("timeout")), this.ms) as unknown as { unref?: () => void };
+    t.unref?.(); // Node: hold ikke processen i live
+    this.timer = t as unknown as ReturnType<typeof setTimeout>;
+  }
+  stop(): void {
+    if (this.timer) clearTimeout(this.timer);
+  }
+}
+
+function timeoutError(ep: Endpoint): UpstreamError {
+  return new UpstreamError(`${ep.name} har ikke svaret i ${Math.round(ep.timeoutMs / 1000)} s (${ep.baseUrl}).`, "UPSTREAM_TIMEOUT");
 }
 
 function headers(ep: Endpoint, json: boolean): Record<string, string> {
@@ -101,20 +128,29 @@ function joinUrl(ep: Endpoint, path: string): string {
   return ep.baseUrl.replace(/\/+$/, "") + path;
 }
 
-async function doFetch(ep: Endpoint, path: string, init: RequestInit, signal: AbortSignal | undefined, opts: ClientOptions): Promise<Response> {
-  const timeout = timeoutSignal(ep.timeoutMs);
-  const combined = signal ? anySignal([signal, timeout]) : timeout;
+async function doFetch(
+  ep: Endpoint,
+  path: string,
+  init: RequestInit,
+  signal: AbortSignal | undefined,
+  opts: ClientOptions,
+  deadline = new IdleDeadline(ep.timeoutMs),
+): Promise<Response> {
+  const combined = signal ? anySignal([signal, deadline.signal]) : deadline.signal;
   let res: Response;
   try {
     res = await fetch(joinUrl(ep, path), { ...init, headers: headers(ep, init.method === "POST"), signal: combined });
+    deadline.touch();
   } catch (err) {
+    deadline.stop();
     if (signal?.aborted) throw err;
-    if (timeout.aborted) throw new UpstreamError(`Timeout efter ${ep.timeoutMs / 1000} s mod ${ep.baseUrl}`, "UPSTREAM_TIMEOUT");
+    if (deadline.expired) throw timeoutError(ep);
     const hint = opts.unreachableHint ? ` ${opts.unreachableHint}` : "";
     throw new UpstreamError(`Kunne ikke forbinde til ${ep.baseUrl}. Kører dit inference-værktøj?${hint}`, "UPSTREAM_UNREACHABLE");
   }
   if (!res.ok) {
     const body = (await res.text().catch(() => "")).slice(0, 500);
+    deadline.stop();
     throw new UpstreamError(`${ep.name} svarede ${res.status}: ${body || res.statusText}`, "UPSTREAM_HTTP", res.status);
   }
   return res;
@@ -130,8 +166,10 @@ export interface ModelEntry {
 const CONTEXT_FIELDS = ["max_model_len", "context_length", "max_context_length", "n_ctx", "loaded_context_length"];
 
 export async function listModelEntries(ep: Endpoint, signal?: AbortSignal, opts: ClientOptions = {}): Promise<ModelEntry[]> {
-  const res = await doFetch(ep, "/models", { method: "GET" }, signal, opts);
+  const deadline = new IdleDeadline(ep.timeoutMs);
+  const res = await doFetch(ep, "/models", { method: "GET" }, signal, opts, deadline);
   const json = (await res.json().catch(() => null)) as { data?: Record<string, unknown>[] } | null;
+  deadline.stop();
   if (!json || !Array.isArray(json.data)) throw new UpstreamError("Uventet svar fra /models", "UPSTREAM_PROTOCOL");
   return json.data
     .filter((m): m is Record<string, unknown> & { id: string } => typeof m.id === "string")
@@ -165,14 +203,16 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   if (!noStreamOptions.has(ep.baseUrl)) body.stream_options = { include_usage: true };
 
   let res: Response;
+  let deadline = new IdleDeadline(ep.timeoutMs);
   try {
-    res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
+    res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts, deadline);
   } catch (err) {
     // Ældre/strenge servere afviser ukendte felter. Prøv igen uden stream_options, og husk det.
     if (err instanceof UpstreamError && err.status === 400 && body.stream_options && /stream_options/i.test(err.message)) {
       noStreamOptions.add(ep.baseUrl);
       delete body.stream_options;
-      res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts);
+      deadline = new IdleDeadline(ep.timeoutMs);
+      res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts, deadline);
     } else throw err;
   }
   const ctype = res.headers.get("content-type") ?? "";
@@ -180,6 +220,8 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   // Nogle servere ignorerer stream=true og svarer med ét JSON-objekt.
   if (!ctype.includes("text/event-stream")) {
     const json = (await res.json().catch(() => null)) as CompletionJson | null;
+    deadline.stop();
+    if (deadline.expired) throw timeoutError(ep);
     const choice = json?.choices?.[0];
     const msg = (choice as { message?: { content?: string; tool_calls?: RawToolCall[] } } | undefined)?.message;
     if (msg && typeof msg.content === "string") {
@@ -199,8 +241,16 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   let buf = "";
   try {
     for (;;) {
-      const { value, done } = await reader.read();
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read();
+      } catch (err) {
+        if (deadline.expired && !p.signal?.aborted) throw timeoutError(ep);
+        throw err;
+      }
+      const { value, done } = chunk;
       if (done) break;
+      deadline.touch();
       buf += decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf("\n")) >= 0) {
@@ -214,6 +264,7 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
     const last = parseSseLine(buf.trim());
     if (last && last !== "done") yield last;
   } finally {
+    deadline.stop();
     reader.cancel().catch(() => {});
   }
 }
@@ -305,8 +356,9 @@ export async function embed(ep: Endpoint, model: string, input: string[], signal
   if (!model) throw new UpstreamError("Vælg en embedding-model under Indstillinger → Viden.", "NO_EMBEDDINGS");
   if (!input.length) return [];
   let res: Response;
+  const deadline = new IdleDeadline(ep.timeoutMs);
   try {
-    res = await doFetch(ep, "/embeddings", { method: "POST", body: JSON.stringify({ model, input }) }, signal, {});
+    res = await doFetch(ep, "/embeddings", { method: "POST", body: JSON.stringify({ model, input }) }, signal, {}, deadline);
   } catch (err) {
     const e = err as UpstreamError;
     if (e.code === "UPSTREAM_HTTP" && e.status !== undefined && [400, 404, 405, 501].includes(e.status))
@@ -318,6 +370,8 @@ export async function embed(ep: Endpoint, model: string, input: string[], signal
     throw err;
   }
   const json = (await res.json().catch(() => null)) as { data?: { embedding?: unknown; index?: number }[] } | null;
+  deadline.stop();
+  if (deadline.expired) throw timeoutError(ep);
   const data = json?.data;
   if (!Array.isArray(data) || data.length !== input.length || !data.every((d) => Array.isArray(d.embedding) && (d.embedding as unknown[]).length > 0))
     throw new UpstreamError(`Uventet svar fra ${ep.name}/embeddings – er '${model}' en embedding-model?`, "NO_EMBEDDINGS");

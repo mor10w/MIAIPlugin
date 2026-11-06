@@ -203,7 +203,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       structuredOutput: p.structuredOutput,
       stripThinking: true,
       extraBody: {},
-      timeoutMs: 120_000,
+      timeoutMs: 300_000,
     };
     setSettings({ ...settings, endpoints: [...settings.endpoints, ep] });
   };
@@ -256,7 +256,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       structuredOutput: tool.structuredOutput,
       stripThinking: true,
       extraBody: {},
-      timeoutMs: 120_000,
+      timeoutMs: 300_000,
     };
     const next: Settings = { ...settings, endpoints: existing ? settings.endpoints : [...settings.endpoints, ep], activeEndpoint: ep.id, defaultModel: "" };
     setSettings(next);
@@ -317,6 +317,10 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
           value={ep.contextTokens ? String(ep.contextTokens) : ""}
           onChange={(_, d) => setEp(ep.id, { contextTokens: d.value ? Math.max(512, Math.round(Number(d.value))) || undefined : undefined })}
         />
+      </Field>
+      {/* Tid uden svar (før svaret begynder og mellem stykkerne) – et svar, der strømmer, afbrydes ikke. */}
+      <Field label={t("timeout")} hint={t("timeoutHint")}>
+        <TimeoutInput valueMs={ep.timeoutMs} onCommit={(ms) => setEp(ep.id, { timeoutMs: ms })} suffix={t("seconds")} />
       </Field>
       <Switch label={t("stripThinking")} checked={ep.stripThinking} onChange={(_, d) => setEp(ep.id, { stripThinking: d.checked })} />
     </>
@@ -644,5 +648,33 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Timeout i sekunder. Gemmes først, når feltet forlades (eller ved Enter), så man kan skrive fx 50
+ * uden at "5" straks rettes til minimum; værdien holdes inden for 10–1800 s.
+ */
+function TimeoutInput({ valueMs, onCommit, suffix }: { valueMs: number; onCommit: (ms: number) => void; suffix: string }) {
+  const [draft, setDraft] = useState(String(Math.round(valueMs / 1000)));
+  useEffect(() => setDraft(String(Math.round(valueMs / 1000))), [valueMs]);
+  const commit = () => {
+    const sec = Math.round(Number(draft));
+    const ms = (Number.isFinite(sec) && sec > 0 ? Math.min(1_800, Math.max(10, sec)) : Math.round(valueMs / 1000)) * 1000;
+    setDraft(String(ms / 1000));
+    if (ms !== valueMs) onCommit(ms);
+  };
+  return (
+    <Input
+      type="number"
+      min={10}
+      max={1800}
+      step={30}
+      value={draft}
+      onChange={(_, d) => setDraft(d.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+      contentAfter={<Caption1>{suffix}</Caption1>}
+    />
   );
 }

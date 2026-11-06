@@ -32,3 +32,22 @@ test("model pr. opgave: advarsel, når modellen ikke findes på endpointen", asy
   // Listen over model pr. opgave er åben, når der er valg.
   await expect(tp.page.getByText(/Modellen findes ikke på den aktive endpoint/)).toBeVisible();
 });
+
+test("timeout kan indstilles pr. endpoint (10–1800 s) og gemmes", async ({ open }) => {
+  const tp = await open({ host: "Word" });
+  await tp.tab("Indstillinger");
+  await tp.page.getByRole("button", { name: "Avanceret" }).click();
+  const field = tp.page.getByRole("spinbutton", { name: "Timeout" });
+  // Standard: 5 minutter.
+  await expect(field).toHaveValue("300");
+  // Under minimum rettes til 10 s, når feltet forlades.
+  await field.fill("5");
+  await field.press("Tab");
+  await expect(field).toHaveValue("10");
+  await field.fill("900");
+  await field.press("Enter");
+  await tp.page.getByRole("button", { name: "Gem" }).click();
+  await expect(tp.page.getByText("Gemt.")).toBeVisible();
+  const saved = await tp.page.evaluate(() => JSON.parse(localStorage.getItem("miai.settings.v1") ?? "{}"));
+  expect(saved.endpoints[0].timeoutMs).toBe(900_000);
+});

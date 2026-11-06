@@ -208,7 +208,12 @@ export const Endpoint = z.object({
   contextTokens: z.number().int().min(512).max(2_000_000).optional(),
   /** Ekstra felter, der flettes ind i hver chat/completions-forespørgsel (fx { "num_ctx": 8192 }). */
   extraBody: z.record(z.string(), z.unknown()).default({}),
-  timeoutMs: z.number().int().min(1_000).max(600_000).default(120_000),
+  /**
+   * Hvor længe serveren må være tavs, før forespørgslen opgives: før svaret begynder (fx mens en
+   * lang prompt behandles på CPU) og mellem stykkerne i et svar. Et svar, der strømmer, afbrydes
+   * aldrig, uanset hvor langt det er. 5 min som standard; op til 30 min for langsom hardware.
+   */
+  timeoutMs: z.number().int().min(1_000).max(1_800_000).default(300_000),
 });
 export type Endpoint = z.infer<typeof Endpoint>;
 
