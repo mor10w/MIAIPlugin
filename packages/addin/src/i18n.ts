@@ -279,6 +279,8 @@ const da = {
   agentAct_freezeRows: "Frys de øverste {n} rækker",
   agentAct_unfreeze: "Fjern frysning af rækker",
   agentAct_runScript: "Kør script: {description}",
+  agentAct_saveSheet: "Gem arket som {fileName}",
+  agentAct_saveSheetNamed: "Gem arket “{sheet}” som {fileName}",
   agentShowCode: "Vis koden",
   agentRetryScript: "Bed modellen rette scriptet",
   agentUndoScript:
@@ -287,10 +289,15 @@ const da = {
   "agentProblem_scripts-off": "Kodetilstanden er slået fra (Indstillinger)",
   "agentProblem_with-script": "Kan ikke kombineres med et script",
   "agentProblem_unsafe-script": "Bruger noget, sandkassen ikke tillader",
+  "agentProblem_no-bridge": "Eksporten er ikke slået til (kræver MIAI Bridge)",
   agentScripts: "Agenten må skrive og køre Office.js-kode (Excel, avanceret)",
   agentScriptsHint:
     "Til det, de faste handlinger ikke kan (fx pivottabeller og datavalidering). Du ser koden, før den kører; den kører i en sandkasse uden netværk og kan fortrydes for det aktive ark. Kræver en stærk model (14B+).",
   agentScriptsForbidden: "Din organisation har slået kodetilstanden fra.",
+  agentExport: "Agenten må gemme et Excel-ark som .xlsx-fil på skrivebordet",
+  agentExportHint:
+    "Filen anlandes på skrivebordet (Documents/Downloads ved forespørgsel). Et eksisterende filnavn afvises – overskrivning sker aldrig. Kræver MIAI Bridge.",
+  agentExportForbidden: "Din organisation har slået eksporten fra.",
   agentBefore: "før",
   agentAfter: "efter",
   agentPosStart: "i starten",
@@ -671,6 +678,8 @@ const en: Dict = {
   agentAct_freezeRows: "Freeze the top {n} rows",
   agentAct_unfreeze: "Unfreeze rows",
   agentAct_runScript: "Run script: {description}",
+  agentAct_saveSheet: "Save the sheet as {fileName}",
+  agentAct_saveSheetNamed: "Save sheet “{sheet}” as {fileName}",
   agentShowCode: "Show the code",
   agentRetryScript: "Ask the model to fix the script",
   agentUndoScript:
@@ -679,10 +688,14 @@ const en: Dict = {
   "agentProblem_scripts-off": "Code mode is off (Settings)",
   "agentProblem_with-script": "Cannot be combined with a script",
   "agentProblem_unsafe-script": "Uses something the sandbox does not allow",
+  "agentProblem_no-bridge": "Export is not enabled (requires MIAI Bridge)",
   agentScripts: "The agent may write and run Office.js code (Excel, advanced)",
   agentScriptsHint:
     "For what the built-in actions cannot do (e.g. pivot tables and data validation). You see the code before it runs; it runs in a sandbox without network access and can be undone for the active sheet. Needs a strong model (14B+).",
   agentScriptsForbidden: "Your organisation has turned code mode off.",
+  agentExport: "The agent may save an Excel sheet as a .xlsx file on the desktop",
+  agentExportHint: "The file lands on the desktop (Documents/Downloads if asked). A taken name is rejected – existing files are never overwritten. Requires MIAI Bridge.",
+  agentExportForbidden: "Your organisation has turned export off.",
   agentBefore: "before",
   agentAfter: "after",
   agentPosStart: "at the start",

@@ -99,3 +99,19 @@ Samme principper: modellen ser strukturen, handlingerne ændrer kun det nødvend
 Tests: simuleret Excel med formater og tabeller og simuleret PowerPoint med slides, layouts og formateret tekst. Testene tjekker formatering efter handlinger og efter fortryd. Tjeklister til rigtig Office står i UDVIKLING.md.
 
 **Opfølgning:** flere faste Excel-værktøjer (sortering, betinget formatering, diagram og frysning) og en kodetilstand med Office.js-scripts i en sandkasse er beskrevet i [ADR-0017](0017-agent-kodetilstand.md).
+
+## Tillæg (2026-11-06): saveSheet – et ark gemmes som .xlsx-fil
+
+Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i sin egen fil"). Det kan de faste handlinger ikke: Office.js har ingen eksport-API, og bridgen kan skrive filer – add-in'et kan det ikke. Undtagelsen er derfor dokumenteret eksplicit i stedet for at åbne generel filadgang:
+
+1. **Én handling, kun Excel:** `saveSheet {fileName, sheet?, reason}` gemmer ét ark som en ny .xlsx-fil. Den ændrer ikke arbejdsbogen, og den er ikke destruktiv – den følger alle de øvrige handlinger gennem **plan → bekræft → udfør**.
+2. **Kun bridge, og slået til af brugeren.** Direkte tilstand har ingen eksekverer, der kan skrive filer: handlingen vises aldrig i prompten uden bridge (`agentExport` injiceres kun, når `deps.tools !== undefined`), og `checkPlan` markerer den som *no-bridge*, hvis den alligevel kommer. I Indstillinger (Privatliv) kan brugeren slå eksporten til – fra som standard – og politikken kan forbyde den (`agentExport: false`), så organisationen styrer, om agenten må skrive filer.
+3. **Datavejen:** add-in'et læser arket (værdier, formler med deres resultat, talformater og kolonnebredder) som JSON og sender det til bridgens `POST /api/export`, der bygger filen med exceljs. Formler skrives som `{formula, result}`, så filen viser tallene, før den åbnes i Excel.
+4. **Sikkerhed:**
+   - Mappen er et fast enum (`desktop`, `documents`, `downloads`) under brugerens hjem – aldrig fra modellen. Filnavnet valideres mod en streng regex (ingen stipelementer, `.xlsx`-påliggende, maks. 255 tegn).
+   - Ingen overskrivning: en eksisterende fil afvises (409), så agenten aldrig skriver over en brugerfil.
+   - Højst 50.000 celler pr. eksport; kroppens loft hæves kun for ruten (16 MB).
+   - Audit-logget får `kind: "export"` med mappen som host – kun metadata, aldrig filens indhold.
+5. **Fortryd rører ikke filen.** Eksporten sker efter ændringerne i planen, så filen viser arket med de udførte handlinger. *Fortryd* gendanner arbejdsbogen, men filen forbliver – den er et nyt artefakt, som brugeren har bekræftet navnet på.
+
+**Test:** `shared` tester prompt-gating og `checkPlan` (no-bridge, ugyldige navne, forkert vært), og bridgen tester `exportPath` (traversal), `buildXlsx` (round-trip læst tilbage med exceljs) og ruten (200/409/400).

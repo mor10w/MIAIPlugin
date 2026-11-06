@@ -17,6 +17,7 @@ import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoCh
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
 import {
+  agentExportAllowed,
   agentScriptsAllowed,
   type Endpoint,
   type ParsedTaskRequest,
@@ -248,7 +249,9 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   }
   // Kodetilstand (ADR-0017): agenten får kun script-værktøjet at vide, når brugeren har slået det
   // til, og politikken tillader det. Det afgøres her, så bridge og direkte tilstand er ens.
-  inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "" } };
+  // Eksport (tillæg ADR-0012): kun bridgen kan skrive filer – direkte tilstand har ingen eksekverer.
+  const agentExport = deps.tools !== undefined && agentExportAllowed(settings, policy) ? "on" : "";
+  inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "", agentExport } };
   const built = task.buildMessages(inputReq);
   const messages: ApiMessage[] = mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built;
 

@@ -1,6 +1,7 @@
 import type {
   AuditEntry,
   Endpoint,
+  ExportSheetRequest,
   HealthInfo,
   KnowledgeStatus,
   ProbeResult,
@@ -57,4 +58,6 @@ export interface Backend {
   runTask(id: string, req: TaskRequest, onEvent: (e: TaskEvent) => void, signal: AbortSignal): Promise<void>;
   /** Søgning i egne mapper (F15). Kun i bridge-tilstand. */
   readonly knowledge?: KnowledgeApi;
+  /** Gemmer et Excel-ark som .xlsx-fil (tillæg ADR-0012) og svarer med filens sti. Kun i bridge-tilstand. */
+  exportSheet?(data: ExportSheetRequest): Promise<{ ok: true; path: string }>;
 }

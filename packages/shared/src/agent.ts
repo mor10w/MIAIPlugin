@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EXPORT_FILE_NAME } from "./export.js";
 import { checkScript } from "./script.js";
 import type { DocContext, HostKind } from "./types.js";
 
@@ -11,7 +12,9 @@ import type { DocContext, HostKind } from "./types.js";
  * størrelse): dokumentindhold kan indeholde prompt injection, og det værste en kapret plan kan
  * gøre, er at foreslå ændringer, som brugeren ser, før de udføres. Formatering sker kun med
  * dokumentets egne typografier og begrænset Markdown (fed, kursiv, links, lister) – i Excel med
- * de indbyggede tabeltypografier, talformater og kolonnebredde.
+ * de indbyggede tabeltypografier, talformater og kolonnebredde. Den ene dokumenterede undtagelse
+ * er saveSheet, der gemmer ét ark som .xlsx i en fast mappe (tillæg ADR-0012): kun med bridge,
+ * bekræftet som alle andre handlinger, og aldrig destruktiv.
  *
  * Formatering bevares: modellen ser afsnittene med typografi (¶-numre), strukturændringer
  * peger på afsnit (ikke tekstsøgning), og erstat ændrer kun de ord, der er forskellige.
@@ -210,6 +213,16 @@ export const AgentAction = z.discriminatedUnion("action", [
     address: z.string().min(2).max(40).describe("Range whose columns get a width that fits their content, e.g. 'A1:F40'"),
     reason,
   }),
+  z.object({
+    action: z.literal("saveSheet"),
+    fileName: z
+      .string()
+      .min(1)
+      .max(255)
+      .describe('File name with the .xlsx extension, e.g. "Svar 2026.xlsx" – no folders, spaces at the start or special characters'),
+    sheet: z.string().min(1).max(31).optional().describe("Name of the sheet to save (default: the active sheet)"),
+    reason,
+  }),
 ]);
 export type AgentAction = z.infer<typeof AgentAction>;
 export type AgentActionKind = AgentAction["action"];
@@ -236,6 +249,7 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "addChart",
   "freezeRows",
   "runScript",
+  "saveSheet",
 ];
 export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide"];
 export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
@@ -291,7 +305,12 @@ export const SCRIPT_GUIDE = [
   "  Write complete, working code (no placeholders). Optionally `return` a short text describing what changed – it is shown to the user. Never change other sheets than the active one unless asked.",
 ].join("\n");
 
-export function agentToolGuide(host: HostKind, opts: { scripts?: boolean } = {}): string {
+/** Eksport (tillæg ADR-0012): beskrivelsen af saveSheet til prompten – kun når den er slået til. */
+export const SAVE_GUIDE = [
+  "- saveSheet {fileName, sheet?, reason}: save a whole sheet as a NEW .xlsx file on the user's desktop (Documents/Downloads if asked), preserving values, formulas and column widths. It does not change the workbook – use it when the user wants a separate file (e.g. 'put this sheet in its own file' or 'give me this as a new Excel file').",
+].join("\n");
+
+export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean } = {}): string {
   if (host === "excel")
     return [
       "Available actions (Excel, active sheet only):",
@@ -312,6 +331,7 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean } = {})
       "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats. Fonts, colours and borders come only from the table style – there is no action for free formatting.",
       "Use addresses that match the sheet overview; row numbers are shown in the first column of the selected values. Never write over existing data unless the user asked for it. Addresses refer to the sheet before any of your actions – the add-in deletes rows last, from the bottom up.",
       opts.scripts ? SCRIPT_GUIDE : undefined,
+      opts.export ? SAVE_GUIDE : undefined,
     ]
       .filter(Boolean)
       .join("\n");
@@ -361,6 +381,8 @@ export type AgentProblem =
   | "bad-table"
   /** Kodetilstanden er ikke slået til (eller forbudt af politikken). */
   | "scripts-off"
+  /** Eksporten er ikke slået til (eller forbudt af politikken), eller der er ingen bridge. */
+  | "no-bridge"
   /** Et script skal stå alene i planen (fortryd gendanner arket fra før scriptet). */
   | "with-script"
   /** Scriptet bruger noget, sandkassen ikke tillader (se checkScript). */
@@ -420,7 +442,7 @@ export function numberedRows(tsv: string, address?: string): string {
 export function checkPlan(
   plan: AgentPlan,
   ctx: Pick<DocContext, "host" | "text" | "paragraphs" | "slides" | "layouts" | "excel">,
-  opts: { scripts?: boolean } = {},
+  opts: { scripts?: boolean; export?: boolean } = {},
 ): CheckedAction[] {
   const allowed = agentActionsFor(ctx.host);
   const hasScript = plan.actions.some((a) => a.action === "runScript");
@@ -463,6 +485,10 @@ export function checkPlan(
         return ok(action, (action.rule === "greaterThan" || action.rule === "lessThan") && action.value === undefined ? "invalid" : undefined);
       case "freezeRows":
         return ok(action);
+      case "saveSheet": {
+        if (!opts.export) return ok(action, "no-bridge");
+        return ok(action, EXPORT_FILE_NAME.test(action.fileName) ? undefined : "invalid");
+      }
       case "replace":
       case "comment":
         return ok(action, inDoc(action.find) ? undefined : "not-found");

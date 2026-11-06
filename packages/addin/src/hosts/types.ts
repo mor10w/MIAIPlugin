@@ -1,4 +1,4 @@
-import type { AgentAction, ApplyMode, DesignPlan, DiagramResult, DocContext, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
+import type { AgentAction, ApplyMode, DesignPlan, DiagramResult, DocContext, ExportSheetRequest, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 
@@ -50,6 +50,8 @@ export interface AgentOptions {
   trackChanges?: boolean;
   /** Excel: kodetilstanden er slået til og tilladt af politikken (ADR-0017). */
   scripts?: boolean;
+  /** Excel: eksport af et ark som .xlsx (tillæg ADR-0012); leveres kun med bridge. Svarer med filens sti. */
+  exportSheet?: (data: ExportSheetRequest) => Promise<string>;
 }
 
 export interface ContextOptions {

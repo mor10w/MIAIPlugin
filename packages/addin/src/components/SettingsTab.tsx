@@ -493,6 +493,17 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
                 onChange={(_, d) => setSettings({ ...settings, agentScripts: d.checked })}
               />
             </Field>
+            {/* Eksport af et ark som .xlsx (tillæg ADR-0012): kræver bridgen og kan forbydes af politikken. */}
+            {api.mode === "bridge" && (
+              <Field hint={policy.agentExport === false ? t("agentExportForbidden") : t("agentExportHint")}>
+                <Switch
+                  label={t("agentExport")}
+                  disabled={policy.agentExport === false}
+                  checked={settings.agentExport && policy.agentExport !== false}
+                  onChange={(_, d) => setSettings({ ...settings, agentExport: d.checked })}
+                />
+              </Field>
+            )}
             {/* Web-søgning kræver bridgen (direkte tilstand har ingen søge-eksekverer) og kan forbydes af politikken. */}
             {api.mode === "bridge" && (
               <Field hint={policy.webSearch ? t("webSearchHint") : t("webSearchForbidden")}>

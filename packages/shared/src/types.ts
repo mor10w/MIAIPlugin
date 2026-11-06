@@ -253,6 +253,12 @@ export const Settings = z.object({
    * efter brugerens godkendelse. Slået FRA som standard og kan forbydes af politikken.
    */
   agentScripts: z.boolean().default(false),
+  /**
+   * Agenten kan gemme et Excel-ark som .xlsx-fil (tillæg ADR-0012). Kræver bridge – direkte
+   * tilstand har ingen eksekverer, der kan skrive filer. Slået FRA som standard og kan forbydes
+   * af politikken, så organisationen styrer, om agenten må skrive filer på maskinen.
+   */
+  agentExport: z.boolean().default(false),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
 });
@@ -276,12 +282,19 @@ export const Policy = z.object({
   knowledgeFolders: z.array(z.string()).optional(),
   /** Må agentens kodetilstand (Office.js-scripts, ADR-0017) slås til? */
   agentScripts: z.boolean().default(true),
+  /** Må agenten gemme et Excel-ark som .xlsx-fil (tillæg ADR-0012)? */
+  agentExport: z.boolean().default(true),
 });
 export type Policy = z.infer<typeof Policy>;
 
 /** Kodetilstanden er kun aktiv, når brugeren har slået den til, og politikken tillader den. */
 export function agentScriptsAllowed(settings: Pick<Settings, "agentScripts">, policy: Pick<Policy, "agentScripts">): boolean {
   return !!settings.agentScripts && policy.agentScripts !== false;
+}
+
+/** Eksporten (tillæg ADR-0012) er kun aktiv, når brugeren har slået den til, og politikken tillader den. */
+export function agentExportAllowed(settings: Pick<Settings, "agentExport">, policy: Pick<Policy, "agentExport">): boolean {
+  return !!settings.agentExport && policy.agentExport !== false;
 }
 
 /** Den søgetjeneste, der faktisk bruges: politikkens, hvis den er låst, ellers brugerens. */

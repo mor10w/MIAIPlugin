@@ -362,6 +362,9 @@ export class ExcelAdapter implements HostAdapter {
           case "freezeRows":
             if (!has("1.7")) fail(i, "Kræver ExcelApi 1.7");
             return undefined;
+          case "saveSheet":
+            if (!opts.exportSheet) fail(i, "Eksport kræver MIAI Bridge (Indstillinger → Eksport)");
+            return undefined;
           case "appendRows":
           case "deleteRows":
           case "deleteEmptyRows":
@@ -535,6 +538,40 @@ export class ExcelAdapter implements HostAdapter {
         }
       });
       await ctx.sync();
+      // saveSheet (tillæg ADR-0012): arket læses og eksporteres som .xlsx via bridgen.
+      // Det sker efter ændringerne, så filen viser arket med de udførte handlinger.
+      for (let i = 0; i < actions.length; i++) {
+        const a = actions[i];
+        if (a.action !== "saveSheet" || !results[i].ok) continue;
+        try {
+          if (!opts.exportSheet) throw new Error("Eksport kræver MIAI Bridge (Indstillinger → Eksport)");
+          const ws = a.sheet ? ctx.workbook.worksheets.getItem(a.sheet) : sheet;
+          const used = ws.getUsedRangeOrNullObject(true);
+          if (!used) throw new Error("Arket har ingen data");
+          used.load("values,formulas,numberFormat,columnCount");
+          const widths = Array.from({ length: Math.min(used.columnCount, 256) }, (_, c) => {
+            const column = used.getColumn(c);
+            column.format.load("columnWidth");
+            return column;
+          });
+          await ctx.sync();
+          if (used.isNullObject) throw new Error("Arket har ingen data");
+          const path = await opts.exportSheet({
+            fileName: a.fileName,
+            folder: "desktop",
+            name: a.sheet ?? sheetName,
+            address: splitAddress(used.address).range,
+            values: used.values as (string | number | boolean | null)[][],
+            formulas: used.formulas as string[][],
+            numberFormats: used.numberFormat as string[][],
+            // Skjulte kolonner (bredde 0) springes over, så de får standardbredden i den nye fil.
+            columnWidths: widths.map((c) => c.format.columnWidth).filter((w) => Number.isFinite(w) && w >= 1),
+          });
+          results[i] = { ok: true, count: 1, detail: path };
+        } catch (e) {
+          fail(i, e instanceof Error ? e.message : String(e));
+        }
+      }
       for (const c of created) c.name = c.table.name;
       for (const c of charts) c.name = c.chart.name;
       for (const c of condFormats) c.id = c.cf.id;

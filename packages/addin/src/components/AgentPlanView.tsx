@@ -16,7 +16,7 @@ import {
 } from "@fluentui/react-components";
 import { ArrowUndo16Regular, CheckmarkCircle16Regular, ErrorCircle16Regular, Play16Filled } from "@fluentui/react-icons";
 import { ui } from "../theme";
-import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext } from "@miai/shared";
+import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext, type ExportSheetRequest } from "@miai/shared";
 import type { AgentOutcome, HostAdapter } from "../hosts/types";
 import { useI18n, type T } from "../i18n";
 
@@ -138,6 +138,8 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return a.rows === 0 ? t("agentAct_unfreeze") : t("agentAct_freezeRows", { n: a.rows });
     case "runScript":
       return t("agentAct_runScript", { description: clip(a.description, 200) });
+    case "saveSheet":
+      return a.sheet ? t("agentAct_saveSheetNamed", { sheet: a.sheet, fileName: a.fileName }) : t("agentAct_saveSheet", { fileName: a.fileName });
   }
 }
 
@@ -153,6 +155,7 @@ export function AgentPlanView({
   ctx,
   adapter,
   scripts = false,
+  exportSheet,
   onRetry,
 }: {
   plan: AgentPlan;
@@ -160,12 +163,14 @@ export function AgentPlanView({
   adapter: HostAdapter;
   /** Kodetilstanden er slået til og tilladt (ADR-0017). */
   scripts?: boolean;
+  /** Eksport af et ark som .xlsx (tillæg ADR-0012); leveres kun med bridge. */
+  exportSheet?: (data: ExportSheetRequest) => Promise<string>;
   /** Et script fejlede: lad modellen rette det med fejlbeskeden. */
   onRetry?: (retry: { error: string; code: string }) => void;
 }) {
   const { t } = useI18n();
   const s = useStyles();
-  const checked = useMemo(() => checkPlan(plan, ctx, { scripts }), [plan, ctx, scripts]);
+  const checked = useMemo(() => checkPlan(plan, ctx, { scripts, export: !!exportSheet }), [plan, ctx, scripts, exportSheet]);
   const [selected, setSelected] = useState<boolean[]>(() => checked.map((c) => !c.problem));
   const canTrack = adapter.agentTracking?.() ?? false;
   const [track, setTrack] = useState(canTrack);
@@ -181,7 +186,7 @@ export function AgentPlanView({
       const outcome = await adapter.applyAgent!(
         ran.map((i) => checked[i].action),
         ctx,
-        { trackChanges: track, scripts },
+        { trackChanges: track, scripts, exportSheet },
       );
       setPhase({ kind: "done", outcome, ran });
     } catch (err) {

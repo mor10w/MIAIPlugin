@@ -9,9 +9,10 @@ export const AuditEntry = z.object({
   ts: z.string(),
   /**
    * task = en opgavekørsel; models = henting af modeller fra /v1/models; search = web-søgning (ADR-0010);
-   * index = indeksering af mapper (F15); retrieve = opslag i vidensindekset (F15).
+   * index = indeksering af mapper (F15); retrieve = opslag i vidensindekset (F15);
+   * export = et ark gemt som .xlsx-fil (tillæg ADR-0012; host = mappen, fx "desktop").
    */
-  kind: z.enum(["task", "models", "search", "index", "retrieve"]),
+  kind: z.enum(["task", "models", "search", "index", "retrieve", "export"]),
   /** Opgave-id (fx "grammar"), kun ved kind=task. */
   task: z.string().max(80).optional(),
   /** Endpointens host inkl. port, fx "127.0.0.1:11434". */

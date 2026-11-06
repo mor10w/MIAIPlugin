@@ -1,6 +1,7 @@
 import type {
   AuditEntry,
   Endpoint,
+  ExportSheetRequest,
   HealthInfo,
   KnowledgeStatus,
   ProbeResult,
@@ -76,6 +77,11 @@ export class BridgeBackend implements Backend {
   }
   audit() {
     return fetch("/api/audit", { headers: H }).then((r) => json<AuditEntry[]>(r));
+  }
+
+  /** Eksport af et ark som .xlsx (tillæg ADR-0012). Bridgen kaster BridgeError, fx 409 ved eksisterende fil. */
+  exportSheet(data: ExportSheetRequest) {
+    return fetch("/api/export", { method: "POST", headers: H, body: JSON.stringify(data) }).then((r) => json<{ ok: true; path: string }>(r));
   }
 
   readonly knowledge: KnowledgeApi = {

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
 import {
@@ -9,6 +9,7 @@ import {
   isUrlAllowed,
   Policy,
   Settings,
+  ExportSheetRequest,
   TaskRequest,
   toTaskView,
   UserTaskFile,
@@ -24,6 +25,7 @@ import { appendAudit, auditFile, readAuditTail } from "./audit.js";
 import { PolicyError, type ConfigStore } from "./config.js";
 import { invalidateUserTasks, loadUserTasks, mergedCatalog, userTasksDir } from "./userTasks.js";
 import { tokenMatches } from "./identity.js";
+import { buildXlsx, exportPath } from "./export.js";
 import { runTask } from "./runner.js";
 import { folderAllowed, KnowledgeIndex } from "./knowledge/index.js";
 import { openFile } from "./knowledge/open.js";
@@ -270,6 +272,41 @@ export async function buildServer({
 
   // --- Audit-log (kun metadata) ----------------------------------------------
   app.get("/api/audit", async () => readAuditTail(auditFile(store.dir), 100));
+
+  // --- Eksport af et ark som .xlsx (tillæg ADR-0012) --------------------------
+  // Mappen kommer fra et fast enum (aldrig fra brugeren), filnavnet valideres mod
+  // EXPORT_FILE_NAME, der er ingen overskrivning (409), og kroppens loft hæves for
+  // denne rute (standard er 2 MB; et stort ark med lange celler kan være over).
+  app.post("/api/export", { config: { bodyLimit: 16 * 1024 * 1024 } }, async (req, reply) => {
+    const parsed = ExportSheetRequest.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const started = Date.now();
+    let path: string;
+    try {
+      path = exportPath(parsed.data.fileName, parsed.data.folder);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    if (existsSync(path)) {
+      return reply.code(409).send({ error: "Filen findes allerede – vælg et andet navn.", code: "EXISTS" });
+    }
+    // Forkert data (fx for mange celler) er en klientfejl – 400, ikke 500.
+    let buf: Buffer;
+    try {
+      buf = await buildXlsx(parsed.data);
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    try {
+      mkdirSync(dirname(path), { recursive: true }); // mappen skal eksistere (fx på en ny profil)
+      writeFileSync(path, buf);
+    } catch (err) {
+      if (store.getSettings().auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "export", host: parsed.data.folder, status: "error" });
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+    if (store.getSettings().auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "export", host: parsed.data.folder, status: "ok", durationMs: Date.now() - started });
+    return { ok: true, path };
+  });
 
   // --- Lokal RAG (F15, ADR-0013) ---------------------------------------------
   app.get("/api/knowledge", async () => knowledge.getStatus());

@@ -339,6 +339,37 @@ describe("agent i PowerPoint og Excel", () => {
     expect(isDestructive(alone.actions[0])).toBe(true);
   });
 
+  it("checkPlan (Excel): saveSheet kræver eksport og validerer filnavnet", () => {
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "saveSheet", fileName: "Svar 2026.xlsx", reason: "" },
+        { action: "saveSheet", fileName: "../evil.xlsx", sheet: "Data", reason: "" },
+        { action: "saveSheet", fileName: "fil.txt", reason: "" },
+      ],
+    });
+    // Eksport er fra (eller der er ingen bridge): handlingen findes, men kan ikke bruges.
+    expect(checkPlan(plan, { host: "excel", text: "" }).map((c) => c.problem)).toEqual(["no-bridge", "no-bridge", "no-bridge"]);
+    // Med eksport valideres navnet (ingen stipelementer, .xlsx-påliggende).
+    expect(checkPlan(plan, { host: "excel", text: "" }, { export: true }).map((c) => c.problem)).toEqual([undefined, "invalid", "invalid"]);
+    // Kun i Excel.
+    expect(checkPlan(plan, { host: "word", text: "" }, { export: true })[0].problem).toBe("wrong-host");
+    // Ikke destruktiv – den ændrer ikke arbejdsbogs, men skriver en ny fil.
+    expect(isDestructive(plan.actions[0])).toBe(false);
+  });
+
+  it("prompten: saveSheet vises kun, når agentExport=on", () => {
+    const req = (extra: Record<string, string> = {}) =>
+      TaskRequest.parse({ context: { host: "excel", text: "", address: "Ark1!A1" }, params: { prompt: "Gem arket som fil", ...extra } });
+    expect(agent.buildMessages(req())[0].content).not.toContain("saveSheet {fileName");
+    expect(agent.buildMessages(req({ agentExport: "on" }))[0].content).toContain("saveSheet {fileName");
+    // Word-prompten får aldrig eksporten.
+    const word = agent.buildMessages(
+      TaskRequest.parse({ context: { host: "word", text: doc, isWholeDocument: true }, params: { prompt: "s", agentExport: "on" } }),
+    );
+    expect(word[0].content).not.toContain("saveSheet");
+  });
+
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {
     expect(rangeBox("Ark1!$B$2:D4")).toEqual({ r0: 1, c0: 1, r1: 3, c1: 3 });
     expect(rangeBox("AA10")).toEqual({ r0: 9, c0: 26, r1: 9, c1: 26 });

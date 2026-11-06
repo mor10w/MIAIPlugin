@@ -23,6 +23,7 @@ import {
   diagramToSvg,
   formatForView,
   agentScriptsAllowed,
+  agentExportAllowed,
   parseTsv,
   stripEmphasis,
   type AgentPlan,
@@ -30,6 +31,7 @@ import {
   type ApplyMode,
   type DiagramResult,
   type DocContext,
+  type ExportSheetRequest,
   type FormulaResult,
   type GrammarResult,
   type SlidesResult,
@@ -195,10 +197,23 @@ export function ActionsTab({
 
   // Kodetilstand (ADR-0017): slået til af brugeren og tilladt af politikken.
   const [scripts, setScripts] = useState(false);
+  // Eksport af et ark som .xlsx (tillæg ADR-0012): kun bridgen kan skrive filer, og den skal
+  // være slået til og tilladt af politikken – ellers er handlingen ikke tilgængelig.
+  const [exportSheet, setExportSheet] = useState<((data: ExportSheetRequest) => Promise<string>) | undefined>();
   useEffect(() => {
     api.settings().then(
-      (v) => setScripts(agentScriptsAllowed(v.settings, v.policy)),
-      () => setScripts(false),
+      (v) => {
+        setScripts(agentScriptsAllowed(v.settings, v.policy));
+        setExportSheet(
+          api.mode === "bridge" && agentExportAllowed(v.settings, v.policy)
+            ? (d: ExportSheetRequest): Promise<string> => api.exportSheet!(d).then((r) => r.path)
+            : undefined,
+        );
+      },
+      () => {
+        setScripts(false);
+        setExportSheet(undefined);
+      },
     );
   }, [api, taskId]);
 
@@ -399,6 +414,7 @@ export function ActionsTab({
                 ctx={ctxRef.current}
                 adapter={adapter}
                 scripts={scripts}
+                exportSheet={exportSheet}
                 onRetry={(r) => void run({ previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900) })}
               />
             ) : isDesign && state.status === "done" && state.result !== undefined && ctxRef.current ? (
