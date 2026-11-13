@@ -176,6 +176,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     HostType: { Word: "Word", Excel: "Excel", PowerPoint: "PowerPoint", Outlook: "Outlook" },
     CoercionType: { Text: "text", Html: "html" },
     AsyncResultStatus: { Succeeded: "succeeded", Failed: "failed" },
+    GoToType: { Index: "Index" },
     EventType: { OfficeThemeChanged: "officeThemeChanged" },
     context: strict("Office.context", {
       displayLanguage: o.displayLanguage ?? "da-DK",
@@ -183,6 +184,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       requirements: { isSetSupported: (name: string, v = "1.1") => versionAtLeast(o.apiSets?.[name], v) },
       mailbox: { item: mailItem },
       document: strict("Office.context.document", {
+        goToByIdAsync: (id: number, type: string, cb: (r: unknown) => void) => {
+          record({ kind: "goTo", id, type });
+          cb({ status: "succeeded" });
+        },
         getSelectedDataAsync: (_t: string, cb: (r: unknown) => void) => cb({ status: "succeeded", value: selection }),
         addHandlerAsync: (type: string, handler: (e: unknown) => void, cb?: (r: unknown) => void) => {
           if (type === "officeThemeChanged") themeHandlers.push(handler);
@@ -310,6 +315,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           change("deleteParagraph", { text: p.text });
           paras = paras.filter((x) => x !== p);
         },
+        select() {
+          record({ kind: "select", paragraph: paras.indexOf(p) + 1, text: p.text });
+        },
         getRange: () => wholeParagraph(p),
         search: (t: string) => search([p], t),
       };
@@ -343,6 +351,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       const get = () => p.text.slice(start, start + len);
       return strict("Word.Range(search)", {
         load() {},
+        select() {
+          record({ kind: "select", text: get() });
+        },
         get text() {
           return get();
         },
@@ -701,6 +712,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
           getRow: (i: number) => rng(r0 + i, c0, 1, cols),
           getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+          select() {
+            record({ kind: "select", address: addr(r0, c0, rows, cols) });
+          },
           dataValidation: strict("Excel.DataValidation", {
             load() {},
             get rule() {
@@ -926,6 +940,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           }),
         });
       const worksheet = strict("Excel.Worksheet", {
+        activate() {
+          record({ kind: "activate", sheet });
+        },
         get name() {
           return sheet;
         },

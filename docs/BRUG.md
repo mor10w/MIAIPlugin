@@ -210,6 +210,7 @@ Knappen **AI-assistent** findes derefter i mailen og i udkastet.
 
 Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument som kontekst** (til som udgangspunkt) giver modellen din aktuelle markering – i Excel dit markerede område – med. De seneste 20 beskeder medsendes som historik. Svar kan indsættes **efter** markeringen, **erstattes** eller indsættes **som kommentar**. **Ny samtale** nulstiller historikken. Enter sender, Shift+Enter linjeskift.
 
+- **Klikbare henvisninger**: i Excel bliver celleadresser i et svar (`C2:C5`, `B7`, `Budget!B2`) til links, der markerer cellerne og skifter til arket; i PowerPoint går "slide 3" til sliden. En enkelt celle linkes kun, når den ligger inden for arkets data, så "Q1 2026" ikke bliver et link. Adresser i kodeblokke linkes ikke.
 - **Figurer i chatten**: Hvis svaret indeholder et diagram (` ```mermaid `) eller en selvstændig SVG (```svg), vises det som billede i task pane, og knappen **Indsæt som billede** indsætter det – i Word som inline-billede ved markeringen, i PowerPoint som billedfyldt rektangel på den valgte slide (PowerPointApi 1.8). Knappen finder også figurer, modellen har gærdat sløjt (fx SVG under ` ```xml `, en afbrudt blok eller rå `<svg>`-markup uden gærde). Typiske diagramfejl fra små modeller (etiketter med parenteser uden anførselstegn, `<b>`/`<i>` i etiketterne) rettes automatisk. Kan diagrammet stadig ikke tegnes, står fejlen under svaret, og **Bed modellen rette diagrammet** sender den til modellen.
 - **Web-søgning**: Modellen kan selv søge online, når den mangler aktuelle oplysninger (indstillingen *Web-søgning*, fra som udgangspunkt). Undervejs vises "Søger på webbet: …", og svaret citerer sine kilder. Søgeresultater er utroværdig input og behandles som data – kritiske fakta bør verificeres.
 
@@ -227,7 +228,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
      - **Flere ark:** agenten kender alle ark i projektmappen (navn, brugt område og overskrifter) og kan skrive på et andet ark, oprette et nyt ark og omdøbe et ark, fx *"lav et nyt ark med den samlede omsætning"*. Fortryd dækker alle berørte ark. Værdierne ser den kun for markeringen.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
    - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
-2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
+2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført. **Vis i dokumentet** under en handling markerer det sted, den gælder (celler, tabel, afsnit, tekst eller slide), uden at ændre noget.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
    - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
    - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.

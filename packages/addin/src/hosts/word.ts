@@ -1,3 +1,4 @@
+import type { DocRef } from "../refs";
 import {
   minimalEdit,
   occurrences,
@@ -219,6 +220,23 @@ export class WordAdapter implements HostAdapter {
   }
   agentTracking(): boolean {
     return has("1.4");
+  }
+
+  /** Markerer afsnittet eller teksten i dokumentet (#22). Ændrer intet. */
+  async goTo(ref: DocRef): Promise<void> {
+    await Word.run(async (ctx) => {
+      const scope = ctx.document.body.getRange();
+      if (ref.paragraph) {
+        const paras = scope.paragraphs;
+        paras.load("items");
+        await ctx.sync();
+        paras.items[ref.paragraph - 1]?.select();
+      } else if (ref.find) {
+        const hits = await this.find(ctx, scope, ref.find.slice(0, 255));
+        hits[0]?.select();
+      }
+      await ctx.sync();
+    });
   }
 
   /**

@@ -1,5 +1,6 @@
 import { fitGrid, numberedRows, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
+import type { DocRef } from "../refs";
 import { runExcelScript } from "../script";
 import { FORMAT_PROPS } from "./excelFormats";
 import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
@@ -408,6 +409,27 @@ export class ExcelAdapter implements HostAdapter {
         });
     };
     return { results, undo, undoKind: "cells" };
+  }
+
+  /** Markerer cellerne eller tabellen og skifter til arket (#22). Ændrer intet. */
+  async goTo(ref: DocRef, dc?: DocContext): Promise<void> {
+    await Excel.run(async (ctx) => {
+      let range: Excel.Range;
+      if (ref.table) range = ctx.workbook.tables.getItem(ref.table).getRange();
+      else if (ref.address) {
+        const onSheet = ref.address.includes("!");
+        const active = dc?.address?.includes("!") ? splitAddress(dc.address).sheet : undefined;
+        const ws = onSheet
+          ? ctx.workbook.worksheets.getItem(splitAddress(ref.address).sheet)
+          : active
+            ? ctx.workbook.worksheets.getItem(active)
+            : ctx.workbook.worksheets.getActiveWorksheet();
+        range = ws.getRange((onSheet ? splitAddress(ref.address).range : ref.address).replace(/\$/g, ""));
+      } else return;
+      range.worksheet.activate();
+      range.select();
+      await ctx.sync();
+    });
   }
 
   /**

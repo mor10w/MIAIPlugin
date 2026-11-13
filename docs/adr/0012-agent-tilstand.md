@@ -131,3 +131,9 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - **Virker uden tool calling:** læsningen er en del af JSON-planen, så små modeller uden værktøjskald kan bruge den.
 - **Rettelse af fejlede handlinger:** fejler faste handlinger ved udførelsen (fx en kolonne, der ikke findes, eller en formelfejl), kan fejlene og de fejlede handlinger sendes til modellen. Prompten siger, at resten er udført, og at kun rettelser skal returneres; dokumentets kontekst hentes igen. Scripts rettes som før (de rulles tilbage og køres forfra).
 - **Mangler:** Word og PowerPoint har ingen læsninger, fordi agenten dér ser hele dokumentet eller markeringen med afsnit; modellen ser heller ikke automatisk resultatet af en vellykket plan (det sker via samtalens historik i chatten, #19).
+
+**Klikbare henvisninger (#22):**
+- **I svar:** celleadresser (Excel) og slidenumre (PowerPoint) i renderet Markdown bliver knapper, der viser stedet (`adapter.goTo`). De findes i tekstnoder uden for kode, links og figurer (`refs.ts`). Områder og adresser med arknavn linkes altid; en enkelt celle kun inden for arkets brugte område. Chat-prompten beder modellen pege på celler og slides med adresse og nummer.
+- **I planen:** *Vis i dokumentet* markerer handlingens mål (`targetOf`): celler eller tabel i Excel, slide i PowerPoint, tekst eller afsnit i Word. Afsnitsnumre vises kun, når planen gælder hele dokumentet.
+- Navigation ændrer intet i dokumentet, og fejl (fx et ark, der er slettet) ignoreres stille.
+- **Mangler:** afsnitshenvisninger i Words chatsvar (chatten ser ikke afsnitsnumre).

@@ -50,7 +50,8 @@ import { DesignPreview } from "./DesignPreview";
 import type { AgentRequest } from "./ChatTab";
 import { ApplyBar } from "./ApplyBar";
 import { EmptyState, IconTile, SectionLabel, TextSkeleton, useKitStyles } from "./kit";
-import { Markdown } from "./Markdown";
+import { Markdown, type DocRefs } from "./Markdown";
+import { useDocRefs } from "../useDocRefs";
 
 /** Søgefeltet vises, når der er flere opgaver end dette. */
 const SEARCH_THRESHOLD = 8;
@@ -196,6 +197,8 @@ export function ActionsTab({
 
   // Kodetilstand og eksport: slået til af brugeren og tilladt af politikken.
   const { scripts, exportSheet } = useAgentOptions(taskId);
+  // Henvisninger til celler og slides i svar kan klikkes (#22). Konteksten er den, opgaven sidst kørte med.
+  const docRefs = useDocRefs(adapter, state.status === "idle" ? null : ctxRef.current);
 
   /** Agentens færdige plan (efter evt. læse-runder), og om den er undervejs. */
   const [agentPlan, setAgentPlan] = useState<AgentPlan>();
@@ -417,7 +420,7 @@ export function ActionsTab({
             ) : isDesign && state.status === "done" && state.result !== undefined && ctxRef.current ? (
               <DesignPreview key={JSON.stringify(state.result)} plan={state.result as DesignPlan} ctx={ctxRef.current} adapter={adapter} />
             ) : hasResult && !isAgent && !isDesign ? (
-              <ResultView task={task} format={format} text={shownText} result={state.result} />
+              <ResultView task={task} format={format} text={shownText} result={state.result} refs={docRefs} />
             ) : (
               <TextSkeleton label={t("working")} />
             )}
@@ -439,11 +442,11 @@ export function ActionsTab({
   );
 }
 
-function ResultView({ task, format, text, result }: { task: TaskView; format?: string; text: string; result: unknown }) {
+function ResultView({ task, format, text, result, refs }: { task: TaskView; format?: string; text: string; result: unknown; refs?: DocRefs }) {
   const s = useStyles();
   const { t } = useI18n();
   if (format === "tsv") return <TsvPreview text={text} />;
-  if (format) return format === "markdown" ? <Markdown text={text} /> : <Text className={s.plain}>{text}</Text>;
+  if (format) return format === "markdown" ? <Markdown text={text} refs={refs} /> : <Text className={s.plain}>{text}</Text>;
   if (!result) return null;
   if (task.id === "grammar") {
     const r = result as GrammarResult;

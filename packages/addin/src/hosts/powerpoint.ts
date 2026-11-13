@@ -1,3 +1,4 @@
+import type { DocRef } from "../refs";
 import {
   applyEdits,
   minimalEdit,
@@ -53,6 +54,16 @@ const H = 540;
 
 export class PowerPointAdapter implements HostAdapter {
   readonly host = "powerpoint" as const;
+
+  /** Går til sliden (#22). Ændrer intet. */
+  goTo(ref: DocRef): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!ref.slide) return resolve();
+      Office.context.document.goToByIdAsync(ref.slide, Office.GoToType.Index, (r) =>
+        r.status === Office.AsyncResultStatus.Succeeded ? resolve() : reject(new Error(r.error?.message ?? "Kunne ikke gå til sliden")),
+      );
+    });
+  }
 
   supports(mode: ApplyMode): boolean {
     if (mode === "newSlides" || mode === "diagram") return has("1.4");

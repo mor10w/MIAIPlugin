@@ -4,6 +4,12 @@ import { mdToSafeHtml } from "../markdown";
 import { ui } from "../theme";
 import { mermaidToSvg } from "../mermaid";
 import { sanitizeSvg } from "../svg";
+import { linkifyRefs, type DocRef, type RefMatch } from "../refs";
+
+export interface DocRefs {
+  find: (text: string) => RefMatch[];
+  onClick: (ref: DocRef) => void;
+}
 
 const useStyles = makeStyles({
   md: {
@@ -31,6 +37,18 @@ const useStyles = makeStyles({
       border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
     },
     "& a": { color: tokens.colorBrandForegroundLink },
+    // Henvisninger til celler og slides ligner links, men er knapper (de navigerer i dokumentet).
+    "& .docref": {
+      font: "inherit",
+      padding: 0,
+      border: "none",
+      background: "none",
+      cursor: "pointer",
+      color: tokens.colorBrandForegroundLink,
+      textDecorationLine: "underline",
+      textDecorationStyle: "dotted",
+      ":hover": { textDecorationStyle: "solid" },
+    },
     "& > :last-child": { marginBottom: 0 },
     "& .figure img": { maxWidth: "100%", height: "auto" },
   },
@@ -52,10 +70,13 @@ function svgToDataUrl(svg: string): string {
 export function Markdown({
   text,
   onDiagramError,
+  refs,
 }: {
   text: string;
   /** Et mermaid-diagram kunne ikke tegnes (heller ikke efter reparation) – med mermaids fejl. */
   onDiagramError?: (error: string | null) => void;
+  /** Henvisninger til steder i dokumentet (#22): `find` udpeger dem i teksten, `onClick` viser stedet. */
+  refs?: DocRefs;
 }) {
   const s = useStyles();
   const ref = useRef<HTMLDivElement>(null);
@@ -64,10 +85,15 @@ export function Markdown({
   const onErrorRef = useRef(onDiagramError);
   onErrorRef.current = onDiagramError;
 
+  const refsRef = useRef(refs);
+  refsRef.current = refs;
+
   useEffect(() => {
     const root = ref.current;
     if (!root) return;
     let cancelled = false;
+    // Henvisninger gøres klikbare i den renderede tekst (ikke i kode, links og figurer).
+    if (refsRef.current) linkifyRefs(root, refsRef.current.find);
 
     const replaceBlock = (block: Element, node: Node) => {
       if (!block.isConnected) return;
@@ -125,6 +151,11 @@ export function Markdown({
     };
   }, [text]);
 
+  // Klik på en henvisning (knapper lavet af linkifyRefs) viser stedet i dokumentet.
+  const onClick = (e: React.MouseEvent) => {
+    const data = (e.target as HTMLElement).closest<HTMLElement>("button.docref")?.dataset.ref;
+    if (data) refsRef.current?.onClick(JSON.parse(data) as DocRef);
+  };
   // eslint-disable-next-line no-restricted-syntax -- mdToSafeHtml renser modellens Markdown med DOMPurify.
-  return <div ref={ref} className={s.md} dangerouslySetInnerHTML={{ __html: mdToSafeHtml(text) }} />;
+  return <div ref={ref} className={s.md} onClick={onClick} dangerouslySetInnerHTML={{ __html: mdToSafeHtml(text) }} />;
 }

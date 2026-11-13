@@ -6,6 +6,7 @@ import {
   Caption1,
   Checkbox,
   Divider,
+  Link,
   MessageBar,
   MessageBarBody,
   Switch,
@@ -16,6 +17,7 @@ import {
 } from "@fluentui/react-components";
 import { ArrowUndo16Regular, CheckmarkCircle16Regular, ErrorCircle16Regular, Play16Filled } from "@fluentui/react-icons";
 import { ui } from "../theme";
+import { targetOf } from "../refs";
 import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext, type ExportSheetRequest } from "@miai/shared";
 import type { AgentOutcome, HostAdapter } from "../hosts/types";
 import { useI18n, type T } from "../i18n";
@@ -35,6 +37,7 @@ const useStyles = makeStyles({
   itemText: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalXXS, minWidth: 0, flex: 1, paddingTop: tokens.spacingVerticalXS },
   what: { overflowWrap: "anywhere" },
   muted: { color: tokens.colorNeutralForeground3 },
+  show: { fontSize: tokens.fontSizeBase200, alignSelf: "flex-start" },
   code: {
     marginTop: tokens.spacingVerticalXXS,
     "& summary": { cursor: "pointer", color: tokens.colorBrandForeground1, fontSize: tokens.fontSizeBase200 },
@@ -270,6 +273,8 @@ export function AgentPlanView({
             {checked.map((c, i) => {
               const r = resultFor(i);
               const label = describeAction(c.action, t, ctx);
+              // Stedet, handlingen gælder, kan vises i dokumentet før den udføres (#22).
+              const target = c.problem ? undefined : targetOf(c.action, ctx);
               return (
                 <li key={i} className={s.item}>
                   <Checkbox
@@ -280,6 +285,11 @@ export function AgentPlanView({
                   />
                   <span className={s.itemText}>
                     <Text className={s.what}>{label}</Text>
+                    {target && adapter.goTo && phase.kind !== "undone" && (
+                      <Link as="button" className={s.show} onClick={() => void adapter.goTo!(target, ctx).catch(() => {})}>
+                        {t("agentShowTarget")}
+                      </Link>
+                    )}
                     {c.action.reason && <Caption1 className={s.muted}>{c.action.reason}</Caption1>}
                     {c.action.action === "runScript" && (
                       <details className={s.code}>

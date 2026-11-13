@@ -10,6 +10,7 @@ import type {
   HostKind,
   SlidesResult,
 } from "@miai/shared";
+import type { DocRef } from "../refs";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 
@@ -100,6 +101,8 @@ export interface HostAdapter {
    * ændre noget. Returnerer tekst til modellen. Kun værter, hvor agenten ikke ser hele dokumentet.
    */
   readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
+  /** Viser et sted i dokumentet (#22): markerer cellerne, afsnittet eller teksten, eller går til sliden. Ændrer intet. */
+  goTo?(ref: DocRef, ctx?: DocContext): Promise<void>;
   /**
    * PowerPoint (ADR-0014): sætter designets master og slides ind. replace = fjern de nuværende
    * slides bagefter (kræver PowerPointApi 1.8, så det kan fortrydes).

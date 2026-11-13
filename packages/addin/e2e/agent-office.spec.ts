@@ -632,6 +632,37 @@ test("Excel (#25): et felt, der ikke findes, fravælges i planen; afviser Excel 
   expect(after.validations).toEqual({ "C2:C5": { decimal: { formula1: 0, operator: "GreaterThanOrEqualTo" } } });
 });
 
+test("agentens plan (#22): 'Vis i dokumentet' markerer handlingens mål i Excel uden at ændre noget", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Formaterer.",
+      actions: [
+        { action: "setNumberFormat", address: "C2:C5", format: "#,##0.00", reason: "" },
+        { action: "sortRange", target: "Salg", by: "Region", reason: "" },
+        { action: "freezeRows", rows: 1, reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  // To handlinger har et sted, der kan vises; frysning har ikke.
+  const show = tp.page.getByRole("button", { name: "Vis i dokumentet" });
+  await expect(show).toHaveCount(2);
+  await show.nth(0).click();
+  await show.nth(1).click();
+  await expect
+    .poll(() =>
+      tp.page.evaluate(() =>
+        (window as unknown as { __miai: { calls: { kind: string; address?: string }[] } }).__miai.calls
+          .filter((c) => c.kind === "select")
+          .map((c) => c.address),
+      ),
+    )
+    .toEqual(["Ark1!C2:C5", "Ark1!A1:C5"]);
+  expect(await sheet(tp.page)).toEqual(before);
+});
+
 type Deck = {
   id: string;
   layout: string;
@@ -743,4 +774,15 @@ test("PowerPoint før 1.8: slides slettes ikke (kan ikke fortrydes), og fortryd 
   await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
   await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
   expect((await deck(tp.page))[0].shapes[1].text).toBe("Q3 2026");
+});
+
+test("PowerPoint (#22): 'slide 2' i et chatsvar kan klikkes og går til sliden", async ({ open }) => {
+  const tp = await open({ host: "PowerPoint", apiSets: { PowerPointApi: "1.8" }, slides: SLIDES });
+  tp.model.reply = () => ({ stream: ["Prisen står på slide 2, og slideshowet har i alt to slides."] });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvor står prisen?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.locator("button.docref")).toHaveText(["slide 2"]);
+  await tp.page.getByRole("button", { name: "slide 2" }).click();
+  await expect.poll(async () => (await tp.find<{ id: number; type: string }>("goTo")) ?? null).toMatchObject({ id: 2, type: "Index" });
 });

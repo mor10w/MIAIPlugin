@@ -290,3 +290,30 @@ test("chat: et ønske, ordgenkendelsen ikke fanger, kan stadig udføres i samtal
   expect(last).toContain("Request: Kan priserne stilles pænere op?");
   expect(last).toContain("<material>");
 });
+
+test("agentens plan i Word (#22): 'Vis i dokumentet' markerer teksten eller afsnittet, handlingen gælder", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Retter prisen og gør noten til en overskrift.",
+      actions: [
+        { action: "replace", find: "499 kr", replace: "599 kr", reason: "" },
+        { action: "setStyle", paragraph: 5, style: "heading2", reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  const show = tp.page.getByRole("button", { name: "Vis i dokumentet" });
+  await expect(show).toHaveCount(2);
+  await show.nth(0).click();
+  await show.nth(1).click();
+  await expect
+    .poll(() =>
+      tp.page.evaluate(() =>
+        (window as unknown as { __miai: { calls: { kind: string; text?: string; paragraph?: number }[] } }).__miai.calls
+          .filter((c) => c.kind === "select")
+          .map((c) => ({ text: c.text, paragraph: c.paragraph })),
+      ),
+    )
+    .toEqual([{ text: "499 kr" }, { text: "Gammel note, der skal væk.", paragraph: 5 }]);
+});
