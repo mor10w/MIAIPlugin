@@ -115,3 +115,5 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 5. **Fortryd rører ikke filen.** Eksporten sker efter ændringerne i planen, så filen viser arket med de udførte handlinger. *Fortryd* gendanner arbejdsbogen, men filen forbliver – den er et nyt artefakt, som brugeren har bekræftet navnet på.
 
 **Test:** `shared` tester prompt-gating og `checkPlan` (no-bridge, ugyldige navne, forkert vært), og bridgen tester `exportPath` (traversal), `buildXlsx` (round-trip læst tilbage med exceljs) og ruten (200/409/400).
+
+**Chatten udfører selv (#19):** et ændringsønske i chatten (ordgenkendelse i `editIntent.ts`, eller knappen under et svar, der henviser til agenten) kører agent-opgaven og viser planen i samtalen med samme bekræft, udfør og fortryd. Historikken går med til agenten: en plan beskrives med sine handlinger og udfaldet (`historyContent`), så opfølgninger og rettelser kan forstås. Intet ændres uden godkendelse; kontakten *Må ændre dokumentet* slår det fra.

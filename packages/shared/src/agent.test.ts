@@ -377,6 +377,22 @@ describe("agent i PowerPoint og Excel", () => {
     expect(numberedRows("x", undefined)).toBe("x");
   });
 
+  it("samtalens historik går med til agenten, mellem systemprompten og det nye ønske (#19)", () => {
+    const msgs = agent.buildMessages(
+      TaskRequest.parse({
+        context: { host: "excel", text: "", table: "Navn\tBeløb", address: "Ark1!A1:B1" },
+        params: { prompt: "Nej, faldende i stedet" },
+        history: [
+          { role: "user", content: "Sortér efter beløb" },
+          { role: "assistant", content: "Sorterer stigende.\nOutcome:\n- Sortér Ark1 efter Beløb (stigende): done" },
+        ],
+      }),
+    );
+    expect(msgs.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
+    expect(msgs[2].content).toContain("Outcome:");
+    expect(msgs[3].content).toContain("Request: Nej, faldende i stedet");
+  });
+
   it("prompten viser slides med layout og figurer, og Excels tabeller og talformater", () => {
     const ppt = agent.buildMessages(
       TaskRequest.parse({

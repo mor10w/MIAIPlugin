@@ -74,6 +74,10 @@ const da = {
   agentSuggestTitle: "Vil du have ændringerne sat ind i dokumentet?",
   agentSuggestText: "Agenten foreslår konkrete handlinger, som du godkender én for én – først derefter ændres dokumentet.",
   agentSuggestCta: "Gør det med agenten",
+  chatAct: "Må ændre dokumentet",
+  chatActHint: "Beder du om en ændring, foreslår MIAI konkrete handlinger her i samtalen. Intet ændres, før du har godkendt dem.",
+  chatPlanning: "Planlægger ændringerne…",
+  agentRetryPrompt: "Ret scriptet ud fra fejlen, og prøv igen.",
   diagramErrorTitle: "Diagrammet kunne ikke tegnes",
   diagramFixCta: "Bed modellen rette diagrammet",
   diagramFixPrompt:
@@ -473,6 +477,10 @@ const en: Dict = {
   agentSuggestTitle: "Want to apply these changes to your document?",
   agentSuggestText: "The agent proposes concrete actions you approve one by one – only then is the document changed.",
   agentSuggestCta: "Do it with the agent",
+  chatAct: "May change the document",
+  chatActHint: "When you ask for a change, MIAI proposes concrete actions here in the conversation. Nothing changes until you approve them.",
+  chatPlanning: "Planning the changes…",
+  agentRetryPrompt: "Fix the script based on the error and try again.",
   diagramErrorTitle: "The diagram could not be drawn",
   diagramFixCta: "Ask the model to fix the diagram",
   diagramFixPrompt:

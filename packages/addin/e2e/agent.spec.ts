@@ -205,7 +205,9 @@ test("chat → agent: forslaget vises ved ændringsønsker, og chatsvaret følge
   await expect(tp.page.getByText("Vi mangler et afsnit om levering.")).toBeVisible();
   await expect(tp.page.getByRole("button", { name: "Gør det med agenten" })).toHaveCount(0);
 
-  // Et ændringsønske (med æ i starten – regression) giver forslaget.
+  // Med "Må ændre dokumentet" slået fra svarer chatten med tekst, og et ændringsønske
+  // (med æ i starten – regression) giver forslaget om at bruge agenten.
+  await tp.page.getByRole("switch", { name: "Må ændre dokumentet" }).click();
   tp.model.reply = () => ({ stream: ["## Levering\nVi leverer på **3 dage**."] });
   await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Ændr dokumentet, så det har et afsnit om levering");
   await tp.page.keyboard.press("Enter");
@@ -220,4 +222,71 @@ test("chat → agent: forslaget vises ved ændringsønsker, og chatsvaret følge
   await tp.page.getByRole("button", { name: "Kør" }).click();
   await expect(tp.page.getByText("Tilføjer afsnittet.")).toBeVisible();
   expect(tp.model.lastRequest!.messages[1].content).toContain("<material>\n## Levering\nVi leverer på **3 dage**.\n</material>");
+});
+
+test("chatten ændrer selv dokumentet: plan i samtalen, udførelse, og opfølgningen kender udfaldet (#19)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  await tp.tab("Chat");
+  const first = PARAS[1].text.split(" ").slice(0, 2).join(" ");
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Retter ordlyden i første afsnit.",
+      actions: [{ action: "replace", find: first, replace: "Ny begyndelse", reason: "Ønsket" }],
+    }),
+  });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Ændr begyndelsen af første afsnit");
+  await tp.page.keyboard.press("Enter");
+
+  // Planen står i samtalen – ikke på fanen Handlinger – og intet er ændret endnu.
+  await expect(tp.page.getByText("Retter ordlyden i første afsnit.")).toBeVisible();
+  await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Gør det med agenten" })).toHaveCount(0);
+  // Agent-opgaven blev brugt (JSON-plan med dokumentets afsnit), på dansk.
+  const sys = tp.model.lastRequest!.messages[0].content;
+  expect(sys).toContain("You are in agent mode");
+  expect(sys).toContain("Write summary and reasons in Danish");
+
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+
+  // Opfølgning: historikken indeholder den første plan og dens udfald.
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Ingen flere ændringer.", actions: [] }) });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Ret det tilbage til det gamle");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Ingen flere ændringer.")).toBeVisible();
+  const msgs = tp.model.lastRequest!.messages;
+  expect(msgs.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
+  expect(msgs[1].content).toBe("Ændr begyndelsen af første afsnit");
+  expect(msgs[2].content).toContain("Retter ordlyden i første afsnit.");
+  expect(msgs[2].content).toContain('"action":"replace"');
+  expect(msgs[2].content).toMatch(/Outcome:\n- .*: done/);
+  expect(msgs[3].content).toContain("Request: Ret det tilbage til det gamle");
+
+  // Et spørgsmål besvares stadig som almindelig tekst.
+  tp.model.reply = () => ({ stream: ["Dokumentet handler om levering."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad handler dokumentet om?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Dokumentet handler om levering.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).not.toContain("You are in agent mode");
+});
+
+test("chat: et ønske, ordgenkendelsen ikke fanger, kan stadig udføres i samtalen, når svaret henviser til agenten (#19)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  await tp.tab("Chat");
+  tp.model.reply = () => ({ stream: ["Det kan MIAI's agent gøre direkte i dokumentet: den kan stille priserne op som punkter."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Kan priserne stilles pænere op?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText(/stille priserne op som punkter/)).toBeVisible();
+
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Gør prisen til et punkt.", actions: [{ action: "setStyle", paragraph: 2, style: "bullet", reason: "Punkt" }] }),
+  });
+  await tp.page.getByRole("button", { name: "Gør det med agenten" }).click();
+  // Planen kommer i samtalen (fanen skifter ikke), og brugerens besked gentages ikke.
+  await expect(tp.page.getByText("Gør prisen til et punkt.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Udfør 1 handling" })).toBeVisible();
+  await expect(tp.page.getByText("Kan priserne stilles pænere op?")).toHaveCount(1);
+  const last = tp.model.lastRequest!.messages.at(-1)!.content;
+  expect(last).toContain("Request: Kan priserne stilles pænere op?");
+  expect(last).toContain("<material>");
 });

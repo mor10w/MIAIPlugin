@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button, Caption1, Switch, Text, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { ChatAdd20Regular, ChatSparkle20Regular, Flash20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
-import type { ApplyMode, ChatMessage, DocContext, SourceRef } from "@miai/shared";
+import type { AgentPlan, ApplyMode, ChatMessage, DocContext, SourceRef } from "@miai/shared";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
 import { useI18n } from "../i18n";
@@ -13,6 +13,8 @@ import { EmptyState, TextSkeleton, useKitStyles } from "./kit";
 import { Markdown } from "./Markdown";
 import { SourceList } from "./SourceList";
 import { looksLikeEditRequest } from "../editIntent";
+import { useAgentOptions } from "../useAgentOptions";
+import { AgentPlanView } from "./AgentPlanView";
 
 /** Chat → agent: brugerens ønske og chatsvaret, som agenten skal bruge som indhold. */
 export interface AgentRequest {
@@ -69,7 +71,9 @@ const useStyles = makeStyles({
   inputRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
   grow: { flex: 1, minWidth: 0 },
   footer: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
-  switch: { flex: 1, minWidth: 0 },
+  // Kontakterne må ikke klemmes sammen (teksterne overlappede i et smalt panel): de ombrydes til hver sin linje.
+  switch: { flexShrink: 0, maxWidth: "100%" },
+  footerEnd: { marginLeft: "auto" },
   muted: { color: tokens.colorNeutralForeground3 },
   /** Zone med apply-knapper + agent-forslag under det seneste chat-svar. */
   applyZone: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
@@ -84,11 +88,35 @@ const useStyles = makeStyles({
   },
 });
 
+/**
+ * En besked i samtalen. Et svar kan være en plan fra agenten (#19): den vises med bekræft, udfør og
+ * fortryd, og `log` (udfaldet) går med i historikken, så modellen ved, hvad der faktisk skete.
+ */
+type Message = ChatMessage & { model?: string; sources?: SourceRef[]; plan?: AgentPlan; planCtx?: DocContext; log?: string };
+
+/**
+ * Henviser svaret til agenten? Chat-prompten beder modellen om det, når brugeren vil have dokumentet
+ * ændret, så det fanger de ønsker, ordgenkendelsen (looksLikeEditRequest) ikke kender.
+ */
+export const refersToAgent = (answer: string) => /(?<![\p{L}])agent(?:en|ens)?(?![\p{L}])/iu.test(answer);
+
+/** Beskeden, som modellen ser den i historikken: en plan beskrives med sine handlinger og udfaldet. */
+export function historyContent(m: Message): string {
+  if (!m.plan) return m.content;
+  const actions = m.plan.actions.length ? `\nProposed actions (JSON): ${JSON.stringify(m.plan.actions).slice(0, 3_000)}` : "\n(no actions proposed)";
+  const outcome = m.log ? `\nOutcome:\n${m.log}` : "\nOutcome: not carried out yet – the user has not approved the plan.";
+  return `${m.content}${actions}${outcome}`.slice(0, 6_000);
+}
+
 export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAgent?: (req: AgentRequest) => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
-  const [messages, setMessages] = useState<(ChatMessage & { model?: string; sources?: SourceRef[] })[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  // Chatten kan selv ændre dokumentet (#19): et ændringsønske bliver til en plan i samtalen.
+  const canAct = adapter.supports("agent");
+  const [act, setAct] = useState(true);
+  const agentOpts = useAgentOptions(messages.length);
   const api = useBackend();
   // Søgning i egne mapper (F15): kun når bridgen har et aktivt vidensindeks.
   const [knowledgeOn, setKnowledgeOn] = useState(false);
@@ -107,6 +135,8 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const { state, start, stop } = useTask();
   const logRef = useRef<HTMLDivElement>(null);
   const running = state.status === "running";
+  /** Agenten er ved at lave en plan (svaret er JSON og vises først som plan, når det er færdigt). */
+  const [planning, setPlanning] = useState(false);
   /** Seneste brugermelding – afgør, om chatten foreslår agent-tilstanden. */
   const [lastUserPrompt, setLastUserPrompt] = useState("");
   /** Førstegangs-hint om apply-knapperne: vises, indtil brugeren har trykket en. */
@@ -115,13 +145,41 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [messages, state.text]);
 
-  const send = async (text = draft) => {
+  /**
+   * Sender en besked. `plan` tvinger en plan fra agenten (knappen under et svar, når ordgenkendelsen
+   * ikke fangede ønsket), `extra` er ekstra parametre til agenten (fejl fra et script, chatsvar som
+   * indhold), og `echo: false` gentager ikke brugerens besked i samtalen.
+   */
+  const send = async (text = draft, opts: { extra?: Record<string, string>; plan?: boolean; echo?: boolean } = {}) => {
     const prompt = text.trim();
     if (!prompt || running) return;
+    const extra = opts.extra ?? {};
     setDraft("");
-    const history = messages.map(({ role, content }) => ({ role, content }));
-    setMessages([...messages, { role: "user", content: prompt }]);
+    const history = messages.map((m) => ({ role: m.role, content: historyContent(m) }));
+    if (opts.echo !== false) setMessages([...messages, { role: "user", content: prompt }]);
     setLastUserPrompt(prompt);
+    // Et ønske om at ændre dokumentet: agenten laver en plan, som vises i samtalen. Intet ændres,
+    // før brugeren har godkendt den. Dokumentet hentes altid (planen skal pege på noget konkret).
+    if (canAct && act && (opts.plan || looksLikeEditRequest(prompt))) {
+      let ctx: DocContext;
+      try {
+        ctx = await adapter.getContext({ wholeDocumentFallback: true, structure: true, overview: "headers" });
+      } catch (err) {
+        setMessages((m) => [...m, { role: "assistant", content: (err as Error).message }]);
+        return;
+      }
+      ctxRef.current = ctx;
+      setLastCtx(ctx);
+      setPlanning(true);
+      const final = await start("agent", {
+        context: ctx,
+        params: { prompt, language: lang === "da" ? "Danish" : "English", ...extra },
+        history: history.slice(-12),
+      }).finally(() => setPlanning(false));
+      const plan = final.result as AgentPlan | undefined;
+      if (final.status === "done" && plan) setMessages((m) => [...m, { role: "assistant", content: plan.summary, model: final.model, plan, planCtx: ctx }]);
+      return;
+    }
     const ctx = useContext
       ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
       : { host: adapter.host, text: "", isWholeDocument: false };
@@ -179,18 +237,38 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 <Sparkle16Regular aria-hidden />
                 <Caption1>{m.model ?? "MIAI"}</Caption1>
               </div>
-              <Markdown
-                text={m.content}
-                onDiagramError={(err) =>
-                  setDiagramErrors((d) => {
-                    if ((d[i] ?? null) === err) return d;
-                    const next = { ...d };
-                    if (err) next[i] = err;
-                    else delete next[i];
-                    return next;
-                  })
-                }
-              />
+              {m.plan && m.planCtx ? (
+                <AgentPlanView
+                  plan={m.plan}
+                  ctx={m.planCtx}
+                  adapter={adapter}
+                  scripts={agentOpts.scripts}
+                  exportSheet={agentOpts.exportSheet}
+                  onOutcome={(log) => setMessages((all) => all.map((x, k) => (k === i ? { ...x, log } : x)))}
+                  onRetry={
+                    i === lastAssistant
+                      ? (r) =>
+                          void send(t("agentRetryPrompt"), {
+                            plan: true,
+                            extra: { previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900) },
+                          })
+                      : undefined
+                  }
+                />
+              ) : (
+                <Markdown
+                  text={m.content}
+                  onDiagramError={(err) =>
+                    setDiagramErrors((d) => {
+                      if ((d[i] ?? null) === err) return d;
+                      const next = { ...d };
+                      if (err) next[i] = err;
+                      else delete next[i];
+                      return next;
+                    })
+                  }
+                />
+              )}
               {diagramErrors[i] && (
                 <div className={s.agentSuggest}>
                   <span>
@@ -206,7 +284,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 </div>
               )}
               {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
-              {i === lastAssistant && !running && (
+              {i === lastAssistant && !running && !m.plan && (
                 <div className={s.applyZone}>
                   <ApplyBar
                     label={t("applyLabel")}
@@ -216,7 +294,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                     }}
                     copyText={m.content}
                   />
-                  {onUseAgent && adapter.supports("agent") && lastUserPrompt && looksLikeEditRequest(lastUserPrompt) && (
+                  {onUseAgent && canAct && lastUserPrompt && (looksLikeEditRequest(lastUserPrompt) || refersToAgent(m.content)) && (
                     <div className={s.agentSuggest}>
                       <span>
                         <Text weight="semibold">{t("agentSuggestTitle")}</Text>
@@ -227,7 +305,12 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                         size="small"
                         appearance="primary"
                         icon={<Flash20Regular />}
-                        onClick={() => onUseAgent({ prompt: lastUserPrompt, material: m.content })}
+                        // Må chatten ændre dokumentet, laves planen her i samtalen; ellers på fanen Handlinger.
+                        onClick={() =>
+                          act
+                            ? void send(lastUserPrompt, { plan: true, echo: false, extra: { material: m.content.slice(0, 3_900) } })
+                            : onUseAgent({ prompt: lastUserPrompt, material: m.content })
+                        }
                       >
                         {t("agentSuggestCta")}
                       </Button>
@@ -250,7 +333,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 {t("searching")}: {state.searchQuery}…
               </Caption1>
             )}
-            {state.text ? <Markdown text={state.text} /> : <TextSkeleton lines={2} label={t("working")} />}
+            {state.text && !planning ? <Markdown text={state.text} /> : <TextSkeleton lines={2} label={planning ? t("chatPlanning") : t("working")} />}
             {state.sources && <SourceList sources={state.sources} api={api.knowledge} />}
           </div>
         )}
@@ -282,7 +365,12 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
         </div>
         <div className={s.footer}>
           <Switch className={s.switch} label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(d.checked)} />
-          {knowledgeOn && <Switch label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
+          {knowledgeOn && <Switch className={s.switch} label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
+          {canAct && (
+            <Tooltip content={t("chatActHint")} relationship="description">
+              <Switch className={s.switch} label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
+            </Tooltip>
+          )}
           {lastCtx?.address && useContext ? (
             <Caption1 className={s.muted}>
               {t("contextSent")} {lastCtx.address}
@@ -291,6 +379,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
           {messages.length > 0 && (
             <Tooltip content={t("newChat")} relationship="label">
               <Button
+                className={s.footerEnd}
                 size="small"
                 appearance="subtle"
                 icon={<ChatAdd20Regular />}
