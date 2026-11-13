@@ -86,3 +86,15 @@ Til det, de faste værktøjer ikke kan, fx pivottabeller, datavalidering, navngi
   - netværk afvist;
   - et fejlende script rulles tilbage og rettes af modellen.
 - Tjekliste til rigtig Excel i UDVIKLING.md.
+
+## Tillæg: pivottabel og datavalidering som faste værktøjer (#25)
+
+Pivottabeller og datavalidering var de to mest almindelige grunde til at slå kodetilstanden til. De er nu faste værktøjer, så de virker med små modeller og med præcis fortryd:
+
+- **`addPivotTable {source, rows, columns?, values, destination}`** (ExcelApi 1.8): kilden er en tabel eller et område med overskrifter, felterne navngives med overskriftsteksten, og hver værdi kan opsummeres med sum, antal, gennemsnit, største eller mindste. Pivottabellen hører til destinationens ark og kan lægges på et ark, planen selv opretter.
+- **`setValidation {address, list | min/max, whole?}`** (ExcelApi 1.8): rulleliste med tilladte værdier eller et tal mellem to grænser.
+- **Validering før udførelse:** felter, der ikke er overskrifter i kilden, fravælges (`bad-field`), når overskrifterne kendes (tabeller og områder fra arkets første brugte række). En regel skal være enten liste eller talgrænse, og listeværdier må ikke indeholde komma.
+- **Udførelse én ad gangen:** hver pivottabel og regel synkroniseres for sig. Afviser Excel en af dem, fejler kun den handling, og en halvt oprettet pivottabel slettes igen.
+- **Fortryd:** pivottabellerne slettes, og området får sin tidligere valideringsregel tilbage (eller ingen).
+
+Kodetilstanden er fortsat til det, de faste værktøjer ikke dækker, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.

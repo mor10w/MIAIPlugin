@@ -136,6 +136,21 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_addChart", { type: t(`agentChart_${a.type}` as const), source: a.source }) + (a.title ? ` “${clip(a.title, 40)}”` : "");
     case "readRange":
       return t("agentAct_readRange", { address: a.address });
+    case "addPivotTable":
+      return t("agentAct_addPivotTable", {
+        source: a.source,
+        rows: [...a.rows, ...a.columns].join(", "),
+        values: a.values.map((v) => `${t(`agentPivot_${v.summarize}` as const)} ${v.field}`).join(", "),
+        destination: a.destination,
+      });
+    case "setValidation":
+      return a.list
+        ? t("agentAct_validationList", { address: a.address, values: clip(a.list.join(", "), 80) })
+        : t("agentAct_validationNumber", {
+            address: a.address,
+            kind: t(a.whole ? "agentValidationWhole" : "agentValidationDecimal"),
+            range: a.min !== undefined && a.max !== undefined ? `${a.min}–${a.max}` : a.min !== undefined ? `≥ ${a.min}` : `≤ ${a.max}`,
+          });
     case "addSheet":
       return t("agentAct_addSheet", { name: a.name });
     case "renameSheet":

@@ -223,6 +223,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
      - **Data:** skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område og sortér.
      - **Udseende:** giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat, tilpas kolonnebredden og brug betinget formatering (farveskala, datalinjer, fremhæv over/under en værdi, dubletter, top 10).
      - **Visning:** lav et diagram og frys overskriftsrækken.
+     - **Analyse og indtastning:** lav en pivottabel (fx *"omsætning pr. region"*, gerne på et nyt ark) og sæt datavalidering (en rulleliste med tilladte værdier eller et tal mellem to grænser).
      - **Flere ark:** agenten kender alle ark i projektmappen (navn, brugt område og overskrifter) og kan skrive på et andet ark, oprette et nyt ark og omdøbe et ark, fx *"lav et nyt ark med den samlede omsætning"*. Fortryd dækker alle berørte ark. Værdierne ser den kun for markeringen.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
    - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
@@ -246,7 +247,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
 - *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
 
-**Kodetilstand (Excel, avanceret).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx pivottabeller, datavalidering og navngivne områder.
+**Kodetilstand (Excel, avanceret).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
 - **Før kørslen:** du ser, hvad scriptet gør, og kan se koden.
 - **Sandkassen:** scriptet kører uden adgang til netværk, filer eller MIAI's indstillinger.
 - **Hvis det fejler:** arket sættes straks tilbage, og du kan bede modellen rette scriptet ud fra fejlen.
