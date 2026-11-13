@@ -145,3 +145,9 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - **Fortryd** er den samme som for de øvrige Word-handlinger: sessionens sporede ændringer afvises (WordApi 1.6), ellers gendannes indholdet fra øjebliksbilledet.
 - **Fra chatten:** Markdown-tabeller indsættes som HTML-tabeller (`insertHtml`), som Word gør til tabeller.
 - **Mangler:** kolonner kan ikke tilføjes eller slettes, og celler kan ikke flettes.
+
+**Markering og samtalehistorik i chatten (#26):**
+- **Markeringen** hentes med `adapter.selectionInfo()` (celleområde i Excel, antal ord i Word og PowerPoint) og opdateres ved `DocumentSelectionChanged` (ventetid 200 ms, så der ikke hentes for hvert museryk).
+- **Samtalen** gemmes i task panes `localStorage` under en nøgle afledt af dokumentets adresse (`Office.context.document.url`, hashet). Der gemmes kun tekst: rolle, indhold, model og for planer opsummering og udfald – ikke planens handlinger eller dokumentkontekst. Grænser: 40 beskeder og 60.000 tegn pr. dokument, 20 dokumenter (de ældste ryger ud).
+- **Fravalg:** indstillingen `chatHistory` (til som standard) og *Ny samtale*, der også sletter fra lageret. Dokumenter uden adresse huskes ikke, så der skrives intet i selve dokumentet.
+- **Overvejet og fravalgt:** at gemme samtalen i dokumentets egne indstillinger. Det ville følge filen til andre brugere og markere dokumentet som ændret.

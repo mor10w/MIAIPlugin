@@ -101,6 +101,11 @@ export interface HostAdapter {
    * ændre noget. Returnerer tekst til modellen. Kun værter, hvor agenten ikke ser hele dokumentet.
    */
   readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
+  /**
+   * Hvad er markeret lige nu (#26)? Vises ved chattens skrivefelt, så brugeren ved, hvad modellen får
+   * at se. null = intet markeret (så bruges hele dokumentet).
+   */
+  selectionInfo?(): Promise<SelectionInfo | null>;
   /** Viser et sted i dokumentet (#22): markerer cellerne, afsnittet eller teksten, eller går til sliden. Ændrer intet. */
   goTo?(ref: DocRef, ctx?: DocContext): Promise<void>;
   /**
@@ -123,3 +128,6 @@ export function truncate(text: string, maxChars = MAX_CONTEXT_CHARS): { text: st
   if (text.length <= maxChars) return { text };
   return { text: `${text.slice(0, maxChars)}\n[… afkortet]`, truncated: true, originalChars: text.length };
 }
+
+/** Den aktuelle markering: et celleområde (Excel) eller tekst af en vis længde (Word, PowerPoint). */
+export type SelectionInfo = { kind: "range"; address: string } | { kind: "text"; words: number };

@@ -268,6 +268,11 @@ export const Settings = z.object({
    */
   agentScripts: z.boolean().default(false),
   /**
+   * Chatten husker samtalen pr. dokument (#26) i task panes lager på maskinen. Kan slås fra, hvis
+   * samtaler om dokumenter ikke må ligge uden for dokumentet.
+   */
+  chatHistory: z.boolean().default(true),
+  /**
    * Agenten kan gemme et Excel-ark som .xlsx-fil (tillæg ADR-0012). Kræver bridge – direkte
    * tilstand har ingen eksekverer, der kan skrive filer. Slået FRA som standard og kan forbydes
    * af politikken, så organisationen styrer, om agenten må skrive filer på maskinen.

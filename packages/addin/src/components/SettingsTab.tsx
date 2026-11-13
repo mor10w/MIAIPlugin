@@ -484,6 +484,14 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
             {t("secPrivacy")}
           </AccordionHeader>
           <AccordionPanel className={s.panel}>
+            {/* Samtalen huskes pr. dokument (#26) i task panes lager på maskinen. */}
+            <Field hint={t("chatHistoryHint")}>
+              <Switch
+                label={t("chatHistory")}
+                checked={settings.chatHistory !== false}
+                onChange={(_, d) => setSettings({ ...settings, chatHistory: d.checked })}
+              />
+            </Field>
             {/* Kodetilstand (ADR-0017): fra som standard, kan forbydes af politikken. */}
             <Field hint={policy.agentScripts === false ? t("agentScriptsForbidden") : t("agentScriptsHint")}>
               <Switch

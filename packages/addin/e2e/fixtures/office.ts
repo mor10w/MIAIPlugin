@@ -52,6 +52,8 @@ export interface FakeOfficeOptions {
     }[];
   };
   displayLanguage?: string;
+  /** Dokumentets adresse (#26). Udeladt = ikke gemt endnu, så samtalen huskes ikke. */
+  documentUrl?: string;
   /** Outlook: mailen i læsetilstand (read) eller et udkast i skrivetilstand (compose). */
   mail?: { mode: "read" | "compose"; subject: string; from?: { name: string; email: string }; body: string; selection?: string; html?: boolean };
   /** PowerPoint med præsentationsmodel (agent-tilstand): slides med layout og figurer. */
@@ -99,6 +101,11 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   };
   const officeTheme = { ...THEMES[o.theme ?? "light"] };
   const themeHandlers: ((e: unknown) => void)[] = [];
+  /** Lyttere på markeringen (#26); __miai.select… ændrer markeringen og kalder dem. */
+  const selectionHandlers: ((e: unknown) => void)[] = [];
+  const selectionChanged = () => {
+    for (const h of [...selectionHandlers]) h({ type: "documentSelectionChanged" });
+  };
   w.__miai = {
     calls,
     setTheme(name: "light" | "dark") {
@@ -174,18 +181,29 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
 
   // --- Fælles Office-objekt -------------------------------------------------
   let selection = o.selection ?? "";
+  /** Brugeren markerer en anden tekst (Word og PowerPoint). */
+  (w.__miai as Record<string, unknown>).selectText = (text: string) => {
+    selection = text;
+    selectionChanged();
+  };
   w.Office = strict("Office", {
     HostType: { Word: "Word", Excel: "Excel", PowerPoint: "PowerPoint", Outlook: "Outlook" },
     CoercionType: { Text: "text", Html: "html" },
     AsyncResultStatus: { Succeeded: "succeeded", Failed: "failed" },
     GoToType: { Index: "Index" },
-    EventType: { OfficeThemeChanged: "officeThemeChanged" },
+    EventType: { OfficeThemeChanged: "officeThemeChanged", DocumentSelectionChanged: "documentSelectionChanged" },
     context: strict("Office.context", {
       displayLanguage: o.displayLanguage ?? "da-DK",
       officeTheme,
       requirements: { isSetSupported: (name: string, v = "1.1") => versionAtLeast(o.apiSets?.[name], v) },
       mailbox: { item: mailItem },
       document: strict("Office.context.document", {
+        url: o.documentUrl ?? "",
+        removeHandlerAsync: (type: string, opts?: { handler?: (e: unknown) => void }) => {
+          if (type !== "documentSelectionChanged") return;
+          const i = opts?.handler ? selectionHandlers.indexOf(opts.handler) : -1;
+          if (i >= 0) selectionHandlers.splice(i, 1);
+        },
         goToByIdAsync: (id: number, type: string, cb: (r: unknown) => void) => {
           record({ kind: "goTo", id, type });
           cb({ status: "succeeded" });
@@ -193,6 +211,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         getSelectedDataAsync: (_t: string, cb: (r: unknown) => void) => cb({ status: "succeeded", value: selection }),
         addHandlerAsync: (type: string, handler: (e: unknown) => void, cb?: (r: unknown) => void) => {
           if (type === "officeThemeChanged") themeHandlers.push(handler);
+          if (type === "documentSelectionChanged") selectionHandlers.push(handler);
           cb?.({ status: "succeeded" });
         },
         setSelectedDataAsync: (text: string, _opts: unknown, cb: (r: unknown) => void) => {
@@ -1182,6 +1201,12 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       const self: Built = { name: () => sheet, worksheet, state, used, tableObjs: () => tables.map(tableObj) };
       return self;
     };
+    /** Brugeren markerer et andet område på det aktive ark (ellers er markeringen hele det brugte område). */
+    let selectedRange: string | undefined;
+    (w.__miai as Record<string, unknown>).selectRange = (address: string) => {
+      selectedRange = address;
+      selectionChanged();
+    };
     built.push(buildSheet({ sheet: o.excel?.sheet ?? "Ark1", values: o.excel?.values, formats: o.excel?.formats, tables: o.excel?.tables }));
     for (const d of o.excel?.sheets ?? []) built.push(buildSheet(d));
     // Det første ark er det aktive (markeringen); __miai.sheet() viser det, __miai.sheets() alle ark.
@@ -1193,7 +1218,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       return b;
     };
     const workbook = strict("Excel.Workbook", {
-      getSelectedRange: () => built[0].used(),
+      getSelectedRange: () => (selectedRange ? (built[0].worksheet as { getRange: (a: string) => unknown }).getRange(selectedRange) : built[0].used()),
       worksheets: strict("Excel.WorksheetCollection", {
         load() {},
         get items() {
