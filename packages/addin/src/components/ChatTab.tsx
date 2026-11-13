@@ -79,6 +79,8 @@ const useStyles = makeStyles({
   // Kontakterne må ikke klemmes sammen (teksterne overlappede i et smalt panel): de ombrydes til hver sin linje.
   switch: { flexShrink: 0, maxWidth: "100%" },
   footerEnd: { marginLeft: "auto" },
+  // Markeringen hører til kontakten for kontekst: på sin egen linje lige under den, på linje med teksten.
+  selection: { flexBasis: "100%", paddingLeft: tokens.spacingHorizontalS, marginTop: `calc(-1 * ${tokens.spacingVerticalXS})` },
   muted: { color: tokens.colorNeutralForeground3 },
   /** Zone med apply-knapper + agent-forslag under det seneste chat-svar. */
   applyZone: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
@@ -446,20 +448,20 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
         </div>
         <div className={s.footer}>
           <Switch className={s.switch} label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(d.checked)} />
-          {knowledgeOn && <Switch className={s.switch} label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
-          {canAct && (
-            <Tooltip content={t("chatActHint")} relationship="description">
-              <Switch className={s.switch} label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
-            </Tooltip>
-          )}
           {useContext && selection !== undefined && (
-            <Caption1 className={s.muted} aria-live="polite">
+            <Caption1 className={mergeClasses(s.muted, s.selection)} aria-live="polite">
               {selection === null
                 ? t(adapter.host === "powerpoint" ? "selectionNonePpt" : "selectionNone")
                 : selection.kind === "range"
                   ? t("selectionRange", { address: selection.address })
                   : t("selectionWords", { n: selection.words })}
             </Caption1>
+          )}
+          {knowledgeOn && <Switch className={s.switch} label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
+          {canAct && (
+            <Tooltip content={t("chatActHint")} relationship="description">
+              <Switch className={s.switch} label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
+            </Tooltip>
           )}
           {messages.length > 0 && (
             <Tooltip content={t("newChat")} relationship="label">
