@@ -96,6 +96,11 @@ export interface HostAdapter {
   /** Agent-tilstand (#6): udfører de bekræftede handlinger og returnerer fortryd for hele sessionen. */
   applyAgent?(actions: AgentAction[], ctx: DocContext, opts?: AgentOptions): Promise<AgentOutcome>;
   /**
+   * Agent i flere trin (#20): læser det, agenten har bedt om (fx celler på et andet ark), uden at
+   * ændre noget. Returnerer tekst til modellen. Kun værter, hvor agenten ikke ser hele dokumentet.
+   */
+  readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
+  /**
    * PowerPoint (ADR-0014): sætter designets master og slides ind. replace = fjern de nuværende
    * slides bagefter (kræver PowerPointApi 1.8, så det kan fortrydes).
    */

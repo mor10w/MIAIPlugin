@@ -134,6 +134,8 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_conditionalFormat", { address: a.address, rule: t(`agentCf_${a.rule}` as const, { value: a.value ?? "" }) });
     case "addChart":
       return t("agentAct_addChart", { type: t(`agentChart_${a.type}` as const), source: a.source }) + (a.title ? ` “${clip(a.title, 40)}”` : "");
+    case "readRange":
+      return t("agentAct_readRange", { address: a.address });
     case "addSheet":
       return t("agentAct_addSheet", { name: a.name });
     case "renameSheet":
@@ -171,7 +173,7 @@ export function AgentPlanView({
   /** Eksport af et ark som .xlsx (tillæg ADR-0012); leveres kun med bridge. */
   exportSheet?: (data: ExportSheetRequest) => Promise<string>;
   /** Et script fejlede: lad modellen rette det med fejlbeskeden. */
-  onRetry?: (retry: { error: string; code: string }) => void;
+  onRetry?: (retry: { error: string; code: string; partial?: boolean }) => void;
   /** Planen er udført (eller fortrudt): en kort tekst til samtalens historik, så modellen kender udfaldet. */
   onOutcome?: (log: string) => void;
 }) {
@@ -221,6 +223,21 @@ export function AgentPlanView({
       setError((err as Error).message);
     }
   };
+
+  /**
+   * Faste handlinger, der fejlede (#20): fejlene og handlingerne kan sendes til modellen, som
+   * foreslår en rettelse. Det, der lykkedes, er udført og skal ikke gentages.
+   */
+  const failedRetry = (() => {
+    if (phase.kind !== "done" || phase.outcome.retry) return undefined;
+    const failed = phase.ran.flatMap((i, k) => (phase.outcome.results[k].ok ? [] : [{ action: checked[i].action, r: phase.outcome.results[k] }]));
+    if (!failed.length) return undefined;
+    return {
+      error: failed.map((f) => `- ${describeAction(f.action, t, ctx)}: ${f.r.error ?? "failed"}${f.r.detail ? ` (${f.r.detail})` : ""}`).join("\n"),
+      code: JSON.stringify(failed.map((f) => f.action)),
+      partial: true,
+    };
+  })();
 
   const resultFor = (i: number) => (phase.kind === "done" ? phase.outcome.results[phase.ran.indexOf(i)] : undefined);
   const locked = phase.kind !== "review";
@@ -308,9 +325,16 @@ export function AgentPlanView({
                 {t("agentRetryScript")}
               </Button>
             ) : (
-              <Button size="small" icon={<ArrowUndo16Regular />} onClick={() => void undo()}>
-                {t("agentUndo")}
-              </Button>
+              <>
+                {failedRetry && onRetry && (
+                  <Button size="small" appearance="primary" onClick={() => onRetry(failedRetry)}>
+                    {t("agentRetryFailed")}
+                  </Button>
+                )}
+                <Button size="small" icon={<ArrowUndo16Regular />} onClick={() => void undo()}>
+                  {t("agentUndo")}
+                </Button>
+              </>
             )}
           </div>
           <Caption1 className={s.muted}>

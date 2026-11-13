@@ -212,6 +212,8 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Kodetilstand slået til: "Lav en pivottabel med omsætning pr. region": koden kan ses, scriptet kører, og Fortryd fjerner pivottabellen og gendanner arket
 - [ ] Et script, der fejler midtvejs: arket er som før, og "Bed modellen rette scriptet" giver et nyt script med fejlen rettet
 - [ ] Flere ark: "Lav et nyt ark med den samlede omsætning" opretter arket med en formel på tværs af ark; skrivning på et andet ark end det aktive; omdøb et ark; Fortryd sletter det nye ark og sætter navn og celler tilbage (også med mellemrum i arknavnet)
+- [ ] Flere trin: bed om noget, der kræver data fra et andet ark ("tilføj budgettet fra Budget-arket"): "Læser Budget!…" vises, og planen bruger de rigtige tal; intet er ændret, før planen udføres
+- [ ] En handling, der fejler (fx sortering efter en kolonne, der ikke findes): "Bed modellen rette det, der fejlede" giver en ny plan kun for det fejlede
 - [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
