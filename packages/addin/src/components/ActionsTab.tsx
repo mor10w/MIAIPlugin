@@ -22,8 +22,6 @@ import { ArrowLeft20Regular, ChevronRight20Regular, Play20Filled, SearchInfo20Re
 import {
   diagramToSvg,
   formatForView,
-  agentScriptsAllowed,
-  agentExportAllowed,
   parseTsv,
   stripEmphasis,
   type AgentPlan,
@@ -31,7 +29,6 @@ import {
   type ApplyMode,
   type DiagramResult,
   type DocContext,
-  type ExportSheetRequest,
   type FormulaResult,
   type GrammarResult,
   type SlidesResult,
@@ -46,6 +43,7 @@ import { CATEGORY_ORDER, taskMeta } from "../taskMeta";
 import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
+import { useAgentOptions } from "../useAgentOptions";
 import { AgentPlanView } from "./AgentPlanView";
 import { DesignPreview } from "./DesignPreview";
 import type { AgentRequest } from "./ChatTab";
@@ -195,27 +193,8 @@ export function ActionsTab({
     reset();
   };
 
-  // Kodetilstand (ADR-0017): slået til af brugeren og tilladt af politikken.
-  const [scripts, setScripts] = useState(false);
-  // Eksport af et ark som .xlsx (tillæg ADR-0012): kun bridgen kan skrive filer, og den skal
-  // være slået til og tilladt af politikken – ellers er handlingen ikke tilgængelig.
-  const [exportSheet, setExportSheet] = useState<((data: ExportSheetRequest) => Promise<string>) | undefined>();
-  useEffect(() => {
-    api.settings().then(
-      (v) => {
-        setScripts(agentScriptsAllowed(v.settings, v.policy));
-        setExportSheet(
-          api.mode === "bridge" && agentExportAllowed(v.settings, v.policy)
-            ? (d: ExportSheetRequest): Promise<string> => api.exportSheet!(d).then((r) => r.path)
-            : undefined,
-        );
-      },
-      () => {
-        setScripts(false);
-        setExportSheet(undefined);
-      },
-    );
-  }, [api, taskId]);
+  // Kodetilstand og eksport: slået til af brugeren og tilladt af politikken.
+  const { scripts, exportSheet } = useAgentOptions(taskId);
 
   const run = async (extra: Record<string, string> = {}) => {
     if (!task) return;

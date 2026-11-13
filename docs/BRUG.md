@@ -251,7 +251,11 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - **Fortryd:** gendanner det aktive ark og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.
 - **Begrænsninger:** kodetilstanden virker kun på ark med højst 50.000 celler, og den kræver en stærk model (14B eller større). Din organisation kan have slået den fra.
 
-**Chatten ændrer ikke dokumentet.** Beder du chatten om at formatere, sortere eller slette, henviser den til agenten. Der vises en knap, **Gør det med agenten**, der tager din besked med. MIAI kan ikke køre VBA eller makroer.
+**Chatten kan selv ændre dokumentet.** Beder du i chatten om en ændring (*"fjern de tomme rækker"*, *"gør overskriften kortere"*), laver MIAI en plan direkte i samtalen. Du godkender handlingerne, og planen kan fortrydes, præcis som under *Agent: redigér dokumentet*.
+- **Opfølgninger virker:** samtalen, de tidligere planer og hvad der faktisk blev udført, går med til modellen. Du kan altså skrive *"nej, sortér faldende i stedet"*.
+- **Spørgsmål besvares som før** med tekst. Kontakten **Må ændre dokumentet** under skrivefeltet slår ændringer fra, hvis chatten kun skal svare.
+- **Hvis MIAI ikke opfatter beskeden som et ønske om en ændring,** svarer den med tekst. Henviser svaret til agenten, vises knappen **Gør det med agenten**, som laver planen i samtalen.
+- MIAI kan ikke køre VBA eller makroer.
 
 **I PowerPoint** følger agenten skabelonen:
 - Erstat ændrer kun de ord, der er forskellige.

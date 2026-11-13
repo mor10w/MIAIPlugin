@@ -157,6 +157,7 @@ export function AgentPlanView({
   scripts = false,
   exportSheet,
   onRetry,
+  onOutcome,
 }: {
   plan: AgentPlan;
   ctx: DocContext;
@@ -167,6 +168,8 @@ export function AgentPlanView({
   exportSheet?: (data: ExportSheetRequest) => Promise<string>;
   /** Et script fejlede: lad modellen rette det med fejlbeskeden. */
   onRetry?: (retry: { error: string; code: string }) => void;
+  /** Planen er udført (eller fortrudt): en kort tekst til samtalens historik, så modellen kender udfaldet. */
+  onOutcome?: (log: string) => void;
 }) {
   const { t } = useI18n();
   const s = useStyles();
@@ -189,6 +192,14 @@ export function AgentPlanView({
         { trackChanges: track, scripts, exportSheet },
       );
       setPhase({ kind: "done", outcome, ran });
+      onOutcome?.(
+        ran
+          .map((i, k) => {
+            const r = outcome.results[k];
+            return `- ${describeAction(checked[i].action, t, ctx)}: ${r.ok ? "done" : `FAILED (${r.error ?? "failed"}${r.detail ? `: ${r.detail}` : ""})`}`;
+          })
+          .join("\n"),
+      );
     } catch (err) {
       setError((err as Error).message);
       setPhase({ kind: "review" });
@@ -201,6 +212,7 @@ export function AgentPlanView({
     try {
       await phase.outcome.undo();
       setPhase({ kind: "undone" });
+      onOutcome?.("The user undid all of these changes; the document is as it was before the plan.");
     } catch (err) {
       setError((err as Error).message);
     }

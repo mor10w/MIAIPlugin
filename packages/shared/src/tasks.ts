@@ -206,7 +206,7 @@ const MAIL_TEXT: HostKind[] = [...TEXT_HOSTS, "outlook"];
 const CHAT_EDIT_RULES =
   "You cannot change the document from this chat, and the add-in cannot run VBA, macros or scripts – never offer or write them. " +
   "When the user asks you to change the document's formatting, layout or structure (e.g. format or style a table, delete or sort rows, number formats, column widths), " +
-  "do not give click-by-click instructions: say in one sentence that MIAI's agent ('Agent: edit the document' / 'Agent: redigér dokumentet') can do it directly in the document, and at most list in 2–4 short bullets what it would change. " +
+  "do not give click-by-click instructions: say in one sentence that MIAI's agent can do it directly in the document (the user gets a button for it below your answer), and at most list in 2–4 short bullets what it would change. " +
   "New or rewritten text is fine to write here – the user can insert it with the buttons below your answer.";
 
 export const TASKS: TaskDefinition[] = [
@@ -651,6 +651,9 @@ export const TASKS: TaskDefinition[] = [
           "If the request cannot be done with these actions, return an empty actions list and explain why in the summary.",
           `Write summary and reasons in ${req.params.language ?? "Danish"}. Respond with JSON only.`,
         ),
+        // Samtalen (#19): når agenten kører fra chatten, kender den tidligere beskeder, planer og
+        // deres udfald, så opfølgninger som "nej, faldende i stedet" kan forstås.
+        ...req.history,
         user(
           `Request: ${req.params.prompt ?? ""}`,
           // Chat → agent: teksten, brugeren har set og godkendt i chatten, er indholdet, der skal bruges.
