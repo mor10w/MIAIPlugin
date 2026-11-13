@@ -261,12 +261,14 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
 - *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
 
-**Kodetilstand (Excel, avanceret).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
+**Kodetilstand (avanceret, i Excel, Word og PowerPoint).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
 - **Før kørslen:** du ser, hvad scriptet gør, og kan se koden.
 - **Sandkassen:** scriptet kører uden adgang til netværk, filer eller MIAI's indstillinger.
 - **Hvis det fejler:** arket sættes straks tilbage, og du kan bede modellen rette scriptet ud fra fejlen.
-- **Fortryd:** gendanner det aktive ark og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.
-- **Begrænsninger:** kodetilstanden virker kun på ark med højst 50.000 celler, og den kræver en stærk model (14B eller større). Din organisation kan have slået den fra.
+- **Fortryd i Excel:** gendanner det aktive ark og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.
+- **Fortryd i Word:** sætter dokumentets brødtekst tilbage til, som den var før scriptet – også ændringer, du selv har lavet siden. Sidehoved, sidefod og kommentarer gendannes ikke.
+- **Fortryd i PowerPoint:** lægger alle slides tilbage, som de var før scriptet. Det kræver Microsoft 365 (PowerPointApi 1.8); ellers køres scripts ikke. Slidemasteren gendannes ikke.
+- **Begrænsninger:** i Excel virker kodetilstanden kun på ark med højst 50.000 celler. Den kræver en stærk model (14B eller større). Din organisation kan have slået den fra.
 
 **Chatten kan selv ændre dokumentet.** Beder du i chatten om en ændring (*"fjern de tomme rækker"*, *"gør overskriften kortere"*), laver MIAI en plan direkte i samtalen. Du godkender handlingerne, og planen kan fortrydes, præcis som under *Agent: redigér dokumentet*.
 - **Opfølgninger virker:** samtalen, de tidligere planer og hvad der faktisk blev udført, går med til modellen. Du kan altså skrive *"nej, sortér faldende i stedet"*.

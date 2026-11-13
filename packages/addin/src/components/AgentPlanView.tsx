@@ -381,7 +381,11 @@ export function AgentPlanView({
                       : phase.outcome.undoKind === "script"
                         ? phase.outcome.retry
                           ? "agentScriptRolledBack"
-                          : "agentUndoScript"
+                          : adapter.host === "word"
+                            ? "agentUndoScriptWord"
+                            : adapter.host === "powerpoint"
+                              ? "agentUndoScriptSlides"
+                              : "agentUndoScript"
                         : "agentUndoCells",
             )}
           </Caption1>

@@ -80,4 +80,14 @@ describe("checkScript (kodetilstandens sandkasse)", () => {
     expect(isBannedKey("values")).toBe(false);
     expect(isBannedKey(0)).toBe(false);
   });
+
+  it("værtens objekt (#23): kun det, der hører til værten, findes i sandkassen", () => {
+    expect(checkScript("return Word.InsertLocation.end", "Word").ok).toBe(true);
+    expect(checkScript("return PowerPoint.ShapeType.placeholder", "PowerPoint").ok).toBe(true);
+    expect(checkScript("return Excel.ChartType.line", "Word")).toMatchObject({ ok: false });
+    expect(checkScript("return Word.InsertLocation.end")).toMatchObject({ ok: false });
+    // De øvrige regler er de samme for alle værter.
+    expect(checkScript("await fetch('https://x')", "Word")).toMatchObject({ ok: false });
+    expect(checkScript("context.document.constructor", "PowerPoint")).toMatchObject({ ok: false });
+  });
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { EXPORT_FILE_NAME } from "./export.js";
-import { checkScript } from "./script.js";
+import { checkScript, SCRIPT_HOSTS } from "./script.js";
 import type { DocContext, HostKind } from "./types.js";
 
 /**
@@ -269,7 +269,11 @@ export const AgentAction = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("runScript"),
     description: z.string().min(1).max(300).describe("What the script does, in the user's language – shown to the user before it runs"),
-    code: z.string().min(1).max(8_000).describe("Body of an async function with `context` (Excel.RequestContext) and `Excel` in scope"),
+    code: z
+      .string()
+      .min(1)
+      .max(8_000)
+      .describe("Body of an async function with `context` (the host's RequestContext) and the host object (Excel, Word or PowerPoint) in scope"),
     reason,
   }),
   z.object({
@@ -297,7 +301,18 @@ export const AgentPlan = z.object({
 });
 export type AgentPlan = z.infer<typeof AgentPlan>;
 
-export const WORD_ACTIONS: AgentActionKind[] = ["replace", "insert", "delete", "move", "setStyle", "comment", "insertTable", "addTableRow", "deleteTableRow"];
+export const WORD_ACTIONS: AgentActionKind[] = [
+  "replace",
+  "insert",
+  "delete",
+  "move",
+  "setStyle",
+  "comment",
+  "insertTable",
+  "addTableRow",
+  "deleteTableRow",
+  "runScript",
+];
 export const EXCEL_ACTIONS: AgentActionKind[] = [
   "setValues",
   "setFormula",
@@ -320,7 +335,7 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "runScript",
   "saveSheet",
 ];
-export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide"];
+export const POWERPOINT_ACTIONS: AgentActionKind[] = ["replace", "setText", "addSlide", "deleteSlide", "moveSlide", "runScript"];
 export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
   host === "word" ? WORD_ACTIONS : host === "excel" ? EXCEL_ACTIONS : host === "powerpoint" ? POWERPOINT_ACTIONS : [];
 
@@ -378,12 +393,33 @@ export function renderParagraphs(paras: NonNullable<DocContext["paragraphs"]>): 
  * Reglerne svarer til sandkassens (checkScript): ingen globale objekter ud over de sikre, ingen
  * this/klasser/import, og egenskaber, der starter med _, er spærret.
  */
-export const SCRIPT_GUIDE = [
-  "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. named ranges, sorting by several columns, chart settings, pivot table filters). It must be the ONLY action in the plan.",
-  "  `code` is the body of an async function with `context` (Excel.RequestContext) and `Excel` in scope. Use Office.js (ExcelApi): `const sheet = context.workbook.worksheets.getActiveWorksheet();`, call `.load(...)` and `await context.sync()` before reading properties, and finish with `await context.sync()`.",
+const SCRIPT_RULES = [
   "  Only these globals exist: Math, JSON, Number, String, Boolean, Array, Object, Date, Map, Set, Promise, Error, isNaN, parseInt, parseFloat, console. No fetch, window, document, eval, this, classes or import; property names starting with _ are blocked.",
-  "  Write complete, working code (no placeholders). Optionally `return` a short text describing what changed – it is shown to the user. Never change other sheets than the active one unless asked.",
-].join("\n");
+  "  Write complete, working code (no placeholders). Optionally `return` a short text describing what changed – it is shown to the user.",
+];
+
+/** Excel-udgaven (bruges også direkte i tests). */
+export const SCRIPT_GUIDE = scriptGuide("excel");
+
+/** Vejledningen til runScript for værten (#23): hvad `context` er, og et par linjer, der viser mønstret. */
+export function scriptGuide(host: HostKind): string {
+  const intro =
+    host === "word"
+      ? [
+          "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. headers and footers, page breaks, table columns, images, content controls, font and paragraph formatting). It must be the ONLY action in the plan.",
+          "  `code` is the body of an async function with `context` (Word.RequestContext) and `Word` in scope. Use Office.js (WordApi): `const body = context.document.body;`, call `.load(...)` and `await context.sync()` before reading properties, and finish with `await context.sync()`.",
+        ]
+      : host === "powerpoint"
+        ? [
+            "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. adding shapes or text boxes, positions and sizes, fills and fonts, tags). It must be the ONLY action in the plan.",
+            "  `code` is the body of an async function with `context` (PowerPoint.RequestContext) and `PowerPoint` in scope. Use Office.js (PowerPointApi): `const slides = context.presentation.slides; slides.load('items');`, call `await context.sync()` before reading properties, and finish with `await context.sync()`.",
+          ]
+        : [
+            "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. named ranges, sorting by several columns, chart settings, pivot table filters). It must be the ONLY action in the plan.",
+            "  `code` is the body of an async function with `context` (Excel.RequestContext) and `Excel` in scope. Use Office.js (ExcelApi): `const sheet = context.workbook.worksheets.getActiveWorksheet();`, call `.load(...)` and `await context.sync()` before reading properties, and finish with `await context.sync()`.",
+          ];
+  return [...intro, ...SCRIPT_RULES, ...(host === "excel" ? ["  Never change other sheets than the active one unless asked."] : [])].join("\n");
+}
 
 /** Eksport (tillæg ADR-0012): beskrivelsen af saveSheet til prompten – kun når den er slået til. */
 export const SAVE_GUIDE = [
@@ -444,7 +480,10 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "- deleteSlide {slide}, moveSlide {slide, to}: remove or reorder slides.",
       "Preserve the design: prefer replace for small changes, setText only when most of a shape's text changes, and addSlide with an existing layout instead of rebuilding slides. Never add your own text boxes, colours or fonts.",
       "Slide and shape numbers refer to the presentation as shown, before any of your actions.",
-    ].join("\n");
+      opts.scripts ? scriptGuide("powerpoint") : undefined,
+    ]
+      .filter(Boolean)
+      .join("\n");
   return [
     "Available actions (Word). The document is shown as numbered paragraphs: ¶number [style] text; (list) = list item, (table 1, row 2, col 1) = inside a table cell.",
     "- replace {find, replace, all?}: change text inside a paragraph. `find` is copied verbatim from one paragraph; only the words that differ are replaced, so bold, links and other formatting around them are kept.",
@@ -458,7 +497,10 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
     "- insertTable {position, paragraph?, rows}: add a new table before/after ¶paragraph (not inside a table) or at the start/end. rows = the cells row by row, the FIRST row is the header; every row has the same number of cells. The table gets the document's table style. Use it for tabular content instead of lines with tabs or | characters.",
     "- addTableRow {paragraph, position?, values}: add one row to an existing table, before or after (default) the row that contains ¶paragraph; values = the cells from left to right. deleteTableRow {paragraph}: delete the row that contains ¶paragraph.",
     "Paragraph numbers refer to the document as shown, before any of your actions; do not renumber after earlier actions.",
-  ].join("\n");
+    opts.scripts ? scriptGuide("word") : undefined,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export type AgentProblem =
@@ -645,7 +687,8 @@ export function checkPlan(
         return ok(action, !existingSheets.has(action.sheet.toLowerCase()) || knownSheets.has(action.name.toLowerCase()) ? "bad-sheet" : undefined);
       case "runScript": {
         if (!opts.scripts) return ok(action, "scripts-off");
-        return ok(action, checkScript(action.code).ok ? undefined : "unsafe-script");
+        const host = ctx.host === "word" || ctx.host === "powerpoint" || ctx.host === "excel" ? SCRIPT_HOSTS[ctx.host] : undefined;
+        return ok(action, host && checkScript(action.code, host).ok ? undefined : "unsafe-script");
       }
       case "sortRange":
       case "addChart": {

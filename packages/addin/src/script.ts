@@ -1,9 +1,9 @@
-import { checkScript, isBannedKey, MAX_SCRIPT_ITERATIONS, type AgentAction } from "@miai/shared";
+import { checkScript, isBannedKey, MAX_SCRIPT_ITERATIONS, type AgentAction, type ScriptHost } from "@miai/shared";
 import { FORMAT_PROPS } from "./hosts/excelFormats";
 import type { AgentOutcome } from "./hosts/types";
 
 /**
- * Kodetilstand (ADR-0017): kører et Office.js-script fra agenten i Excel.
+ * Kodetilstand (ADR-0017): kører et Office.js-script fra agenten i Excel, Word eller PowerPoint (#23).
  *
  *  1. Scriptet tjekkes og omskrives af checkScript (kun `context`, `Excel` og sikre globale objekter).
  *  2. Det aktive ark gemmes som øjebliksbillede (celler, talformater og formater) sammen med listen
@@ -20,20 +20,23 @@ export const MAX_SNAPSHOT_CELLS = 50_000;
 /** Tidsgrænse for ét script. */
 export const SCRIPT_TIMEOUT_MS = 60_000;
 
-type ScriptFn = (context: Excel.RequestContext, excel: typeof Excel) => Promise<unknown>;
+type ScriptFn = (context: unknown, host: unknown) => Promise<unknown>;
 
-/** Oversætter det kontrollerede script til en funktion. Kaster, hvis sandkassen afviser det. */
-export function compileScript(source: string): ScriptFn {
-  const check = checkScript(source);
+/**
+ * Oversætter det kontrollerede script til en funktion med `context` og værtens objekt (`Excel`,
+ * `Word` eller `PowerPoint`) som eneste adgang til omverdenen. Kaster, hvis sandkassen afviser det.
+ */
+export function compileScript(source: string, host: ScriptHost = "Excel"): ScriptFn {
+  const check = checkScript(source, host);
   if (!check.ok) throw new Error(check.error);
   // Koden er tjekket og omskrevet ovenfor; den kan kun nå parametrene og de sikre globale objekter.
-  const fn = new Function("context", "Excel", "__key", "__tick", `"use strict";\nreturn (async () => {\n${check.code}\n})();`) as (
-    c: Excel.RequestContext,
-    e: typeof Excel,
+  const fn = new Function("context", host, "__key", "__tick", `"use strict";\nreturn (async () => {\n${check.code}\n})();`) as (
+    c: unknown,
+    h: unknown,
     key: (k: unknown) => string | number,
     tick: () => void,
   ) => Promise<unknown>;
-  return (context, excel) => {
+  return (context, hostObject) => {
     let n = 0;
     // Beregnede navne tjekkes ved kørsel og gøres til primitive værdier (en toString kan ikke snyde to gange).
     const key = (k: unknown) => {
@@ -44,7 +47,7 @@ export function compileScript(source: string): ScriptFn {
     const tick = () => {
       if (++n > MAX_SCRIPT_ITERATIONS) throw new Error("Scriptet blev stoppet: for mange gennemløb (uendelig løkke?).");
     };
-    return fn(context, excel, key, tick);
+    return fn(context, hostObject, key, tick);
   };
 }
 
@@ -134,10 +137,19 @@ function describeError(e: unknown): string {
   return `${err.code && err.code !== err.message ? `${err.code}: ` : ""}${err.message ?? String(e)}${where}`;
 }
 
-export async function runExcelScript(a: Extract<AgentAction, { action: "runScript" }>, sheetName: string): Promise<AgentOutcome> {
+/**
+ * Fælles kørsel for alle værter: tjek og oversæt scriptet, tag et øjebliksbillede, kør med
+ * tidsgrænse, og rul tilbage, hvis det fejler. `run` kører funktionen i værtens egen kontekst.
+ */
+async function runGuarded(
+  a: Extract<AgentAction, { action: "runScript" }>,
+  host: ScriptHost,
+  snapshot: () => Promise<() => Promise<void>>,
+  run: (fn: ScriptFn) => Promise<unknown>,
+): Promise<AgentOutcome> {
   let fn: ScriptFn;
   try {
-    fn = compileScript(a.code);
+    fn = compileScript(a.code, host);
   } catch (e) {
     return {
       results: [{ ok: false, error: "failed", detail: (e as Error).message }],
@@ -146,27 +158,21 @@ export async function runExcelScript(a: Extract<AgentAction, { action: "runScrip
       retry: { error: (e as Error).message, code: a.code },
     };
   }
-  const snap = await snapshotSheet(sheetName);
+  // Uden øjebliksbillede køres scriptet ikke (kaster, fx hvis arket er for stort eller API'et mangler).
+  const restore = await snapshot();
   try {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => reject(new Error(`Scriptet blev stoppet efter ${SCRIPT_TIMEOUT_MS / 1000} sekunder.`)), SCRIPT_TIMEOUT_MS);
     });
-    const value = await Promise.race([
-      Excel.run(async (ctx) => {
-        const r = await fn(ctx, Excel);
-        await ctx.sync();
-        return r;
-      }),
-      timeout,
-    ]).finally(() => clearTimeout(timer));
+    const value = await Promise.race([run(fn), timeout]).finally(() => clearTimeout(timer));
     const detail = typeof value === "string" && value.trim() ? value.trim().slice(0, 300) : undefined;
-    return { results: [{ ok: true, detail }], undo: () => restoreSheet(snap), undoKind: "script" };
+    return { results: [{ ok: true, detail }], undo: restore, undoKind: "script" };
   } catch (e) {
     const error = describeError(e);
-    // Et halvt udført script efterlader ikke arket i en ukendt tilstand.
+    // Et halvt udført script efterlader ikke dokumentet i en ukendt tilstand.
     let rolledBack = true;
-    await restoreSheet(snap).catch(() => (rolledBack = false));
+    await restore().catch(() => (rolledBack = false));
     return {
       results: [{ ok: false, error: "failed", detail: `${error}${rolledBack ? " – ændringerne er rullet tilbage" : ""}` }],
       undo: async () => {},
@@ -174,4 +180,109 @@ export async function runExcelScript(a: Extract<AgentAction, { action: "runScrip
       retry: { error, code: a.code },
     };
   }
+}
+
+type RunScript = Extract<AgentAction, { action: "runScript" }>;
+
+export function runExcelScript(a: RunScript, sheetName: string): Promise<AgentOutcome> {
+  return runGuarded(
+    a,
+    "Excel",
+    async () => {
+      const snap = await snapshotSheet(sheetName);
+      return () => restoreSheet(snap);
+    },
+    (fn) =>
+      Excel.run(async (ctx) => {
+        const r = await fn(ctx, Excel);
+        await ctx.sync();
+        return r;
+      }),
+  );
+}
+
+/**
+ * Word (#23): øjebliksbilledet er brødtekstens OOXML, som sættes tilbage ved fejl og fortryd.
+ * Sidehoved, sidefod og kommentarer er ikke med i brødteksten og gendannes ikke.
+ */
+export function runWordScript(a: RunScript): Promise<AgentOutcome> {
+  return runGuarded(
+    a,
+    "Word",
+    async () => {
+      const ooxml = await Word.run(async (ctx) => {
+        const xml = ctx.document.body.getOoxml();
+        await ctx.sync();
+        return xml.value;
+      });
+      return () =>
+        Word.run(async (ctx) => {
+          ctx.document.body.insertOoxml(ooxml, "Replace");
+          await ctx.sync();
+        });
+    },
+    (fn) =>
+      Word.run(async (ctx) => {
+        const r = await fn(ctx, Word);
+        await ctx.sync();
+        return r;
+      }),
+  );
+}
+
+/**
+ * PowerPoint (#23): øjebliksbilledet er alle slides eksporteret hver for sig (PowerPointApi 1.8).
+ * Ved fejl og fortryd lægges de tilbage i rækkefølge, og de slides, der var der efter scriptet,
+ * fjernes. Uden PowerPointApi 1.8 kan der ikke tages et øjebliksbillede, og scriptet køres ikke.
+ */
+export function runPowerPointScript(a: RunScript): Promise<AgentOutcome> {
+  return runGuarded(
+    a,
+    "PowerPoint",
+    async () => {
+      if (!Office.context.requirements.isSetSupported("PowerPointApi", "1.8"))
+        throw new Error("Kodetilstanden i PowerPoint kræver PowerPointApi 1.8 (Microsoft 365), så ændringerne kan fortrydes.");
+      const saved = await PowerPoint.run(async (ctx) => {
+        const col = ctx.presentation.slides;
+        col.load("items/id");
+        await ctx.sync();
+        const exported = col.items.map((sl) => sl.exportAsBase64());
+        await ctx.sync();
+        return exported.map((r) => r.value);
+      });
+      return () =>
+        PowerPoint.run(async (ctx) => {
+          const cur = ctx.presentation.slides;
+          cur.load("items/id");
+          await ctx.sync();
+          // De slides, der er der nu (efter scriptet), noteres, før de gemte lægges ind.
+          const stale = [...cur.items];
+          const now = stale.map((x) => x.id);
+          // De gemte slides lægges ind efter de nuværende i den oprindelige rækkefølge …
+          const known = new Set(now);
+          let target = now[now.length - 1] as string | undefined;
+          for (const b64 of saved) {
+            ctx.presentation.insertSlidesFromBase64(b64, {
+              formatting: PowerPoint.InsertSlideFormatting.keepSourceFormatting,
+              ...(target ? { targetSlideId: target } : {}),
+            });
+            await ctx.sync();
+            const after = ctx.presentation.slides;
+            after.load("items/id");
+            await ctx.sync();
+            target = after.items.find((x) => !known.has(x.id))?.id ?? target;
+            if (target) known.add(target);
+          }
+          // … og dem, der var der efter scriptet, fjernes (der skal altid være mindst ét slide undervejs).
+          for (const sl of stale) sl.delete();
+          await ctx.sync();
+        });
+    },
+    (fn) =>
+      PowerPoint.run(async (ctx) => {
+        const r = await fn(ctx, PowerPoint);
+        await ctx.sync();
+        return r;
+      }),
+  );
 }

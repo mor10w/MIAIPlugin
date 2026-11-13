@@ -1,6 +1,6 @@
 # ADR-0017: Flere faste værktøjer og en kodetilstand for agenten (Excel)
 
-- **Status:** Besluttet (prototype i Excel; afprøves i rigtig Excel, før den udvides til Word og PowerPoint)
+- **Status:** Besluttet (Excel, Word og PowerPoint; kun afprøvet i simuleret Office)
 - **Dato:** 2026-11-04
 - **Relateret:** ADR-0012 (agent-tilstand), ADR-0008 (sikkerhed og politik)
 
@@ -109,3 +109,13 @@ Sandkassen beskytter mod kode fra modellen. CSP'en er laget udenom: browseren h�
 - **Ændret politik:** en CSP kan kun strammes, mens siden er åben. Fjernes hosts, strammes den med det samme. Tilføjes hosts, genindlæses task pane, åbner Indstillinger igen og siger, at forbindelsen kan testes.
 - **Bevidst ikke `script-src`/`default-src`:** Office.js hentes fra Microsofts CDN og indlæser selv mere kode, og kodetilstanden bruger `new Function`. En stram script-politik kan ikke afprøves i rigtig Office herfra; målet er at spærre dataudslip.
 - **Dækker ikke:** navigation væk fra siden (`window.location`) og Office.js' egne API'er. Office.js' telemetri til Microsoft bliver blokeret af `connect-src`; det er uden betydning for funktionen, men skal bekræftes i rigtig Office (tjeklisten i UDVIKLING.md).
+
+## Tillæg: kodetilstand i Word og PowerPoint (#23)
+
+Samme sandkasse, godkendelse, politik og *Bed modellen rette scriptet* som i Excel. Forskellen er værtens objekt og øjebliksbilledet.
+
+- **Sandkassen pr. vært:** scriptet får `context` og kun sin egen værts objekt (`Word` eller `PowerPoint`). `Excel` i et Word-script afvises som alt andet ukendt. Vejledningen i prompten følger værten.
+- **Word:** øjebliksbilledet er brødtekstens OOXML (`body.getOoxml`), som sættes tilbage ved fejl og fortryd (`insertOoxml(…, "Replace")`). Sidehoved, sidefod og kommentarer ligger uden for brødteksten og gendannes ikke.
+- **PowerPoint:** alle slides eksporteres hver for sig (`exportAsBase64`, PowerPointApi 1.8). Ved fejl og fortryd lægges de tilbage i rækkefølge, og de slides, der var der efter scriptet, fjernes. Slidemasteren gendannes ikke. Uden PowerPointApi 1.8 køres scriptet ikke.
+- **Fortryd gendanner hele øjebliksbilledet,** også ændringer, brugeren selv har lavet efter scriptet. Det står i brugerfladen.
+- **Mangler:** øjebliksbilledet har ingen størrelsesgrænse i Word og PowerPoint (store dokumenter med billeder kan være langsomme), og sporede ændringer bruges ikke til scripts.

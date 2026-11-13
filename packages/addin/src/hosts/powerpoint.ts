@@ -1,5 +1,6 @@
+import { runPowerPointScript } from "../script";
 import { selectedText, wordCount } from "./selection";
-import type { SelectionInfo } from "./types";
+import type { AgentOptions, SelectionInfo } from "./types";
 import type { DocRef } from "../refs";
 import {
   applyEdits,
@@ -327,7 +328,14 @@ export class PowerPointAdapter implements HostAdapter {
    * med deres formatering; tilføjede slides slettes, og flyttede flyttes tilbage. Ældre
    * PowerPoint kan kun gendanne teksten, og sletning af slides kræver 1.8.
    */
-  async applyAgent(actions: AgentAction[], dc: DocContext): Promise<AgentOutcome> {
+  async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
+    // Kodetilstand (#23): et script står alene i planen og kører i sandkassen med sit eget øjebliksbillede.
+    const script = actions.find((a) => a.action === "runScript");
+    if (script?.action === "runScript") {
+      if (!opts.scripts) throw new Error("Kodetilstanden er ikke slået til (Indstillinger → Avanceret).");
+      if (actions.length > 1) throw new Error("Et script skal stå alene i planen.");
+      return runPowerPointScript(script);
+    }
     const full = has("1.8");
     return PowerPoint.run(async (ctx) => {
       const slideCol = ctx.presentation.slides;
