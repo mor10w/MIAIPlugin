@@ -14,6 +14,7 @@ import { Markdown } from "./Markdown";
 import { SourceList } from "./SourceList";
 import { looksLikeEditRequest } from "../editIntent";
 import { useAgentOptions } from "../useAgentOptions";
+import { planWithReads } from "../agentRun";
 import { AgentPlanView } from "./AgentPlanView";
 
 /** Chat → agent: brugerens ønske og chatsvaret, som agenten skal bruge som indhold. */
@@ -137,6 +138,8 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const running = state.status === "running";
   /** Agenten er ved at lave en plan (svaret er JSON og vises først som plan, når det er færdigt). */
   const [planning, setPlanning] = useState(false);
+  /** Områder, agenten er ved at læse, før den laver planen (#20). */
+  const [reading, setReading] = useState<string | null>(null);
   /** Seneste brugermelding – afgør, om chatten foreslår agent-tilstanden. */
   const [lastUserPrompt, setLastUserPrompt] = useState("");
   /** Førstegangs-hint om apply-knapperne: vises, indtil brugeren har trykket en. */
@@ -171,11 +174,13 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
       ctxRef.current = ctx;
       setLastCtx(ctx);
       setPlanning(true);
-      const final = await start("agent", {
-        context: ctx,
-        params: { prompt, language: lang === "da" ? "Danish" : "English", ...extra },
-        history: history.slice(-12),
-      }).finally(() => setPlanning(false));
+      // Agenten kan læse i dokumentet (fx andre ark), før den laver planen (#20).
+      const final = await planWithReads(
+        start,
+        adapter,
+        { context: ctx, params: { prompt, language: lang === "da" ? "Danish" : "English", ...extra }, history: history.slice(-12) },
+        (addresses) => setReading(addresses ? addresses.join(", ") : null),
+      ).finally(() => setPlanning(false));
       const plan = final.result as AgentPlan | undefined;
       if (final.status === "done" && plan) setMessages((m) => [...m, { role: "assistant", content: plan.summary, model: final.model, plan, planCtx: ctx }]);
       return;
@@ -248,9 +253,13 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                   onRetry={
                     i === lastAssistant
                       ? (r) =>
-                          void send(t("agentRetryPrompt"), {
+                          void send(t(r.partial ? "agentRetryFailedPrompt" : "agentRetryPrompt"), {
                             plan: true,
-                            extra: { previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900) },
+                            extra: {
+                              previousError: r.error.slice(0, 2_000),
+                              previousCode: r.code.slice(0, 3_900),
+                              ...(r.partial ? { previousPartial: "true" } : {}),
+                            },
                           })
                       : undefined
                   }
@@ -333,7 +342,11 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 {t("searching")}: {state.searchQuery}…
               </Caption1>
             )}
-            {state.text && !planning ? <Markdown text={state.text} /> : <TextSkeleton lines={2} label={planning ? t("chatPlanning") : t("working")} />}
+            {state.text && !planning ? (
+              <Markdown text={state.text} />
+            ) : (
+              <TextSkeleton lines={2} label={planning ? (reading ? t("agentReading", { what: reading }) : t("chatPlanning")) : t("working")} />
+            )}
             {state.sources && <SourceList sources={state.sources} api={api.knowledge} />}
           </div>
         )}

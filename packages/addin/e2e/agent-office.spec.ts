@@ -465,6 +465,101 @@ test("Excel, flere ark (#21): et ark, der ikke findes, og et optaget navn fravæ
   await expect(tp.page.getByRole("checkbox", { name: "Skriv 1 celler fra Noter!A2" })).toBeChecked();
 });
 
+const BUDGET = {
+  ...SALG,
+  sheets: [
+    {
+      sheet: "Budget",
+      values: [
+        ["Region", "Budget"],
+        ["Nord", 100],
+        ["Syd", "=B2*3"],
+      ],
+    },
+  ],
+};
+
+test("Excel, flere trin (#20): agenten læser et andet ark, før den laver planen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: BUDGET });
+  let round = 0;
+  tp.model.reply = () =>
+    ++round === 1
+      ? { json: JSON.stringify({ summary: "Jeg skal se budgettet først.", actions: [{ action: "readRange", address: "Budget!A1:B20", reason: "Budgettal" }] }) }
+      : {
+          json: JSON.stringify({
+            summary: "Skriver budgettet ved siden af omsætningen.",
+            actions: [{ action: "setValues", address: "D1", values: [["Budget"], [100]], reason: "Fra Budget-arket" }],
+          }),
+        };
+  await tp.run("Agent: redigér dokumentet");
+  // Kun den færdige plan vises; læsningen er sket uden bekræftelse og uden at ændre noget.
+  await expect(tp.page.getByText("Skriver budgettet ved siden af omsætningen.")).toBeVisible();
+  await expect(tp.page.getByText("Jeg skal se budgettet først.")).toHaveCount(0);
+  await expect(tp.page.getByRole("checkbox", { name: "Skriv 2 celler fra D1" })).toBeChecked();
+  expect(round).toBe(2);
+  const [first, second] = tp.model.requests.slice(-2).map((r) => r.messages.map((m) => m.content).join("\n"));
+  expect(first).toContain("readRange {address}");
+  expect(first).not.toContain("Cells you asked to read");
+  // Anden runde har værdierne med arkets rækkenumre, formlen og besked om de tomme rækker.
+  expect(second).toContain("Cells you asked to read");
+  expect(second).toContain("Budget!A1:B20 (TSV; the first column is the sheet's row number, not data) – rows 4–20 are empty:");
+  expect(second).toContain("1\tRegion\tBudget\n2\tNord\t100\n3\tSyd\t=B2*3");
+  expect(second).toContain("Formulas: B3: =B2*3");
+  expect((await sheets(tp.page)).Budget.values).toEqual(BUDGET.sheets[0].values);
+
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+});
+
+test("Excel, flere trin (#20): efter tre læse-runder skal modellen lave planen, og læsninger udføres aldrig som handlinger", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: BUDGET });
+  const before = tp.model.requests.length;
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Læser igen.", actions: [{ action: "readRange", address: "Budget!A1:B3", reason: "" }] }) });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Læser igen.")).toBeVisible();
+  await expect(tp.page.getByText("Modellen foreslog ingen handlinger.")).toBeVisible();
+  // Tre runder med læsning og en sidste uden vejledningen til readRange.
+  expect(tp.model.requests.length - before).toBe(4);
+  expect(tp.model.lastRequest!.messages[0].content).not.toContain("readRange {address}");
+});
+
+test("Excel, flere trin (#20): en handling, der fejler, kan rettes af modellen; det udførte gentages ikke", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Sorterer og sætter en etiket.",
+      actions: [
+        { action: "sortRange", target: "Salg", by: "Beløb", order: "desc", reason: "Størst først" },
+        { action: "setValues", address: "E1", values: [["Sorteret"]], reason: "Etiket" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("1 af 2 handlinger udført.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Fortryd agent-session" })).toBeVisible();
+
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Sorterer efter den rigtige kolonne.",
+      actions: [{ action: "sortRange", target: "Salg", by: "Omsætning", order: "desc", reason: "Rettet" }],
+    }),
+  });
+  await tp.page.getByRole("button", { name: "Bed modellen rette det, der fejlede" }).click();
+  await expect(tp.page.getByText("Sorterer efter den rigtige kolonne.")).toBeVisible();
+  const prompt = tp.model.lastRequest!.messages.at(-1)!.content;
+  expect(prompt).toContain("return ONLY actions that fix what failed");
+  expect(prompt).toContain('Kolonnen "Beløb" findes ikke');
+  expect(prompt).toContain('"action":"sortRange"');
+  expect(prompt).not.toContain('"action":"setValues"');
+  // Konteksten er hentet igen: etiketten fra første plan står i arket.
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.values.map((r) => r[0])).toEqual(["Region", "Syd", "Vest", "Nord", "Øst"]);
+  expect(after.values[0][4]).toBe("Sorteret");
+});
+
 type Deck = {
   id: string;
   layout: string;

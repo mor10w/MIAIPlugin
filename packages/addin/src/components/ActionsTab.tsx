@@ -44,6 +44,7 @@ import { ui, type TaskCategory } from "../theme";
 import { TaskNotices } from "./TaskNotices";
 import { useTask } from "../useTask";
 import { useAgentOptions } from "../useAgentOptions";
+import { planWithReads } from "../agentRun";
 import { AgentPlanView } from "./AgentPlanView";
 import { DesignPreview } from "./DesignPreview";
 import type { AgentRequest } from "./ChatTab";
@@ -196,6 +197,11 @@ export function ActionsTab({
   // Kodetilstand og eksport: slået til af brugeren og tilladt af politikken.
   const { scripts, exportSheet } = useAgentOptions(taskId);
 
+  /** Agentens færdige plan (efter evt. læse-runder), og om den er undervejs. */
+  const [agentPlan, setAgentPlan] = useState<AgentPlan>();
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [reading, setReading] = useState<string | null>(null);
+
   const run = async (extra: Record<string, string> = {}) => {
     if (!task) return;
     setInputError(undefined);
@@ -211,7 +217,16 @@ export function ActionsTab({
         maxChars: task.chunking === "map-reduce" ? MAX_CHUNKED_CHARS : undefined,
       });
       ctxRef.current = ctx;
-      await start(task.id, { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params, ...extra } });
+      const req = { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params, ...extra } };
+      if (task.id === "agent") {
+        // Agenten kan læse i dokumentet (fx andre ark), før den laver planen (#20). Planen vises først,
+        // når den er færdig – ikke mellemregningerne med læsninger.
+        setAgentBusy(true);
+        const final = await planWithReads(start, adapter, req, (addresses) => setReading(addresses ? addresses.join(", ") : null)).finally(() =>
+          setAgentBusy(false),
+        );
+        setAgentPlan(final.status === "done" ? (final.result as AgentPlan | undefined) : undefined);
+      } else await start(task.id, req);
     } catch (err) {
       setInputError((err as Error).message);
     }
@@ -383,18 +398,21 @@ export function ActionsTab({
         <Card className={mergeClasses(s.card, kit.appear)}>
           <div className={s.resultHead}>
             <Subtitle2 as="h3">{t("result")}</Subtitle2>
+            {reading && <Caption1 className={s.muted}>{t("agentReading", { what: reading })}</Caption1>}
             {running && task.output.kind === "json" && <Caption1 className={s.muted}>{t("generatingStructured", { chars: state.progressChars })}</Caption1>}
           </div>
           <div className={mergeClasses(s.resultBody, (isAgent || isDesign) && s.agentBody)} aria-live="polite" aria-busy={running}>
-            {isAgent && state.status === "done" && state.result !== undefined && ctxRef.current ? (
+            {isAgent && !agentBusy && state.status === "done" && agentPlan && ctxRef.current ? (
               <AgentPlanView
-                key={JSON.stringify(state.result)}
-                plan={state.result as AgentPlan}
+                key={JSON.stringify(agentPlan)}
+                plan={agentPlan}
                 ctx={ctxRef.current}
                 adapter={adapter}
                 scripts={scripts}
                 exportSheet={exportSheet}
-                onRetry={(r) => void run({ previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900) })}
+                onRetry={(r) =>
+                  void run({ previousError: r.error.slice(0, 2_000), previousCode: r.code.slice(0, 3_900), ...(r.partial ? { previousPartial: "true" } : {}) })
+                }
               />
             ) : isDesign && state.status === "done" && state.result !== undefined && ctxRef.current ? (
               <DesignPreview key={JSON.stringify(state.result)} plan={state.result as DesignPlan} ctx={ctxRef.current} adapter={adapter} />

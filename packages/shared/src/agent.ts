@@ -204,6 +204,11 @@ export const AgentAction = z.discriminatedUnion("action", [
     title: z.string().max(120).optional(),
     reason,
   }),
+  z.object({
+    action: z.literal("readRange"),
+    address: z.string().min(2).max(300).describe("Range to look at before planning, with sheet name when it is on another sheet, e.g. 'Budget!A1:F40'"),
+    reason,
+  }),
   z.object({ action: z.literal("addSheet"), name: SheetName.describe("Name of the new, empty sheet (max 31 characters)"), reason }),
   z.object({
     action: z.literal("renameSheet"),
@@ -264,6 +269,7 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "freezeRows",
   "addSheet",
   "renameSheet",
+  "readRange",
   "runScript",
   "saveSheet",
 ];
@@ -334,7 +340,22 @@ export const SAVE_GUIDE = [
   "- saveSheet {fileName, sheet?, reason}: save a whole sheet as a NEW .xlsx file on the user's desktop (Documents/Downloads if asked), preserving values, formulas and column widths. It does not change the workbook – use it when the user wants a separate file (e.g. 'put this sheet in its own file' or 'give me this as a new Excel file').",
 ].join("\n");
 
-export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean } = {}): string {
+/** Maks. antal celler, agenten kan læse pr. readRange (#20). */
+export const MAX_READ_CELLS = 6_000;
+/** Maks. antal runder, hvor agenten læser, før den skal lave sin plan. */
+export const MAX_READ_ROUNDS = 3;
+
+/**
+ * Agent i flere trin (#20): beskrivelsen af readRange – kun så længe agenten har læse-runder tilbage.
+ * En plan med readRange vises ikke for brugeren: add-in'et henter cellerne (ingen ændringer) og
+ * spørger modellen igen med værdierne.
+ */
+export const READ_GUIDE = [
+  "- readRange {address}: LOOK at cells you need but cannot see – another sheet, or a range outside the selection (e.g. 'Budget!A1:F40'). Nothing is changed and the user is not asked: the add-in returns the values and asks you again.",
+  "  When you need to read, return ONLY readRange actions (up to 4) and nothing else; make the real plan when you have the values. Do not read what is already shown, and do not read at all when the request can be planned from what you see.",
+].join("\n");
+
+export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean; reads?: boolean } = {}): string {
   if (host === "excel")
     return [
       "Available actions (Excel, active sheet only):",
@@ -358,6 +379,7 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "Use addresses that match the sheet overview; row numbers are shown in the first column of the selected values. Never write over existing data unless the user asked for it. Addresses refer to the sheet before any of your actions – the add-in deletes rows last, from the bottom up.",
       opts.scripts ? SCRIPT_GUIDE : undefined,
       opts.export ? SAVE_GUIDE : undefined,
+      opts.reads ? READ_GUIDE : undefined,
     ]
       .filter(Boolean)
       .join("\n");
@@ -466,6 +488,17 @@ const tablesOn = (ctx: Pick<DocContext, "excel">, address: string) => {
   return tablesOf(ctx).filter((t) => !sheet || !t.sheet || t.sheet === sheet);
 };
 
+/** Planens læsninger (#20), som add-in'et kan udføre uden bekræftelse: gyldig adresse, kendt ark og ikke for stor. */
+export function readRequests(plan: AgentPlan, ctx: Pick<DocContext, "host" | "excel">): Extract<AgentAction, { action: "readRange" }>[] {
+  if (ctx.host !== "excel") return [];
+  const sheets = ctx.excel?.sheets?.length ? new Set(ctx.excel.sheets.map((sh) => sh.name.toLowerCase())) : undefined;
+  return plan.actions.flatMap((a) => {
+    if (a.action !== "readRange" || !RANGE.test(a.address) || cellCount(a.address) > MAX_READ_CELLS) return [];
+    const sheet = sheetOfAddress(a.address);
+    return sheet && sheets && !sheets.has(sheet.toLowerCase()) ? [] : [a];
+  });
+}
+
 /**
  * Markerede værdier med arkets rækkenummer først, så modellen kan pege på rækker (deleteRows)
  * uden at tælle selv: "5\tJylland\t120".
@@ -525,6 +558,10 @@ export function checkPlan(
       if (sheet && knownSheets && !knownSheets.has(sheet.toLowerCase())) return { action, problem: "bad-sheet" };
     }
     switch (action.action) {
+      case "readRange":
+        // Læsning udføres af add-in'et før planen vises; en læsning, der står tilbage i planen, kan ikke udføres.
+        if (!RANGE.test(action.address)) return ok(action, "bad-address");
+        return ok(action, cellCount(action.address) > MAX_READ_CELLS ? "too-large" : "invalid");
       case "addSheet":
         return ok(action, knownSheets && existingSheets.has(action.name.toLowerCase()) ? "bad-sheet" : undefined);
       case "renameSheet":

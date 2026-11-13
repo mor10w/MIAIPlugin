@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentPlan, cellCount, checkPlan, isDestructive, MAX_AGENT_ACTIONS, numberedRows, rangeBox, renderExcelStructure, sheetOfAddress } from "./agent.js";
+import {
+  AgentPlan,
+  agentToolGuide,
+  cellCount,
+  checkPlan,
+  readRequests,
+  isDestructive,
+  MAX_AGENT_ACTIONS,
+  numberedRows,
+  rangeBox,
+  renderExcelStructure,
+  sheetOfAddress,
+} from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
 import { TaskRequest } from "./types.js";
 import { TASKS } from "./tasks.js";
@@ -412,6 +424,47 @@ describe("agent i PowerPoint og Excel", () => {
     expect(sheetOfAddress("'Mit ark'!B2")).toBe("Mit ark");
     expect(sheetOfAddress("B2")).toBeUndefined();
     expect(renderExcelStructure(excel)).toContain("Sheets:\n- Ark1 (active): A1:C5, headers: Region | Måned | Omsætning\n- Mit ark: empty");
+  });
+
+  it("readRange (#20): læsninger udføres af add-in'et før planen, aldrig som handling, og kun gyldige udføres", () => {
+    const excel = {
+      tables: [],
+      columnFormats: [],
+      activeSheet: "Ark1",
+      sheets: [
+        { name: "Ark1", headers: [] },
+        { name: "Budget", headers: [] },
+      ],
+    };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "readRange", address: "Budget!A1:F40", reason: "" },
+        { action: "readRange", address: "Findes!A1:B2", reason: "" },
+        { action: "readRange", address: "A1:Z1000", reason: "" },
+        { action: "readRange", address: "ikke en adresse", reason: "" },
+      ],
+    });
+    const ctx = { host: "excel" as const, text: "", excel };
+    expect(readRequests(plan, ctx).map((r) => r.address)).toEqual(["Budget!A1:F40"]);
+    expect(readRequests(plan, { host: "word", text: "" })).toEqual([]);
+    // Står en læsning tilbage i en plan, kan den ikke vælges.
+    expect(checkPlan(plan, ctx).map((c) => c.problem)).toEqual(["invalid", "bad-sheet", "too-large", "bad-address"]);
+    expect(agentToolGuide("excel", { reads: true })).toContain("readRange {address}");
+    expect(agentToolGuide("excel")).not.toContain("readRange {address}");
+    expect(agentToolGuide("word", { reads: true })).not.toContain("readRange");
+  });
+
+  it("agentens prompt (#20): det læste står som data, og en delvis fejlet plan rettes uden at gentage det udførte", () => {
+    const msgs = agent.buildMessages(
+      TaskRequest.parse({
+        context: { host: "excel", text: "", address: "Ark1!A1:B2", observations: "Budget!A1:B2:\n1\tRegion\tBudget" },
+        params: { prompt: "Sammenlign med budgettet", agentReads: "on", previousError: "- Sortér: failed", previousCode: "[]", previousPartial: "true" },
+      }),
+    );
+    expect(msgs[0].content).toContain("readRange {address}");
+    expect(msgs[1].content).toContain("Cells you asked to read (you have these now – do not ask for them again):\n<document>\nBudget!A1:B2:");
+    expect(msgs[1].content).toContain("return ONLY actions that fix what failed");
   });
 
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {

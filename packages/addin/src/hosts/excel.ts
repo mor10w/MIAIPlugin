@@ -1,4 +1,4 @@
-import { fitGrid, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import { fitGrid, numberedRows, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { mdToPlain } from "../markdown";
 import { runExcelScript } from "../script";
 import { FORMAT_PROPS } from "./excelFormats";
@@ -10,6 +10,9 @@ const MAX_COLS = 30;
 const MAX_STAT_ROWS = 5_000;
 /** Uden statistik: overskrifter + så mange rækker af used range. */
 const HEADER_ROWS = 6;
+/** Agenten kan læse højst så mange områder pr. runde, og så mange formler vises pr. område (#20). */
+const MAX_READS = 4;
+const MAX_READ_FORMULAS = 60;
 /** Agentens overblik over projektmappen dækker højst så mange ark. */
 const MAX_SHEETS = 30;
 
@@ -403,6 +406,51 @@ export class ExcelAdapter implements HostAdapter {
         });
     };
     return { results, undo, undoKind: "cells" };
+  }
+
+  /**
+   * Agent i flere trin (#20): værdierne i de områder, agenten har bedt om at se, som TSV med arkets
+   * rækkenummer først og en liste over formler. Intet ændres. Tomme rækker i bunden udelades.
+   */
+  async readForAgent(reads: { address: string }[], dc: DocContext): Promise<string> {
+    const active = dc.address?.includes("!") ? splitAddress(dc.address).sheet : undefined;
+    return Excel.run(async (ctx) => {
+      const parts: string[] = [];
+      for (const read of reads.slice(0, MAX_READS)) {
+        try {
+          const onSheet = read.address.includes("!");
+          const ws = onSheet
+            ? ctx.workbook.worksheets.getItem(splitAddress(read.address).sheet)
+            : active
+              ? ctx.workbook.worksheets.getItem(active)
+              : ctx.workbook.worksheets.getActiveWorksheet();
+          const r = ws.getRange((onSheet ? splitAddress(read.address).range : read.address).replace(/\$/g, ""));
+          r.load("address,values,formulas,rowIndex,columnIndex");
+          await ctx.sync();
+          const values = r.values as unknown[][];
+          let last = values.length;
+          while (last > 0 && values[last - 1].every((v) => v === "" || v === null)) last--;
+          const formulas = (r.formulas as unknown[][])
+            .slice(0, last)
+            .flatMap((row, y) =>
+              row.flatMap((f, x) => (typeof f === "string" && f.startsWith("=") ? [`${colName(r.columnIndex + x)}${r.rowIndex + y + 1}: ${f}`] : [])),
+            )
+            .slice(0, MAX_READ_FORMULAS);
+          parts.push(
+            [
+              `${r.address} (TSV; the first column is the sheet's row number, not data)${last < values.length ? ` – rows ${r.rowIndex + last + 1}–${r.rowIndex + values.length} are empty` : ""}:`,
+              last ? numberedRows(toTsv(values.slice(0, last)), r.address) : "(all cells are empty)",
+              formulas.length ? `Formulas: ${formulas.join("; ")}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          );
+        } catch (e) {
+          parts.push(`${read.address}: could not be read (${e instanceof Error ? e.message : String(e)})`);
+        }
+      }
+      return parts.join("\n\n");
+    });
   }
 
   /** Udfører handlingerne for ét ark (se applyAgent). `active`: arket er det, markeringen står på. */

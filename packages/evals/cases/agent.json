@@ -551,5 +551,53 @@
       }
     ],
     "rubric": "addSheet Oversigt, en etiket og =SUM(Salg!C2:C5) på Oversigt-arket (adresser med 'Oversigt!'); intet ændres på Salg."
+  },
+  {
+    "id": "agent-excel-laes-andet-ark-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (flere trin)",
+    "note": "#20: budgettet står på et andet ark, som agenten ikke kan se. Den skal læse det (kun readRange), ikke gætte tallene.",
+    "context": {
+      "host": "excel",
+      "text": "Region\tOmsætning\nNord\t120\nSyd\t340",
+      "table": "Region\tOmsætning\nNord\t120\nSyd\t340",
+      "address": "Salg!A1:B3",
+      "excel": {
+        "tables": [],
+        "columnFormats": [],
+        "activeSheet": "Salg",
+        "sheets": [
+          {
+            "name": "Salg",
+            "used": "A1:B3",
+            "headers": ["Region", "Omsætning"]
+          },
+          {
+            "name": "Budget",
+            "used": "A1:B3",
+            "headers": ["Region", "Budget"]
+          }
+        ]
+      }
+    },
+    "params": {
+      "prompt": "Tilføj en kolonne med budgettet fra Budget-arket ud for hver region",
+      "agentReads": "on"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 2,
+        "include": ["readRange"],
+        "exclude": ["setValues", "setFormula", "runScript"]
+      },
+      {
+        "type": "regex",
+        "pattern": "Budget!"
+      }
+    ],
+    "rubric": "Kun readRange på Budget-arket (fx Budget!A1:B3) og ingen skrivende handlinger endnu; alternativt er opslagsformler acceptable, men opdigtede budgettal er en fejl."
   }
 ]

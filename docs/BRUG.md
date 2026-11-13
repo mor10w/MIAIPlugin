@@ -225,11 +225,12 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
      - **Visning:** lav et diagram og frys overskriftsrækken.
      - **Flere ark:** agenten kender alle ark i projektmappen (navn, brugt område og overskrifter) og kan skrive på et andet ark, oprette et nyt ark og omdøbe et ark, fx *"lav et nyt ark med den samlede omsætning"*. Fortryd dækker alle berørte ark. Værdierne ser den kun for markeringen.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
+   - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
    - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
    - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.
-3. **Udfør.** Hver handling får ✓ eller en forklaring.
+3. **Udfør.** Hver handling får ✓ eller en forklaring. Fejler nogle af handlingerne, kan du trykke **Bed modellen rette det, der fejlede**: fejlene sendes til modellen, som foreslår en rettelse. Det, der lykkedes, er udført og gentages ikke.
 
 **Formateringen bevares.** Agenten ser dokumentet afsnit for afsnit med typografi (overskrift, brødtekst, punkt, tabel), så den kan arbejde med strukturen frem for imod den:
 - **Erstat** ændrer kun de ord, der faktisk er forskellige. Fed, kursiv og links omkring dem bliver stående.

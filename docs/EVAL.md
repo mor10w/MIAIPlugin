@@ -6,7 +6,7 @@ Harnesset kalder `executeTask` fra `@miai/shared`. Det er samme motor, som add-i
 
 ## Indhold
 
-61 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 18 indbyggede opgaver (F1–F13, agent-tilstand, præsentationsdesign, svar på mail og web-søgning):
+62 cases i `packages/evals/cases/*.json`, på dansk og engelsk og fordelt på alle 18 indbyggede opgaver (F1–F13, agent-tilstand, præsentationsdesign, svar på mail og web-søgning):
 
 | Fil | Opgaver | Hvad der især testes |
 |---|---|---|
@@ -16,7 +16,7 @@ Harnesset kalder `executeTask` fra `@miai/shared`. Det er samme motor, som add-i
 | `struktureret.json` | grammatik, slides, diagram | gyldigt JSON i første forsøg, antal slides/noder, ingen opdigtede rettelser i korrekt tekst |
 | `formler.json` | lav og forklar formler | `SUMIFS`/`XLOOKUP`/`COUNTIFS`, engelske funktionsnavne, komma som separator |
 | `chat.json` | chat og web-søgning | svar ud fra dokumentet, "står ikke i dokumentet" (hallucination), Excel-omfang, samtalehistorik, kalder `web_search` når relevant – og lader være, når dokumentet svarer; henviser til agenten (ingen VBA) ved ønsker om formatering |
-| `agent.json` | agent i Word, Excel og PowerPoint | gyldige planer (afsnit/figurer/tabeller findes), formatering bevares: `setStyle` frem for slet+indsæt, korte erstatninger, `appendRows` i Excel-tabeller, tomme rækker, tabeltypografi, sortering og diagram i Excel, kodetilstand (pivottabel via script), flere ark, prompt injection |
+| `agent.json` | agent i Word, Excel og PowerPoint | gyldige planer (afsnit/figurer/tabeller findes), formatering bevares: `setStyle` frem for slet+indsæt, korte erstatninger, `appendRows` i Excel-tabeller, tomme rækker, tabeltypografi, sortering og diagram i Excel, kodetilstand (pivottabel via script), flere ark, læsning før planen, prompt injection |
 
 Hver case har automatiske tjek og en `rubric` til en valgfri dommermodel. Formatet er beskrevet i `packages/evals/src/types.ts`.
 

@@ -124,3 +124,10 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - **Udførelse:** handlingerne grupperes pr. ark og køres med samme fremgangsmåde og fortryd som før, ét ark ad gangen. `addSheet` udføres først, så planen kan skrive på det nye ark; `renameSheet` til sidst, så alle adresser bruger navnene fra før planen.
 - **Fortryd:** navnene sættes tilbage, hvert arks ændringer fortrydes i omvendt rækkefølge, og ark, planen har oprettet, slettes.
 - **Begrænsning:** frysning af rækker gælder det aktive ark.
+
+**Agent i flere trin (#20):**
+- **Læsning før planen (Excel):** handlingen `readRange {address}` udføres af add-in'et, ikke af brugeren. Indeholder planen læsninger, hentes cellerne (TSV med rækkenumre og en liste over formler; højst 4 områder a 6.000 celler), og modellen spørges igen med værdierne i konteksten (`DocContext.observations`, som data). Efter tre runder får modellen ikke længere vejledningen til `readRange` og skal lave planen. En læsning kan aldrig udføres som handling (`checkPlan` fravælger den).
+- **Ingen bekræftelse af læsninger:** det læste er samme slags data som markeringen og går kun til den model, brugeren har valgt. Alt, der ændrer dokumentet, vises og bekræftes som før.
+- **Virker uden tool calling:** læsningen er en del af JSON-planen, så små modeller uden værktøjskald kan bruge den.
+- **Rettelse af fejlede handlinger:** fejler faste handlinger ved udførelsen (fx en kolonne, der ikke findes, eller en formelfejl), kan fejlene og de fejlede handlinger sendes til modellen. Prompten siger, at resten er udført, og at kun rettelser skal returneres; dokumentets kontekst hentes igen. Scripts rettes som før (de rulles tilbage og køres forfra).
+- **Mangler:** Word og PowerPoint har ingen læsninger, fordi agenten dér ser hele dokumentet eller markeringen med afsnit; modellen ser heller ikke automatisk resultatet af en vellykket plan (det sker via samtalens historik i chatten, #19).

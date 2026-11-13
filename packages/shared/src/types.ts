@@ -18,6 +18,11 @@ export const DocContext = z.object({
   table: z.string().max(100_000).optional(),
   /** Excel: oversigt over filen – arkliste, headers og kolonne-statistik regnet over hele used range (bygget af add-in'et). */
   surroundings: z.string().max(20_000).optional(),
+  /**
+   * Agent i flere trin (#20): det, agenten selv har bedt om at læse i dokumentet (fx celler på et
+   * andet ark), hentet af add-in'et uden at ændre noget. Vises for modellen i næste runde.
+   */
+  observations: z.string().max(40_000).optional(),
   /** Sat af add-in'et, hvis teksten blev afkortet, før den blev sendt (#3). */
   truncated: z.boolean().optional(),
   /** Tekstens oprindelige længde i tegn, når den er afkortet. */
