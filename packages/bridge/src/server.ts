@@ -31,6 +31,10 @@ import { folderAllowed, KnowledgeIndex } from "./knowledge/index.js";
 import { openFile } from "./knowledge/open.js";
 import { pickLang, renderStatusPage } from "./statusPage.js";
 
+/** Samme direktiver som add-in'et selv sætter i bridge-tilstand (packages/addin/src/csp.ts). */
+export const BRIDGE_CSP =
+  "connect-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; object-src 'none'; form-action 'none'; base-uri 'self'";
+
 export const VERSION = "0.1.0";
 const KEY_MASK = "********";
 
@@ -96,6 +100,9 @@ export async function buildServer({
   app.addHook("onSend", async (_req, reply) => {
     reply.header("x-content-type-options", "nosniff");
     reply.header("referrer-policy", "no-referrer");
+    // CSP (#28): task pane taler kun med bridgen selv; billeder, medier, plugins og formularer kan
+    // ikke bruges til at sende indhold ud. Scripts begrænses ikke (Office.js hentes fra Microsofts CDN).
+    reply.header("content-security-policy", BRIDGE_CSP);
   });
 
   // --- API ------------------------------------------------------------------

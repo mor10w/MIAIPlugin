@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { policyReloadPending } from "../csp";
 import {
   Button,
   Caption1,
@@ -82,7 +83,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const kit = useKitStyles();
   const theme = useOfficeTheme();
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
-  const [tab, setTab] = useState<TabId>("actions");
+  // Efter en genindlæsning, fordi politikkens hosts blev ændret (#28), åbnes Indstillinger igen.
+  const [tab, setTab] = useState<TabId>(() => (policyReloadPending() ? "settings" : "actions"));
   /** Prompt fra chatten → udfyldes i agent-opgaven, når brugeren vælger "Gør det med agenten". */
   const [agentRequest, setAgentRequest] = useState<AgentRequest | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "warn" });
