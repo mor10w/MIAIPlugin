@@ -155,6 +155,8 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Excel: forklar formel; generér formel → validering og **Fortryd**; oversæt område → celler; kommentar
 - [ ] PowerPoint: omskriv tekst i markeret tekstboks; tekst til slides med standardskabelon **og** en firmaskabelon
 - [ ] Chat i alle tre apps; stop-knappen afbryder generering
+- [ ] Vedhæft et skærmbillede (klips og Ctrl+V) med en vision-model: svaret beskriver billedet; "indsæt tabellen fra billedet i arket" giver en plan med de rigtige tal; med en model uden vision vises beskeden om at vælge en anden model
+- [ ] Vedhæft en PDF og en .docx med bridge: indholdet bruges i svaret; uden bridge forklares, at det kræver MIAI Bridge
 - [ ] Markeringen under chattens skrivefelt følger med, når der markeres noget andet (Word, Excel, PowerPoint; Windows og Mac)
 - [ ] Samtalen er der igen, når task pane lukkes og åbnes på samme gemte dokument (også OneDrive/SharePoint); "Ny samtale" sletter den; et nyt, ikke gemt dokument huskes ikke
 - [ ] Endpoint uden for politik afvises; låst maskinpolitik (bridge) kan ikke ændres

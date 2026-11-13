@@ -15,7 +15,7 @@ type Start = (id: string, req: TaskRequest) => Promise<TaskState>;
 export async function planWithReads(
   start: Start,
   adapter: HostAdapter,
-  req: { context: DocContext; params: Record<string, string>; history?: TaskRequest["history"] },
+  req: { context: DocContext; params: Record<string, string>; history?: TaskRequest["history"]; attachments?: TaskRequest["attachments"] },
   onRead?: (addresses: string[] | null) => void,
 ): Promise<TaskState> {
   let observations = "";
@@ -23,7 +23,12 @@ export async function planWithReads(
     for (let round = 0; ; round++) {
       const canRead = !!adapter.readForAgent && round < MAX_READ_ROUNDS;
       const context = observations ? { ...req.context, observations: observations.slice(0, 40_000) } : req.context;
-      const final = await start("agent", { context, params: { ...req.params, agentReads: canRead ? "on" : "" }, history: req.history });
+      const final = await start("agent", {
+        context,
+        params: { ...req.params, agentReads: canRead ? "on" : "" },
+        history: req.history,
+        attachments: req.attachments,
+      });
       const plan = final.result as AgentPlan | undefined;
       if (final.status !== "done" || !plan) return final;
       const reads = readRequests(plan, req.context);

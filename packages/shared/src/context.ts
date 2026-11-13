@@ -18,9 +18,14 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
-export function estimateMessages(messages: { content?: string | null }[]): number {
+/** Omtrentligt antal tokens for et billede (afhænger af modellen; de fleste bruger 250–1.500). */
+const IMAGE_TOKENS = 800;
+
+export function estimateMessages(messages: { content?: string | null | ({ type: "text"; text: string } | { type: "image_url" })[] }[]): number {
   // + lidt pr. besked til rolle og formattering
-  return messages.reduce((n, m) => n + estimateTokens(m.content ?? "") + 4, 0);
+  const size = (c: (typeof messages)[number]["content"]) =>
+    Array.isArray(c) ? c.reduce((n, part) => n + (part.type === "text" ? estimateTokens(part.text) : IMAGE_TOKENS), 0) : estimateTokens(c ?? "");
+  return messages.reduce((n, m) => n + size(m.content) + 4, 0);
 }
 
 /**

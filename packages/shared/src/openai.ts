@@ -7,7 +7,15 @@ import type { Endpoint } from "./types.js";
  */
 
 export type UpstreamCode =
-  "UPSTREAM_UNREACHABLE" | "UPSTREAM_HTTP" | "UPSTREAM_TIMEOUT" | "UPSTREAM_PROTOCOL" | "NO_MODEL" | "POLICY" | "CONTEXT_OVERFLOW" | "NO_EMBEDDINGS";
+  | "UPSTREAM_UNREACHABLE"
+  | "UPSTREAM_HTTP"
+  | "UPSTREAM_TIMEOUT"
+  | "UPSTREAM_PROTOCOL"
+  | "NO_MODEL"
+  | "POLICY"
+  | "CONTEXT_OVERFLOW"
+  | "NO_EMBEDDINGS"
+  | "NO_VISION";
 
 export class UpstreamError extends Error {
   constructor(
@@ -57,8 +65,13 @@ export interface ToolCallDelta {
 }
 
 /** Besked til /chat/completions. Bredere end ChatMessage: tillader tool-kald og -resultater (ADR-0010). */
+/** Indhold i dele (#27): tekst og billeder til modeller med vision. */
+export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+
 export type ApiMessage =
-  { role: "system" | "user" | "assistant"; content: string; tool_calls?: ToolCall[] } | { role: "tool"; tool_call_id: string; content: string };
+  | { role: "system" | "assistant"; content: string; tool_calls?: ToolCall[] }
+  | { role: "user"; content: string | ContentPart[] }
+  | { role: "tool"; tool_call_id: string; content: string };
 
 export interface StreamChunk {
   text?: string;

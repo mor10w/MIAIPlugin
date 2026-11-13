@@ -255,3 +255,80 @@ test("samtalen huskes ikke for dokumenter uden adresse, eller når det er slået
   await ask(off);
   expect(await stored(off.page)).toEqual([]);
 });
+
+const PNG_1X1 = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+type Part = { type: string; text?: string; image_url?: { url: string } };
+
+test("vedhæftninger (#27): et billede og en tekstfil går med til modellen og ryddes efter afsendelse", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { sheet: "Ark1", values: [["Region", "Omsætning"]] } });
+  await tp.tab("Chat");
+  await tp.page.locator('input[type="file"]').setInputFiles([
+    { name: "tabel.png", mimeType: "image/png", buffer: PNG_1X1 },
+    { name: "noter.txt", mimeType: "text/plain", buffer: Buffer.from("Budgettet for 2026 er 900.") },
+  ]);
+  await expect(tp.page.getByText("tabel.png")).toBeVisible();
+  await expect(tp.page.getByText("noter.txt")).toBeVisible();
+  // En vedhæftning kan fjernes igen, før beskeden sendes.
+  await tp.page.locator('input[type="file"]').setInputFiles([{ name: "fortrudt.txt", mimeType: "text/plain", buffer: Buffer.from("x") }]);
+  await tp.page.getByRole("button", { name: "Fjern fortrudt.txt" }).click();
+  await expect(tp.page.getByText("fortrudt.txt")).toHaveCount(0);
+
+  tp.model.reply = () => ({ stream: ["Billedet viser en tabel med to kolonner."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad viser billedet?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Billedet viser en tabel med to kolonner.")).toBeVisible();
+
+  const content = tp.model.lastRequest!.messages.at(-1)!.content as unknown as Part[];
+  expect(content.map((p) => p.type)).toEqual(["text", "image_url"]);
+  expect(content[0].text).toContain("Hvad viser billedet?");
+  expect(content[0].text).toContain('<attachment name="noter.txt">\nBudgettet for 2026 er 900.\n</attachment>');
+  expect(content[1].image_url!.url).toMatch(/^data:image\/png;base64,/);
+  // Skrivefeltet er ryddet, og beskeden i samtalen viser, hvad der var vedhæftet.
+  await expect(tp.page.getByRole("button", { name: /^Fjern / })).toHaveCount(0);
+  await expect(tp.page.getByText("tabel.png")).toBeVisible();
+
+  // Næste besked: tekstfilen følger med i historikken, billedet sendes ikke igen.
+  tp.model.reply = () => ({ stream: ["Budgettet var 900."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad var budgettet?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Budgettet var 900.")).toBeVisible();
+  const msgs = tp.model.lastRequest!.messages;
+  expect(typeof msgs.at(-1)!.content).toBe("string");
+  expect(msgs[1].content).toContain("[image attached earlier: tabel.png]");
+  expect(msgs[1].content).toContain("Budgettet for 2026 er 900.");
+});
+
+test("vedhæftninger (#27): en model uden vision giver en forståelig fejl, og PDF kræver bridgen", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  await tp.tab("Chat");
+  const input = tp.page.locator('input[type="file"]');
+  await input.setInputFiles([{ name: "rapport.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4") }]);
+  await expect(tp.page.getByText("rapport.pdf: PDF og Office-filer kan kun vedhæftes med MIAI Bridge eller MIAI App.")).toBeVisible();
+  await input.setInputFiles([{ name: "program.exe", mimeType: "application/octet-stream", buffer: Buffer.from("MZ") }]);
+  await expect(tp.page.getByText(/program\.exe: filtypen kan ikke vedhæftes/)).toBeVisible();
+
+  await input.setInputFiles([{ name: "skærm.png", mimeType: "image/png", buffer: PNG_1X1 }]);
+  tp.model.reply = (b) => (Array.isArray(b.messages.at(-1)!.content) ? { status: 400, error: "image input is not supported" } : { stream: ["ok"] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad står der?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText(/Modellen kunne ikke bruge billedet – den understøtter måske ikke billeder/)).toBeVisible();
+});
+
+test("vedhæftninger (#27): et billede går også med, når chatten laver en plan for dokumentet", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { sheet: "Ark1", values: [["Region", "Omsætning"]] } });
+  await tp.tab("Chat");
+  await tp.page.locator('input[type="file"]').setInputFiles([{ name: "tabel.png", mimeType: "image/png", buffer: PNG_1X1 }]);
+  await expect(tp.page.getByText("tabel.png")).toBeVisible();
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Indsætter tallene fra billedet.",
+      actions: [{ action: "setValues", address: "A2", values: [["Nord", 120]], reason: "Fra billedet" }],
+    }),
+  });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Indsæt tabellen fra billedet i arket");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Indsætter tallene fra billedet.")).toBeVisible();
+  const req = tp.model.lastRequest!;
+  expect(req.messages[0].content).toContain("You are in agent mode");
+  expect((req.messages.at(-1)!.content as unknown as Part[]).map((p) => p.type)).toEqual(["text", "image_url"]);
+});

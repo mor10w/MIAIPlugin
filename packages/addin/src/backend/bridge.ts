@@ -84,6 +84,16 @@ export class BridgeBackend implements Backend {
     return fetch("/api/export", { method: "POST", headers: H, body: JSON.stringify(data) }).then((r) => json<{ ok: true; path: string }>(r));
   }
 
+  /** Tekst fra en vedhæftet PDF- eller Office-fil (#27), trukket ud af bridgen. */
+  async extractFile(file: File): Promise<string> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    // I bidder: String.fromCharCode med hele filen på én gang rammer grænsen for argumenter.
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const r = await fetch("/api/extract", { method: "POST", headers: H, body: JSON.stringify({ name: file.name, data: btoa(bin) }) });
+    return (await json<{ text: string }>(r)).text;
+  }
+
   readonly knowledge: KnowledgeApi = {
     status: () => fetch("/api/knowledge", { headers: H }).then((r) => json<KnowledgeStatus>(r)),
     reindex: () => fetch("/api/knowledge/reindex", { method: "POST", headers: H, body: "{}" }).then((r) => json<KnowledgeStatus>(r)),

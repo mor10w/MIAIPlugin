@@ -210,6 +210,12 @@ Knappen **AI-assistent** findes derefter i mailen og i udkastet.
 
 Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument som kontekst** (til som udgangspunkt) giver modellen din aktuelle markering – i Excel dit markerede område – med. De seneste 20 beskeder medsendes som historik. Svar kan indsættes **efter** markeringen, **erstattes** eller indsættes **som kommentar**. **Ny samtale** nulstiller historikken. Enter sender, Shift+Enter linjeskift.
 
+- **Vedhæft billeder og filer**: klik på klipsen ved skrivefeltet, eller sæt et skærmbillede ind med Ctrl+V.
+  - **Billeder** (PNG, JPEG, WebP, GIF) sendes til modellen sammen med beskeden. Det kræver en model, der kan se (fx gemma3 eller qwen2.5vl). Kan modellen ikke det, får du en besked om at vælge en anden model eller fjerne billedet. Store billeder skaleres ned først.
+  - **Tekstfiler** (.txt, .md, .csv, .json m.fl.) læses som tekst. **PDF, Word, Excel og PowerPoint** kan vedhæftes med MIAI Bridge eller MIAI App, som trækker teksten ud; filen gemmes ikke.
+  - Højst 6 vedhæftninger pr. besked og 60.000 tegn pr. fil (resten udelades, og modellen får det at vide).
+  - Vedhæftninger går også med, når chatten laver en plan for dokumentet, fx *"indsæt tabellen fra billedet i arket"*.
+  - I opfølgende beskeder husker modellen tekstfilernes indhold, men billedet sendes ikke igen.
 - **Markeringen vises**: under skrivefeltet står, hvad chatten bruger som kontekst lige nu, fx "Markering: Ark1!B2:B9", "Markering: 42 ord" eller "Intet markeret – hele dokumentet bruges". Den følger med, når du markerer noget andet.
 - **Samtalen huskes pr. dokument**: åbner du MIAI igen på samme dokument, er samtalen der stadig, og den går med som historik til modellen.
   - Den gemmes kun på denne maskine (i task panes lager), højst 40 beskeder pr. dokument og 20 dokumenter.
