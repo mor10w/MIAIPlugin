@@ -363,7 +363,7 @@ test("Excel, kodetilstand: sandkassen afviser netværk, og et fejlende script ru
   await tp.run("Agent: redigér dokumentet");
   await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
   await expect(tp.page.getByText(/Bum: kolonnen findes ikke – ændringerne er rullet tilbage/)).toBeVisible();
-  await expect(tp.page.getByText(/arket er sat tilbage til, som det var/)).toBeVisible();
+  await expect(tp.page.getByText(/dokumentet er sat tilbage til, som det var/)).toBeVisible();
   expect((await sheet(tp.page)).values.map((r) => r.slice(0, 3))).toEqual(before.values);
 
   // "Bed modellen rette scriptet" sender fejlen og koden med.
@@ -785,4 +785,45 @@ test("PowerPoint (#22): 'slide 2' i et chatsvar kan klikkes og går til sliden",
   await expect(tp.page.locator("button.docref")).toHaveText(["slide 2"]);
   await tp.page.getByRole("button", { name: "slide 2" }).click();
   await expect.poll(async () => (await tp.find<{ id: number; type: string }>("goTo")) ?? null).toMatchObject({ id: 2, type: "Index" });
+});
+
+test("kodetilstand i PowerPoint (#23): scriptet kører i sandkassen, fortryd lægger alle slides tilbage, og fejl rulles tilbage", async ({ open }) => {
+  const tp = await open({ host: "PowerPoint", apiSets: { PowerPointApi: "1.8" }, slides: SLIDES, layouts: LAYOUTS, settings: { agentScripts: true } });
+  const before = withoutIds(await deck(tp.page));
+  const script = (code: string) => ({
+    json: JSON.stringify({ summary: "Script.", actions: [{ action: "runScript", description: "Slet første slide", code, reason: "" }] }),
+  });
+  const remove = 'const slides = context.presentation.slides;\nslides.load("items");\nawait context.sync();\nslides.items[0].delete();\nawait context.sync();';
+
+  tp.model.reply = () => script(`${remove}\nreturn "Slettede det første slide";`);
+  await tp.run("Agent: redigér dokumentet");
+  expect(tp.model.lastRequest!.messages[0].content).toContain("`context` (PowerPoint.RequestContext) and `PowerPoint` in scope");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("Slettede det første slide", { exact: true })).toBeVisible();
+  expect(withoutIds(await deck(tp.page))).toEqual(before.slice(1));
+  await expect(tp.page.getByText(/Fortryd lægger alle slides tilbage/)).toBeVisible();
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(withoutIds(await deck(tp.page))).toEqual(before);
+
+  tp.model.reply = () => script(`${remove}\nthrow new Error("Bum i PowerPoint");`);
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText(/Bum i PowerPoint – ændringerne er rullet tilbage/)).toBeVisible();
+  expect(withoutIds(await deck(tp.page))).toEqual(before);
+});
+
+test("kodetilstand i PowerPoint (#23): uden PowerPointApi 1.8 kan der ikke tages et øjebliksbillede, så scriptet køres ikke", async ({ open }) => {
+  const tp = await open({ host: "PowerPoint", apiSets: { PowerPointApi: "1.4" }, slides: SLIDES, layouts: LAYOUTS, settings: { agentScripts: true } });
+  const before = await deck(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Script.",
+      actions: [{ action: "runScript", description: "Slet", code: "context.presentation.slides.items[0].delete(); await context.sync();", reason: "" }],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText(/Kodetilstanden i PowerPoint kræver PowerPointApi 1.8/)).toBeVisible();
+  expect(await deck(tp.page)).toEqual(before);
 });

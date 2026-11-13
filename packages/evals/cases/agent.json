@@ -841,5 +841,53 @@
       }
     ],
     "rubric": "Én insertTable efter ¶6 (eller i slutningen) med en overskriftsrække (fx By | Leveringstid) og tre rækker: Aalborg 2 dage, Aarhus 1 dag, Odense 1 dag."
+  },
+  {
+    "id": "agent-word-script-sidehoved-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (kodetilstand)",
+    "note": "#23: sidehoveder findes ikke som fast handling i Word, så modellen skal skrive et Office.js-script, der består sandkassen.",
+    "context": {
+      "host": "word",
+      "text": "Tilbud\nVi tilbyder levering inden for 3 dage.",
+      "isWholeDocument": true,
+      "paragraphs": [
+        {
+          "text": "Tilbud",
+          "style": "Heading1"
+        },
+        {
+          "text": "Vi tilbyder levering inden for 3 dage.",
+          "style": "Normal"
+        }
+      ]
+    },
+    "params": {
+      "prompt": "Skriv 'Fortroligt' i sidehovedet på alle sider",
+      "agentScripts": "on"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 1,
+        "include": ["runScript"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "getHeader"
+      },
+      {
+        "type": "regex",
+        "pattern": "Fortroligt"
+      },
+      {
+        "type": "notContains",
+        "values": ["fetch(", "window.", "Excel."]
+      }
+    ],
+    "rubric": "Ét runScript, der bruger context.document.sections, getHeader(...) og insertText/insertParagraph med 'Fortroligt' og kalder context.sync(). Koden bruger kun context og Word."
   }
 ]

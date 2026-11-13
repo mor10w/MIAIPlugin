@@ -1,3 +1,4 @@
+import { runWordScript } from "../script";
 import { selectedText, wordCount } from "./selection";
 import type { SelectionInfo } from "./types";
 import type { DocRef } from "../refs";
@@ -276,6 +277,13 @@ export class WordAdapter implements HostAdapter {
    * røres; uden sporede ændringer gendannes indholdet fra et øjebliksbillede.
    */
   async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
+    // Kodetilstand (#23): et script står alene i planen og kører i sandkassen med sit eget øjebliksbillede.
+    const script = actions.find((a) => a.action === "runScript");
+    if (script?.action === "runScript") {
+      if (!opts.scripts) throw new Error("Kodetilstanden er ikke slået til (Indstillinger → Avanceret).");
+      if (actions.length > 1) throw new Error("Et script skal stå alene i planen.");
+      return runWordScript(script);
+    }
     return this.run(async (ctx, range) => {
       const body = ctx.document.body;
       const tracking = !!opts.trackChanges && has("1.4");

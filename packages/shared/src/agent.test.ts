@@ -349,8 +349,25 @@ describe("agent i PowerPoint og Excel", () => {
     expect(checkPlan(unsafe, { host: "excel", text: "" }, { scripts: true })[0].problem).toBe("unsafe-script");
     const mixed = AgentPlan.parse({ summary: "s", actions: [script, { action: "freezeRows", rows: 1, reason: "" }] });
     expect(checkPlan(mixed, { host: "excel", text: "" }, { scripts: true }).map((c) => c.problem)).toEqual([undefined, "with-script"]);
-    // Kun i Excel.
-    expect(checkPlan(alone, { host: "word", text: "" }, { scripts: true })[0].problem).toBe("wrong-host");
+    // Scriptet kender kun sin egen værts objekt (#23): `context` i Word er Words, og `Excel` findes ikke der.
+    const word = AgentPlan.parse({
+      summary: "s",
+      actions: [{ ...script, code: "context.document.body.insertParagraph('x', Word.InsertLocation.end); await context.sync();" }],
+    });
+    expect(checkPlan(word, { host: "word", text: "" }, { scripts: true })[0].problem).toBeUndefined();
+    expect(checkPlan(word, { host: "word", text: "" })[0].problem).toBe("scripts-off");
+    expect(checkPlan(word, { host: "excel", text: "" }, { scripts: true })[0].problem).toBe("unsafe-script");
+    const ppt = AgentPlan.parse({
+      summary: "s",
+      actions: [{ ...script, code: "const s = context.presentation.slides; s.load('items'); await context.sync(); return PowerPoint.ShapeType.placeholder;" }],
+    });
+    expect(checkPlan(ppt, { host: "powerpoint", text: "" }, { scripts: true })[0].problem).toBeUndefined();
+    expect(checkPlan(ppt, { host: "word", text: "" }, { scripts: true })[0].problem).toBe("unsafe-script");
+    expect(checkPlan(alone, { host: "outlook", text: "" }, { scripts: true })[0].problem).toBe("wrong-host");
+    // Vejledningen følger værten og gives kun, når kodetilstanden er slået til.
+    expect(agentToolGuide("word", { scripts: true })).toContain("`context` (Word.RequestContext) and `Word` in scope");
+    expect(agentToolGuide("powerpoint", { scripts: true })).toContain("`context` (PowerPoint.RequestContext) and `PowerPoint` in scope");
+    expect(agentToolGuide("word")).not.toContain("runScript {description, code}");
     expect(isDestructive(alone.actions[0])).toBe(true);
   });
 

@@ -430,3 +430,37 @@ test("Word-tabeller (#24): uden en tabel i dokumentet bruges en indbygget tabelt
     },
   ]);
 });
+
+test("kodetilstand i Word (#23): scriptet kører i sandkassen, kan fortrydes, og et fejlende script rulles tilbage", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS, settings: { agentScripts: true } });
+  const script = (code: string, description = "Tilføj en linje") => ({
+    json: JSON.stringify({ summary: "Script.", actions: [{ action: "runScript", description, code, reason: "" }] }),
+  });
+
+  // Excel-objektet findes ikke i Word, og netværk er spærret som i Excel.
+  tp.model.reply = () => script("const s = Excel.run; await fetch('https://evil.example');", "Forkert vært");
+  await tp.run("Agent: redigér dokumentet");
+  expect(tp.model.lastRequest!.messages[0].content).toContain("`context` (Word.RequestContext) and `Word` in scope");
+  await expect(tp.page.getByText("Bruger noget, sandkassen ikke tillader")).toBeVisible();
+
+  tp.model.reply = () =>
+    script('context.document.body.insertParagraph("Tilføjet af script", "End");\nawait context.sync();\nreturn "Tilføjede en linje sidst i dokumentet";');
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByText("Vis koden").click();
+  await expect(tp.page.getByText('insertParagraph("Tilføjet af script"')).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("Tilføjede en linje sidst i dokumentet", { exact: true })).toBeVisible();
+  expect((await doc(tp)).at(-1)!.text).toBe("Tilføjet af script");
+  await expect(tp.page.getByText(/Fortryd sætter dokumentets brødtekst tilbage/)).toBeVisible();
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await doc(tp)).toEqual(ORIGINAL);
+
+  // Et script, der ændrer og så fejler: dokumentet er som før, og modellen kan rette det.
+  tp.model.reply = () => script('context.document.body.insertParagraph("Halvt færdig", "End");\nawait context.sync();\nthrow new Error("Bum i Word");');
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText(/Bum i Word – ændringerne er rullet tilbage/)).toBeVisible();
+  expect(await doc(tp)).toEqual(ORIGINAL);
+  await expect(tp.page.getByRole("button", { name: "Bed modellen rette scriptet" })).toBeVisible();
+});

@@ -5,7 +5,7 @@ import { parse } from "acorn";
  * før add-in'et kører det.
  *
  * Scriptet er modeloutput og kan være påvirket af prompt injection i dokumentet. Det må derfor kun
- * kunne nå de objekter, det får (`context` og `Excel`) og en håndfuld sikre indbyggede objekter –
+ * kunne nå de objekter, det får (`context` og værtens objekt, fx `Excel`) og en håndfuld sikre indbyggede objekter –
  * aldrig `window`, `fetch`, `localStorage` (indstillinger og API-nøgler) eller DOM'en.
  *
  * Kontrollen er kapabilitetsbaseret:
@@ -48,8 +48,9 @@ export const SCRIPT_GLOBALS: ReadonlySet<string> = new Set([
   "console",
 ]);
 
-/** Parametrene, scriptet kaldes med. */
-export const SCRIPT_PARAMS = ["context", "Excel"] as const;
+/** Værtens globale objekt i scriptet: `Excel`, `Word` eller `PowerPoint` (kun det, der hører til værten). */
+export const SCRIPT_HOSTS = { excel: "Excel", word: "Word", powerpoint: "PowerPoint" } as const;
+export type ScriptHost = (typeof SCRIPT_HOSTS)[keyof typeof SCRIPT_HOSTS];
 
 /** Egenskaber, der kan føre fra et tilladt objekt ud til funktioner eller det globale objekt. */
 const BANNED_MEMBERS = new Set([
@@ -107,9 +108,10 @@ const FORBIDDEN_NODES: Record<string, string> = {
 
 /**
  * Tjekker scriptet og returnerer den omskrevne kode (med `__key` og `__tick`), som add-in'et
- * kører som krop i en async-funktion med parametrene `context`, `Excel`, `__key` og `__tick`.
+ * kører som krop i en async-funktion med parametrene `context`, værtens objekt (`Excel`, `Word`
+ * eller `PowerPoint`), `__key` og `__tick`.
  */
-export function checkScript(source: string): ScriptCheck {
+export function checkScript(source: string, host: ScriptHost = "Excel"): ScriptCheck {
   let ast: Node;
   try {
     ast = parse(source, {
@@ -127,7 +129,8 @@ export function checkScript(source: string): ScriptCheck {
   const problem = (msg: string) => problems.length < 5 && !problems.includes(msg) && problems.push(msg);
 
   type Scope = { names: Set<string>; parent?: Scope; fn: boolean };
-  const top: Scope = { names: new Set(SCRIPT_PARAMS), fn: true };
+  // Parametrene, scriptet kaldes med: `context` og værtens eget objekt.
+  const top: Scope = { names: new Set(["context", host]), fn: true };
   const resolves = (name: string, scope: Scope | undefined): boolean => {
     for (let s = scope; s; s = s.parent) if (s.names.has(name)) return true;
     return SCRIPT_GLOBALS.has(name);

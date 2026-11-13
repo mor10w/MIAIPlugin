@@ -331,14 +331,17 @@ const da = {
   agentRetryScript: "Bed modellen rette scriptet",
   agentUndoScript:
     "Fortryd gendanner arkets celler og formater og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.",
-  agentScriptRolledBack: "Scriptet fejlede, og arket er sat tilbage til, som det var. Modellen kan rette scriptet ud fra fejlen.",
+  agentUndoScriptWord:
+    "Fortryd sætter dokumentets brødtekst tilbage til, som den var før scriptet – også ændringer, du selv har lavet siden. Sidehoved, sidefod og kommentarer gendannes ikke.",
+  agentUndoScriptSlides: "Fortryd lægger alle slides tilbage, som de var før scriptet – også ændringer, du selv har lavet siden. Slidemasteren gendannes ikke.",
+  agentScriptRolledBack: "Scriptet fejlede, og dokumentet er sat tilbage til, som det var. Modellen kan rette scriptet ud fra fejlen.",
   "agentProblem_scripts-off": "Kodetilstanden er slået fra (Indstillinger)",
   "agentProblem_with-script": "Kan ikke kombineres med et script",
   "agentProblem_unsafe-script": "Bruger noget, sandkassen ikke tillader",
   "agentProblem_no-bridge": "Eksporten er ikke slået til (kræver MIAI Bridge)",
-  agentScripts: "Agenten må skrive og køre Office.js-kode (Excel, avanceret)",
+  agentScripts: "Agenten må skrive og køre Office.js-kode (avanceret)",
   agentScriptsHint:
-    "Til det, de faste handlinger ikke kan (fx navngivne områder og sortering på flere kolonner). Du ser koden, før den kører; den kører i en sandkasse uden netværk og kan fortrydes for det aktive ark. Kræver en stærk model (14B+).",
+    "Til det, de faste handlinger ikke kan (fx navngivne områder og sortering på flere kolonner). Du ser koden, før den kører; den kører i en sandkasse uden netværk og kan fortrydes (det aktive ark i Excel, brødteksten i Word, alle slides i PowerPoint). Kræver en stærk model (14B+).",
   agentScriptsForbidden: "Din organisation har slået kodetilstanden fra.",
   agentExport: "Agenten må gemme et Excel-ark som .xlsx-fil på skrivebordet",
   agentExportHint:
@@ -775,14 +778,17 @@ const en: Dict = {
   agentRetryScript: "Ask the model to fix the script",
   agentUndoScript:
     "Undo restores the sheet's cells and formats and removes new sheets, tables, charts and pivot tables. Conditional formatting, data validation and changes on other sheets are not restored.",
-  agentScriptRolledBack: "The script failed and the sheet has been put back as it was. The model can fix the script from the error.",
+  agentUndoScriptWord:
+    "Undo puts the document body back as it was before the script – including changes you have made since. Headers, footers and comments are not restored.",
+  agentUndoScriptSlides: "Undo puts all slides back as they were before the script – including changes you have made since. The slide master is not restored.",
+  agentScriptRolledBack: "The script failed and the document has been put back as it was. The model can fix the script from the error.",
   "agentProblem_scripts-off": "Code mode is off (Settings)",
   "agentProblem_with-script": "Cannot be combined with a script",
   "agentProblem_unsafe-script": "Uses something the sandbox does not allow",
   "agentProblem_no-bridge": "Export is not enabled (requires MIAI Bridge)",
-  agentScripts: "The agent may write and run Office.js code (Excel, advanced)",
+  agentScripts: "The agent may write and run Office.js code (advanced)",
   agentScriptsHint:
-    "For what the built-in actions cannot do (e.g. named ranges and sorting by several columns). You see the code before it runs; it runs in a sandbox without network access and can be undone for the active sheet. Needs a strong model (14B+).",
+    "For what the built-in actions cannot do (e.g. named ranges and sorting by several columns). You see the code before it runs; it runs in a sandbox without network access and can be undone (the active sheet in Excel, the body in Word, all slides in PowerPoint). Needs a strong model (14B+).",
   agentScriptsForbidden: "Your organisation has turned code mode off.",
   agentExport: "The agent may save an Excel sheet as a .xlsx file on the desktop",
   agentExportHint:
