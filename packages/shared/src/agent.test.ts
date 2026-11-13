@@ -11,6 +11,7 @@ import {
   numberedRows,
   rangeBox,
   renderExcelStructure,
+  renderParagraphs,
   sheetOfAddress,
 } from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
@@ -151,7 +152,9 @@ describe("agent-plan (#6)", () => {
     const sys = word[0].content;
     expect(sys).toContain("setStyle {paragraph, style}");
     expect(sys).toMatch(/never inherits the neighbour's formatting/);
-    expect(sys).toMatch(/never delete, move or insert inside paragraphs marked \(table\)/);
+    expect(sys).toMatch(/never delete, move or insert text inside paragraphs marked \(table …\)/);
+    expect(sys).toContain("insertTable {position, paragraph?, rows}");
+    expect(sys).toContain("addTableRow {paragraph, position?, values}");
   });
 });
 
@@ -513,6 +516,55 @@ describe("agent i PowerPoint og Excel", () => {
       undefined,
     ]);
     expect(plan.actions[0]).toMatchObject({ columns: [], values: [{ field: "omsætning", summarize: "sum" }] });
+  });
+
+  it("Word-tabeller (#24): celler vises med række og kolonne, og rækkehandlinger kræver en tabel", () => {
+    const paragraphs = [
+      { text: "Priser", style: "Heading1" },
+      { text: "Vare", style: "Normal", table: true, cell: { table: 1, row: 1, col: 1 } },
+      { text: "Pris", style: "Normal", table: true, cell: { table: 1, row: 1, col: 2 } },
+      { text: "Æble", style: "Normal", table: true, cell: { table: 1, row: 2, col: 1 } },
+      { text: "4 kr", style: "Normal", table: true, cell: { table: 1, row: 2, col: 2 } },
+      { text: "Én række", style: "Normal", table: true, cell: { table: 2, row: 1, col: 1 } },
+    ];
+    expect(renderParagraphs(paragraphs)).toContain("¶2 [Normal] (table 1, row 1, col 1) Vare\n¶3 [Normal] (table 1, row 1, col 2) Pris");
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        {
+          action: "insertTable",
+          position: "after",
+          paragraph: 1,
+          rows: [
+            ["A", "B"],
+            ["1", "2"],
+          ],
+          reason: "",
+        },
+        { action: "insertTable", position: "after", paragraph: 2, rows: [["A"], ["1"]], reason: "" },
+        { action: "insertTable", position: "end", rows: [["A", "B"], ["1"]], reason: "" },
+        { action: "addTableRow", paragraph: 4, values: ["Pære", "5 kr"], reason: "" },
+        { action: "addTableRow", paragraph: 4, values: ["Pære", "5 kr", "for mange"], reason: "" },
+        { action: "addTableRow", paragraph: 1, values: ["x"], reason: "" },
+        { action: "deleteTableRow", paragraph: 5, reason: "" },
+        { action: "deleteTableRow", paragraph: 6, reason: "" },
+        { action: "deleteTableRow", paragraph: 99, reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "word", text: "", paragraphs }).map((c) => c.problem)).toEqual([
+      undefined,
+      "in-table",
+      "invalid",
+      undefined,
+      "invalid",
+      "not-in-table",
+      undefined,
+      "invalid", // tabellens eneste række
+      "bad-paragraph",
+    ]);
+    expect(plan.actions[3]).toMatchObject({ position: "after" });
+    expect(isDestructive(plan.actions[6])).toBe(true);
+    expect(() => AgentPlan.parse({ summary: "s", actions: [{ action: "insertTable", position: "end", rows: [["kun overskrift"]], reason: "" }] })).toThrow();
   });
 
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {

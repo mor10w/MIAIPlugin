@@ -677,5 +677,169 @@
       }
     ],
     "rubric": "Én setValidation på B2:B5 (kolonnen Måned uden overskriften) med list ['Jan','Feb','Mar']."
+  },
+  {
+    "id": "agent-word-tabelraekke-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (Word-tabeller)",
+    "note": "#24: en ny vare skal ind som tabelrække, ikke som tekst efter tabellen.",
+    "context": {
+      "host": "word",
+      "text": "Priser\nVare\nPris\nÆble\n4 kr\nVi leverer til tre byer: Aalborg (2 dage), Aarhus (1 dag) og Odense (1 dag).",
+      "isWholeDocument": true,
+      "paragraphs": [
+        {
+          "text": "Priser",
+          "style": "Heading1"
+        },
+        {
+          "text": "Vare",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 1,
+            "col": 1
+          }
+        },
+        {
+          "text": "Pris",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 1,
+            "col": 2
+          }
+        },
+        {
+          "text": "Æble",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 2,
+            "col": 1
+          }
+        },
+        {
+          "text": "4 kr",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 2,
+            "col": 2
+          }
+        },
+        {
+          "text": "Vi leverer til tre byer: Aalborg (2 dage), Aarhus (1 dag) og Odense (1 dag).",
+          "style": "Normal"
+        }
+      ]
+    },
+    "params": {
+      "prompt": "Tilføj Pære til 5 kr i pristabellen"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 1,
+        "include": ["addTableRow"],
+        "exclude": ["insert", "insertTable"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "Pære"
+      }
+    ],
+    "rubric": "Én addTableRow med paragraph 4 eller 5 (rækken med Æble) og values ['Pære','5 kr']."
+  },
+  {
+    "id": "agent-word-ny-tabel-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (Word-tabeller)",
+    "note": "#24: tabelindhold skal blive en rigtig tabel, ikke linjer med | eller tabulatorer.",
+    "context": {
+      "host": "word",
+      "text": "Priser\nVare\nPris\nÆble\n4 kr\nVi leverer til tre byer: Aalborg (2 dage), Aarhus (1 dag) og Odense (1 dag).",
+      "isWholeDocument": true,
+      "paragraphs": [
+        {
+          "text": "Priser",
+          "style": "Heading1"
+        },
+        {
+          "text": "Vare",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 1,
+            "col": 1
+          }
+        },
+        {
+          "text": "Pris",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 1,
+            "col": 2
+          }
+        },
+        {
+          "text": "Æble",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 2,
+            "col": 1
+          }
+        },
+        {
+          "text": "4 kr",
+          "style": "Normal",
+          "table": true,
+          "cell": {
+            "table": 1,
+            "row": 2,
+            "col": 2
+          }
+        },
+        {
+          "text": "Vi leverer til tre byer: Aalborg (2 dage), Aarhus (1 dag) og Odense (1 dag).",
+          "style": "Normal"
+        }
+      ]
+    },
+    "params": {
+      "prompt": "Lav en tabel med leveringstiderne for de tre byer efter sidste afsnit"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 2,
+        "include": ["insertTable"],
+        "exclude": ["addTableRow"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "Aalborg"
+      },
+      {
+        "type": "regex",
+        "pattern": "Odense"
+      }
+    ],
+    "rubric": "Én insertTable efter ¶6 (eller i slutningen) med en overskriftsrække (fx By | Leveringstid) og tre rækker: Aalborg 2 dage, Aarhus 1 dag, Odense 1 dag."
   }
 ]

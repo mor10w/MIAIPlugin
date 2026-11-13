@@ -87,6 +87,25 @@ export const AgentAction = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("setStyle"), paragraph, style: WordStyle, reason }),
   z.object({ action: z.literal("comment"), find, text: z.string().min(1).max(2_000), reason }),
+  z.object({
+    action: z.literal("insertTable"),
+    position: z.enum(["before", "after", "start", "end"]).describe("before/after: relative to ¶paragraph; start/end: of the document or selection"),
+    paragraph: paragraph.optional().describe("Required for before/after – a paragraph that is NOT in a table"),
+    rows: z
+      .array(z.array(z.string().max(500)).min(1).max(12))
+      .min(2)
+      .max(60)
+      .describe("The table's cells, row by row. The FIRST row is the header row. Plain text, one string per cell"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("addTableRow"),
+    paragraph: paragraph.describe("A paragraph (¶) in the table row next to which the new row goes"),
+    position: z.enum(["before", "after"]).default("after"),
+    values: z.array(z.string().max(500)).min(1).max(12).describe("The new row's cells from left to right"),
+    reason,
+  }),
+  z.object({ action: z.literal("deleteTableRow"), paragraph: paragraph.describe("A paragraph (¶) in the table row to delete"), reason }),
   // --- PowerPoint (replace deles med Word) --------------------------------------
   z.object({
     action: z.literal("setText"),
@@ -278,7 +297,7 @@ export const AgentPlan = z.object({
 });
 export type AgentPlan = z.infer<typeof AgentPlan>;
 
-export const WORD_ACTIONS: AgentActionKind[] = ["replace", "insert", "delete", "move", "setStyle", "comment"];
+export const WORD_ACTIONS: AgentActionKind[] = ["replace", "insert", "delete", "move", "setStyle", "comment", "insertTable", "addTableRow", "deleteTableRow"];
 export const EXCEL_ACTIONS: AgentActionKind[] = [
   "setValues",
   "setFormula",
@@ -308,6 +327,7 @@ export const agentActionsFor = (host: HostKind): AgentActionKind[] =>
 /** Destruktive handlinger fremhæves i planen. */
 export const isDestructive = (a: AgentAction) =>
   a.action === "delete" ||
+  a.action === "deleteTableRow" ||
   a.action === "clear" ||
   a.action === "deleteSlide" ||
   a.action === "deleteRows" ||
@@ -347,7 +367,9 @@ export function renderExcelStructure(x: NonNullable<DocContext["excel"]>): strin
  * Lange afsnit vises i fuld længde, så modellen kan citere ordret.
  */
 export function renderParagraphs(paras: NonNullable<DocContext["paragraphs"]>): string {
-  return paras.map((p, i) => `¶${i + 1} [${p.style}]${p.list ? " (list)" : ""}${p.table ? " (table)" : ""} ${p.text}`).join("\n");
+  // Tabelceller vises med tabel, række og kolonne (#24), så agenten kan tilføje og slette rækker.
+  const cell = (p: (typeof paras)[number]) => (p.cell ? ` (table ${p.cell.table}, row ${p.cell.row}, col ${p.cell.col})` : p.table ? " (table)" : "");
+  return paras.map((p, i) => `¶${i + 1} [${p.style}]${p.list ? " (list)" : ""}${cell(p)} ${p.text}`).join("\n");
 }
 
 /** Beskrivelse af værktøjerne til systemprompten – kun dem, der gælder for værten. */
@@ -424,7 +446,7 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "Slide and shape numbers refer to the presentation as shown, before any of your actions.",
     ].join("\n");
   return [
-    "Available actions (Word). The document is shown as numbered paragraphs: ¶number [style] text; (list) = list item, (table) = inside a table.",
+    "Available actions (Word). The document is shown as numbered paragraphs: ¶number [style] text; (list) = list item, (table 1, row 2, col 1) = inside a table cell.",
     "- replace {find, replace, all?}: change text inside a paragraph. `find` is copied verbatim from one paragraph; only the words that differ are replaced, so bold, links and other formatting around them are kept.",
     "- insert {text, position: before|after|start|end, paragraph?, style?}: add new paragraph(s) before/after ¶paragraph or at the start/end. One line per paragraph; use Markdown for structure and emphasis ('## ' heading, '- ' bullet, '1. ' numbered, **bold**, *italic*, [text](https://…)). Lines without a prefix get `style` (default normal) – the new text never inherits the neighbour's formatting.",
     "- delete {paragraph} removes a whole paragraph; delete {find} removes only that text inside a paragraph.",
@@ -432,7 +454,9 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
     "- setStyle {paragraph, style}: change a paragraph's role (e.g. body text → heading2, or a line → bullet) without touching its text or inline formatting.",
     "- comment {find, text}: add a review comment on the text.",
     "Styles: normal, heading1, heading2, heading3, bullet, numbered, quote. Use the document's existing structure: match the heading levels and list style already used around the place you edit.",
-    "Preserve formatting: prefer small replace actions over rewriting whole paragraphs; use setStyle instead of delete + insert to change a role; never delete, move or insert inside paragraphs marked (table) – edit their text with replace only.",
+    "Preserve formatting: prefer small replace actions over rewriting whole paragraphs; use setStyle instead of delete + insert to change a role; never delete, move or insert text inside paragraphs marked (table …) – edit their text with replace, and change a table's rows with addTableRow/deleteTableRow.",
+    "- insertTable {position, paragraph?, rows}: add a new table before/after ¶paragraph (not inside a table) or at the start/end. rows = the cells row by row, the FIRST row is the header; every row has the same number of cells. The table gets the document's table style. Use it for tabular content instead of lines with tabs or | characters.",
+    "- addTableRow {paragraph, position?, values}: add one row to an existing table, before or after (default) the row that contains ¶paragraph; values = the cells from left to right. deleteTableRow {paragraph}: delete the row that contains ¶paragraph.",
     "Paragraph numbers refer to the document as shown, before any of your actions; do not renumber after earlier actions.",
   ].join("\n");
 }
@@ -447,6 +471,8 @@ export type AgentProblem =
   | "bad-paragraph"
   /** Strukturændring i en tabel (ville ødelægge tabellen). */
   | "in-table"
+  /** Word: afsnittet står ikke i en tabel (kræves for at tilføje eller slette en tabelrække). */
+  | "not-in-table"
   /** Handlingen er ufuldstændig (fx delete uden afsnit og tekst). */
   | "invalid"
   /** Word uden afsnitsstruktur (før WordApi 1.3): afsnitshandlinger kan ikke bruges. */
@@ -673,6 +699,27 @@ export function checkPlan(
       case "insert":
         if (action.position === "before" || action.position === "after") return ok(action, para(action.paragraph, true));
         return ok(action);
+      case "insertTable": {
+        // Alle rækker skal have lige mange celler; ellers er det uklart, hvor cellerne hører til.
+        if (action.rows.some((r) => r.length !== action.rows[0].length)) return ok(action, "invalid");
+        if (action.position === "before" || action.position === "after") return ok(action, para(action.paragraph, true));
+        return ok(action);
+      }
+      case "addTableRow":
+      case "deleteTableRow": {
+        if (!paras) return ok(action, "no-structure");
+        const p = paras[action.paragraph - 1];
+        if (!p) return ok(action, "bad-paragraph");
+        if (!p.table && !p.cell) return ok(action, "not-in-table");
+        if (action.action === "deleteTableRow") {
+          // Tabellens eneste række kan ikke slettes som række (så skal hele tabellen væk).
+          const rows = p.cell ? new Set(paras.filter((x) => x.cell?.table === p.cell!.table).map((x) => x.cell!.row)).size : 2;
+          return ok(action, rows < 2 ? "invalid" : undefined);
+        }
+        // Flere værdier end tabellen har kolonner, kan ikke placeres.
+        const cols = p.cell ? Math.max(...paras.filter((x) => x.cell?.table === p.cell!.table).map((x) => x.cell!.col)) : undefined;
+        return ok(action, cols !== undefined && action.values.length > cols ? "invalid" : undefined);
+      }
       case "setText": {
         if (!slides) return ok(action, "no-structure");
         const [sn, shn] = action.shape.split(".").map(Number);
