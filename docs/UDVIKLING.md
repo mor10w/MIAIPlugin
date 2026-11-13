@@ -195,6 +195,8 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Slet et helt afsnit: intet tomt afsnit bliver tilbage; slet et punkt: intet tomt punkt
 - [ ] Flyt et afsnit med fed tekst og et link: formateringen følger med, og der opstår intet ekstra tomt afsnit
 - [ ] Tabeller: tekst i en celle kan rettes; sletning/flytning af celleafsnit er fravalgt i planen
+- [ ] Tabeller (#24): "tilføj en række" og "slet rækken med …" ændrer den rigtige række (også i en tabel med flettede celler); "lav en tabel med …" giver en Word-tabel med overskriftsrække og dokumentets tabeltypografi; sporede ændringer og Fortryd virker for alle tre
+- [ ] En Markdown-tabel i et chatsvar bliver en rigtig tabel ved "Indsæt efter"
 - [ ] Fortryd med sporede ændringer (Microsoft 365): kun agentens ændringer og kommentarer forsvinder; egne sporede ændringer før sessionen er urørte
 - [ ] Fortryd i Word 2016/2019 (uden WordApi 1.6): dokumentet er som før; nummerering i lister og sidehoveder er intakte
 - [ ] Ændr et afsnit mellem plan og "Udfør": handlinger på det afsnit afvises med "Dokumentet er ændret siden planen"

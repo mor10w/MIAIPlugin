@@ -317,3 +317,116 @@ test("agentens plan i Word (#22): 'Vis i dokumentet' markerer teksten eller afsn
     )
     .toEqual([{ text: "499 kr" }, { text: "Gammel note, der skal væk.", paragraph: 5 }]);
 });
+
+const TABEL_DOK = [
+  { text: "Priser", style: "Heading1" },
+  { text: "Vare", cell: [1, 1] as [number, number] },
+  { text: "Pris", cell: [1, 2] as [number, number] },
+  { text: "Æble", cell: [2, 1] as [number, number] },
+  { text: "4 kr", cell: [2, 2] as [number, number] },
+  { text: "Pære", cell: [3, 1] as [number, number] },
+  { text: "5 kr", cell: [3, 2] as [number, number] },
+  { text: "Slut", style: "Normal" },
+];
+type Tabel = { rows: string[][]; style?: string; styleBuiltIn?: string; headerRowCount?: number };
+const tables = (tp: { page: import("@playwright/test").Page }) =>
+  tp.page.evaluate(() => (window as unknown as { __miai: { tables: () => Tabel[] } }).__miai.tables());
+
+test("Word-tabeller (#24): ny tabel, ny række, slettet række og rettet celle; fortryd gendanner dokumentet", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: TABEL_DOK });
+  const before = await doc(tp);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Opdaterer pristabellen og tilføjer en tabel over butikker.",
+      actions: [
+        { action: "addTableRow", paragraph: 4, values: ["Banan", "3 kr"], reason: "Ny vare" },
+        { action: "deleteTableRow", paragraph: 6, reason: "Udgået" },
+        { action: "replace", find: "4 kr", replace: "6 kr", reason: "Ny pris" },
+        {
+          action: "insertTable",
+          position: "after",
+          paragraph: 8,
+          rows: [
+            ["Butik", "By"],
+            ["Nord", "Aalborg"],
+          ],
+          reason: "Butikker",
+        },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  // Modellen ser cellerne med tabel, række og kolonne.
+  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  expect(prompt).toContain("¶4 [Normal] (table 1, row 2, col 1) Æble\n¶5 [Normal] (table 1, row 2, col 2) 4 kr");
+  expect(prompt).toContain("insertTable {position, paragraph?, rows}");
+  await expect(tp.page.getByRole("checkbox", { name: "Ny tabelrække ved ¶4 “Æble”: Banan | 3 kr" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Slet tabelrækken med ¶6 “Pære”" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Indsæt tabel (2 rækker × 2 kolonner): Butik | By" })).toBeChecked();
+
+  await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).click();
+  await expect(tp.page.getByText("4 af 4 handlinger udført.")).toBeVisible();
+  expect(await tables(tp)).toEqual([
+    {
+      style: "Tabelgitter",
+      rows: [
+        ["Vare", "Pris"],
+        ["Æble", "6 kr"],
+        ["Banan", "3 kr"],
+      ],
+    },
+    // Den nye tabel får samme typografi som dokumentets tabel og en overskriftsrække.
+    {
+      style: "Tabelgitter",
+      headerRowCount: 1,
+      rows: [
+        ["Butik", "By"],
+        ["Nord", "Aalborg"],
+      ],
+    },
+  ]);
+  expect((await doc(tp)).at(-1)!.text).toBe("Aalborg");
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await doc(tp)).toEqual(before);
+});
+
+test("Word-tabeller (#24): uden en tabel i dokumentet bruges en indbygget tabeltypografi, og rækkehandlinger kræver en tabel", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Tilføjer en tabel.",
+      actions: [
+        {
+          action: "insertTable",
+          position: "end",
+          rows: [
+            ["Plan", "Pris"],
+            ["Basis", "499 kr"],
+            ["Plus", "799 kr"],
+          ],
+          reason: "Prisoversigt",
+        },
+        { action: "addTableRow", paragraph: 2, values: ["x"], reason: "" },
+        { action: "insertTable", position: "end", rows: [["A", "B"], ["kun én"]], reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Afsnittet står ikke i en tabel")).toBeVisible();
+  await expect(tp.page.getByText("Ufuldstændig handling")).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  expect(await tables(tp)).toEqual([
+    {
+      styleBuiltIn: "GridTable4_Accent1",
+      headerRowCount: 1,
+      rows: [
+        ["Plan", "Pris"],
+        ["Basis", "499 kr"],
+        ["Plus", "799 kr"],
+      ],
+    },
+  ]);
+});

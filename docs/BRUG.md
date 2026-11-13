@@ -225,7 +225,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 **Agent: redigér dokumentet** udfører ændringer for dig. Beskriv, hvad der skal ændres, fx *"ret alle 'kunde' til 'klient' og tilføj overskriften 'Vilkår' øverst"* eller i Excel *"tilføj en total-række under tabellen"*.
 
 1. **Plan.** MIAI foreslår en liste af konkrete handlinger med en kort begrundelse for hver. **Intet er ændret endnu.**
-   - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit og kommentér.
+   - Word: erstat tekst, indsæt afsnit, skift et afsnits typografi (fx brødtekst → overskrift), slet eller flyt hele afsnit, kommentér, indsæt en tabel og tilføj eller slet tabelrækker.
    - Excel:
      - **Data:** skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område og sortér.
      - **Udseende:** giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat, tilpas kolonnebredden og brug betinget formatering (farveskala, datalinjer, fremhæv over/under en værdi, dubletter, top 10).
@@ -245,7 +245,8 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - **Ny tekst** får sin egen typografi og arver ikke naboens formatering. En linje efter en overskrift bliver altså brødtekst, ikke endnu en overskrift. Agenten kan selv skabe formatering: overskrifter, punkter, nummererede lister, citater, **fed**, *kursiv* og links. Skrifttype, farve og størrelse følger dokumentets egne typografier.
 - **Skift af typografi** sker uden at røre teksten.
 - **Slet og flyt** virker på hele afsnit. Flyttede afsnit beholder deres formatering, og slettede efterlader ingen tomme linjer.
-- **Tabeller** kan få deres tekst rettet, men agenten må ikke slette, flytte eller indsætte i dem.
+- **Tabeller:** agenten ser hver celle med tabel, række og kolonne. Den kan rette teksten i en celle, tilføje en række (*"tilføj Pære til 5 kr i pristabellen"*), slette en række og indsætte en ny tabel. En ny tabel får samme tabeltypografi som dokumentets første tabel; har dokumentet ingen, bruges en indbygget. Agenten flytter ikke celler og indsætter ikke almindelige afsnit i en tabel.
+- **Tabeller fra chatten:** en Markdown-tabel i et chatsvar vises som tabel og bliver en rigtig Word-tabel, når du vælger *Indsæt efter* eller *Erstat*.
 - Har du ændret dokumentet, efter planen blev lavet, rører agenten ikke de berørte afsnit. Kør den igen.
 
 **I Excel** bevares formateringen også:

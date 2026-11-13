@@ -99,6 +99,12 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_setStyle", { paragraph: paraLabel(a.paragraph, ctx), style: t(`agentStyle_${a.style}` as const) });
     case "comment":
       return t("agentAct_comment", { find: clip(a.find, 40), text: clip(a.text) });
+    case "insertTable":
+      return t("agentAct_insertTable", { rows: a.rows.length, cols: a.rows[0].length, header: clip(a.rows[0].join(" | "), 60) });
+    case "addTableRow":
+      return t("agentAct_addTableRow", { values: clip(a.values.join(" | "), 60), paragraph: paraLabel(a.paragraph, ctx) });
+    case "deleteTableRow":
+      return t("agentAct_deleteTableRow", { paragraph: paraLabel(a.paragraph, ctx) });
     case "setText": {
       const [sn, shn] = a.shape.split(".").map(Number);
       const sh = ctx?.slides?.[sn - 1]?.shapes[shn - 1];

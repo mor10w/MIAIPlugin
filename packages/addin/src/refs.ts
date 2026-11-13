@@ -127,7 +127,8 @@ export function targetOf(a: AgentAction, ctx: DocContext): DocRef | undefined {
     const para = (n: number | undefined) => (n !== undefined && ctx.isWholeDocument && ctx.paragraphs?.[n - 1] ? { paragraph: n } : undefined);
     if (a.action === "replace" || a.action === "comment") return { find: a.find };
     if (a.action === "delete") return a.find ? { find: a.find } : para(a.paragraph);
-    if (a.action === "setStyle" || a.action === "move" || a.action === "insert") return para(a.paragraph);
+    if (a.action === "setStyle" || a.action === "move" || a.action === "insert" || a.action === "insertTable") return para(a.paragraph);
+    if (a.action === "addTableRow" || a.action === "deleteTableRow") return para(a.paragraph);
   }
   return undefined;
 }

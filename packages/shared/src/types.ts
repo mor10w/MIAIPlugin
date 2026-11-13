@@ -39,6 +39,8 @@ export const DocContext = z.object({
         style: z.string().max(80),
         list: z.boolean().optional(),
         table: z.boolean().optional(),
+        /** Afsnittet står i en tabelcelle (#24): tabellens nummer i dokumentet, række og kolonne (1 = første). */
+        cell: z.object({ table: z.number().int().min(1), row: z.number().int().min(1), col: z.number().int().min(1) }).optional(),
       }),
     )
     .max(5_000)

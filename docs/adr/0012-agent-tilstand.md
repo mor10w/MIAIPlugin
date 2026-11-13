@@ -138,6 +138,14 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - Navigation ændrer intet i dokumentet, og fejl (fx et ark, der er slettet) ignoreres stille.
 - **Mangler:** afsnitshenvisninger i Words chatsvar (chatten ser ikke afsnitsnumre).
 
+**Tabeller i Word (#24):**
+- **Kontekst:** afsnit i tabelceller vises som `(table 1, row 2, col 1)`. Række og kolonne hentes fra `parentTableCellOrNullObject` (højst 1.500 celleafsnit); tabeller nummereres i dokumentets rækkefølge.
+- **`insertTable {position, paragraph?, rows}`:** første række er overskriftsrækken (`headerRowCount = 1`). Tabellen får typografien fra dokumentets første tabel, ellers den indbyggede `GridTable4_Accent1`. Alle rækker skal have lige mange celler.
+- **`addTableRow {paragraph, position?, values}`** og **`deleteTableRow {paragraph}`** peger på rækken via et afsnit i den. `checkPlan` afviser afsnit uden for tabeller (`not-in-table`), for mange værdier og sletning af tabellens eneste række.
+- **Fortryd** er den samme som for de øvrige Word-handlinger: sessionens sporede ændringer afvises (WordApi 1.6), ellers gendannes indholdet fra øjebliksbilledet.
+- **Fra chatten:** Markdown-tabeller indsættes som HTML-tabeller (`insertHtml`), som Word gør til tabeller.
+- **Mangler:** kolonner kan ikke tilføjes eller slettes, og celler kan ikke flettes.
+
 **Markering og samtalehistorik i chatten (#26):**
 - **Markeringen** hentes med `adapter.selectionInfo()` (celleområde i Excel, antal ord i Word og PowerPoint) og opdateres ved `DocumentSelectionChanged` (ventetid 200 ms, så der ikke hentes for hvert museryk).
 - **Samtalen** gemmes i task panes `localStorage` under en nøgle afledt af dokumentets adresse (`Office.context.document.url`, hashet). Der gemmes kun tekst: rolle, indhold, model og for planer opsummering og udfald – ikke planens handlinger eller dokumentkontekst. Grænser: 40 beskeder og 60.000 tegn pr. dokument, 20 dokumenter (de ældste ryger ud).

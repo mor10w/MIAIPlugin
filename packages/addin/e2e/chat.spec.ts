@@ -159,6 +159,22 @@ test("Excel: celleadresser i svaret kan klikkes og markerer området – ikke i 
   await expect.poll(selected).toEqual(["Ark1!B2:B3", "Budget!B2"]);
 });
 
+test("Word: en Markdown-tabel i chatsvaret indsættes som en rigtig tabel (#24)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  tp.model.reply = () => ({ stream: chunks("Her er priserne:\n\n| Plan | Pris |\n|---|---|\n| Basis | 499 kr |\n| Plus | 799 kr |\n") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad koster de to planer?");
+  await tp.page.keyboard.press("Enter");
+  // Tabellen vises som tabel i samtalen …
+  await expect(tp.page.getByRole("cell", { name: "799 kr" })).toBeVisible();
+  // … og indsættes som HTML-tabel, som Word gør til en tabel.
+  await tp.page.getByRole("button", { name: "Indsæt efter" }).click();
+  const html = (await tp.find<{ html: string }>("insertHtml"))!.html;
+  expect(html).toContain("<table>");
+  expect(html).toMatch(/<th>Plan<\/th>\s*<th>Pris<\/th>/);
+  expect(html).toMatch(/<td>Plus<\/td>\s*<td>799 kr<\/td>/);
+});
+
 test("chatten viser den aktuelle markering og følger den, når brugeren markerer noget andet (#26)", async ({ open }) => {
   const tp = await open({
     host: "Excel",
