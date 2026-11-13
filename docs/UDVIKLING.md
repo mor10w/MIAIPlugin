@@ -78,6 +78,11 @@ npm test
 3. `release.yml` bygger macOS (dmg og zip, arm64 og x64) og Windows (NSIS, x64), signerer, hvis secrets er sat op, og laver en GitHub Release.
 4. Pages kopierer filerne og opdateringsfeedet (`latest*.yml`) til `<pages-url>/updates/`, hvor appen henter opdateringer.
 
+**Udviklerudgave (ADR-0016, tillæg):** hvert push til `main`, der rører appen, bygger en `.dmg` til Apple Silicon i `dev-build.yml` med version `<version>-dev.<kørselsnummer>` og lægger den som forhåndsudgivelsen `dev`. Pages serverer den under `<pages-url>/dev/`, og appens menu viser *Hent udviklerudgave …*, når der er en nyere. Workflowet kan også startes manuelt (Actions → Udviklerudgave); fra andre grene end `main` bygges der kun, og `.dmg`'en ligger som artefakt på kørslen. Tjekliste på en rigtig Mac:
+- Menupunktet dukker op i en ældre udgave og åbner hentningen i browseren.
+- Appen kan godkendes i Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel* og starter bagefter.
+- Den nye udgave viser *Udviklerudgave X er installeret*, og nøgler i nøgleringen og Office-installationen virker stadig.
+
 Lokalt: `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`, usigneret med mindre et certifikat findes. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
 
 **CI:** `ci.yml` bygger og tester på Linux og Windows og kører lint og e2e. Det er de tjek, der skal være grønne. macOS bygges i `ci-macos.yml` som et separat, ikke-blokerende tjek: GitHubs Mac-runnere er ofte optaget, og et job, der aldrig får en maskine, skal ikke gøre CI rødt. Fejler macOS-tjekket på selve koden, skal det rettes som alt andet. Står det i kø eller bliver annulleret, så kør det igen fra Actions.

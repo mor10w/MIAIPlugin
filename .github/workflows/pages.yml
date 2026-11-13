@@ -39,6 +39,19 @@ jobs:
           gh release download --repo "$GITHUB_REPOSITORY" --dir packages/addin/dist/updates \
             --pattern '*.yml' --pattern '*.zip' --pattern '*.exe' --pattern '*.dmg' --pattern '*.blockmap' \
             || echo "Ingen release endnu – ingen downloads eller opdateringer."
+      # Udviklerudgaven (dev-build.yml): den rullende forhåndsudgivelse "dev" serveres under /dev/,
+      # hvor appens menupunkt "Hent udviklerudgave" læser dev.json. "Seneste release" ovenfor
+      # omfatter ikke forhåndsudgivelser, så de to blandes ikke.
+      - name: Udviklerudgave fra forhåndsudgivelsen "dev"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/dev"
+          if gh release download dev --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/dev" --pattern 'dev.json' --pattern '*.dmg'; then
+            mv "$RUNNER_TEMP/dev" packages/addin/dist/dev
+          else
+            echo "Ingen udviklerudgave endnu."
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: packages/addin/dist

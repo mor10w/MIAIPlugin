@@ -1,0 +1,132 @@
+# Udviklerudgave af MIAI App til macOS (ADR-0016, tillæg): hvert push til main, der rører appen,
+# bygger en .dmg til Apple Silicon og lægger den som den rullende forhåndsudgivelse "dev".
+# Pages kopierer den til <pages-url>/dev/, hvor appens menupunkt "Hent udviklerudgave" finder den.
+#
+#   Version: <version i packages/app/package.json>-dev.<kørselsnummer>, fx 0.1.0-dev.42 (intet git-tag).
+#   Signering: ad hoc (intet certifikat) – Gatekeeper skal godkende appen ved første start.
+#   Windows: bygges ikke her endnu (#40).
+#
+# De rigtige udgivelser (tag v*) laves stadig af release.yml.
+name: Udviklerudgave
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "!packages/evals/**"
+      - "!packages/addin/e2e/**"
+      - "scripts/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/dev-build.yml"
+  # På en pull request bygges der kun (ingen udgivelse), og kun når selve pakningen er ændret.
+  pull_request:
+    paths:
+      - ".github/workflows/dev-build.yml"
+      - "packages/app/package.json"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  # Kun det nyeste push bygges.
+  group: dev-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  mac:
+    runs-on: macos-latest # Apple Silicon
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Sæt udviklerversion
+        id: version
+        working-directory: packages/app
+        run: |
+          base=$(node -p "require('./package.json').version")
+          version="$base-dev.$GITHUB_RUN_NUMBER"
+          npm pkg set version="$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Udviklerversion: $version"
+      - name: Byg .dmg (Apple Silicon, ad hoc-signeret)
+        working-directory: packages/app
+        env:
+          # electron-builder springer signering over på pull requests; ad hoc-signering bruger ingen hemmeligheder.
+          CSC_FOR_PULL_REQUEST: true
+        run: |
+          npm run icons
+          # Ad hoc-signatur ("-"): Apple Silicon kræver en gyldig signatur for at starte appen.
+          # Hardened runtime slås fra, da den uden et Team ID afviser Electrons egne biblioteker.
+          npx electron-builder --mac dmg --arm64 --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false
+      - name: Kontrollér signaturen
+        run: |
+          app="packages/app/dist/mac-arm64/MIAI.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
+          grep -q "Signature=adhoc" "$RUNNER_TEMP/codesign.txt"
+      - name: Kontrollér, at appen starter
+        run: |
+          log="$HOME/Library/Application Support/MIAI/MIAI.log"
+          MIAI_NO_UPDATES=1 "packages/app/dist/mac-arm64/MIAI.app/Contents/MacOS/MIAI" &
+          pid=$!
+          for _ in $(seq 1 30); do
+            if grep -q "bridge-process: lytter" "$log" 2>/dev/null; then break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then break; fi
+            sleep 2
+          done
+          cat "$log" 2>/dev/null || echo "(ingen log)"
+          ok=0
+          grep -q "bridge-process: lytter" "$log" 2>/dev/null && ok=1
+          kill "$pid" 2>/dev/null || true
+          if [ "$ok" != 1 ]; then echo "::error::Appen startede ikke bridgen inden for et minut"; exit 1; fi
+      - name: Saml filer
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir out
+          cp packages/app/dist/*.dmg out/
+          file=$(basename out/*.dmg)
+          node -e '
+            const [version, file, commit] = process.argv.slice(1);
+            process.stdout.write(JSON.stringify({ version, file, commit, date: new Date().toISOString() }, null, 2) + "\n");
+          ' "$VERSION" "$file" "$GITHUB_SHA" > out/dev.json
+          cat out/dev.json
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miai-dev-mac
+          path: out/
+          retention-days: 14
+
+  publish:
+    needs: mac
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # den rullende forhåndsudgivelse "dev"
+      actions: write # starte Pages
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: miai-dev-mac
+          path: out
+      - name: Forhåndsudgivelsen "dev"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.mac.outputs.version }}
+        run: |
+          # Én rullende udgivelse: den gamle (og dens tag) erstattes, så der altid kun ligger den nyeste.
+          gh release delete dev --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || echo "Ingen tidligere udviklerudgave."
+          gh release create dev out/* --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" \
+            --title "MIAI udviklerudgave $VERSION" \
+            --notes "Bygget automatisk fra main (${GITHUB_SHA::7}). Kun macOS på Apple Silicon, ad hoc-signeret. Erstattes ved næste push – brug en rigtig udgivelse (v*) til andet end afprøvning."
+      - name: Opdatér Pages (/dev/)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run pages.yml --repo "$GITHUB_REPOSITORY" --ref main

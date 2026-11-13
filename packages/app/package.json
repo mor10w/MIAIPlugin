@@ -39,6 +39,7 @@
       "main.js",
       "platform.js",
       "updates.js",
+      "devBuild.js",
       "bridge-process.mjs",
       "assets/**/*"
     ],

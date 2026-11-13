@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 import { configDir } from "@miai/bridge/dist/config.js";
 import { currentPlatform } from "./platform.js";
-import { setupUpdates, updateMenuItem } from "./updates.js";
+import { devMenuItem, setupDevBuilds, setupUpdates, updateMenuItem } from "./updates.js";
 
 /** Den faktiske port meldes af bridge-processen (pr. bruger, #11). */
 let PORT = Number(process.env.MIAI_PORT ?? 44321);
@@ -195,6 +195,7 @@ function buildMenu() {
       click: (item) => void setStartAtLogin(item.checked),
     },
     ...updateMenuItem(),
+    ...devMenuItem(),
     { type: "separator" },
     { label: "Afslut MIAI", click: () => app.quit() },
   ]);
@@ -319,6 +320,8 @@ if (!gotLock) {
       if (app.isPackaged && process.platform === "darwin") migrateOldLaunchAgent();
       // Automatiske opdateringer (kun den installerede app; menuen viser, når en er klar).
       setupUpdates({ log, onChange: refreshMenu });
+      // Udviklerudgaven: menupunkt, når der ligger en nyere på feedet (kun Apple Silicon indtil videre).
+      setupDevBuilds({ log, onChange: refreshMenu });
 
       // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
       // Tidligere blev velkomstdialogen vist ved hver start.
