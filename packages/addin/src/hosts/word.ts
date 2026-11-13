@@ -1,3 +1,5 @@
+import { selectedText, wordCount } from "./selection";
+import type { SelectionInfo } from "./types";
 import type { DocRef } from "../refs";
 import {
   minimalEdit,
@@ -220,6 +222,12 @@ export class WordAdapter implements HostAdapter {
   }
   agentTracking(): boolean {
     return has("1.4");
+  }
+
+  /** Antal markerede ord, eller null når intet er markeret (#26). */
+  async selectionInfo(): Promise<SelectionInfo | null> {
+    const words = wordCount(await selectedText());
+    return words ? { kind: "text", words } : null;
   }
 
   /** Markerer afsnittet eller teksten i dokumentet (#22). Ændrer intet. */

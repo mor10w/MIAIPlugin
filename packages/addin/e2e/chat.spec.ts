@@ -158,3 +158,84 @@ test("Excel: celleadresser i svaret kan klikkes og markerer området – ikke i 
   await tp.page.getByRole("button", { name: "Budget!B2" }).click();
   await expect.poll(selected).toEqual(["Ark1!B2:B3", "Budget!B2"]);
 });
+
+test("chatten viser den aktuelle markering og følger den, når brugeren markerer noget andet (#26)", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Region", "Omsætning"],
+        ["Nord", 120],
+        ["Syd", 340],
+      ],
+    },
+  });
+  await tp.tab("Chat");
+  await expect(tp.page.getByText("Markering: Ark1!A1:B3")).toBeVisible();
+  await tp.page.evaluate(() => (window as unknown as { __miai: { selectRange: (a: string) => void } }).__miai.selectRange("B2:B3"));
+  await expect(tp.page.getByText("Markering: Ark1!B2:B3")).toBeVisible();
+  // Det er den nye markering, modellen får.
+  tp.model.reply = () => ({ stream: ["Summen er 460."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad er summen?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Summen er 460.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).toContain("(Ark1!B2:B3)");
+  // Slås konteksten fra, vises markeringen ikke.
+  await tp.page.getByRole("switch", { name: "Brug markering/dokument som kontekst" }).click();
+  await expect(tp.page.getByText("Markering: Ark1!B2:B3")).toHaveCount(0);
+});
+
+test("Word: markeringen vises som antal ord, eller at hele dokumentet bruges (#26)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  await tp.tab("Chat");
+  await expect(tp.page.getByText("Intet markeret – hele dokumentet bruges")).toBeVisible();
+  await tp.page.evaluate(() => (window as unknown as { __miai: { selectText: (t: string) => void } }).__miai.selectText("Tre små ord"));
+  await expect(tp.page.getByText("Markering: 3 ord")).toBeVisible();
+});
+
+test("samtalen huskes pr. dokument og ryddes med 'Ny samtale' (#26)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, documentUrl: "https://firma.sharepoint.com/Rapport.docx" });
+  tp.model.reply = () => ({ stream: ["Rapporten handler om **levering**."] });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad handler rapporten om?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Rapporten handler om")).toBeVisible();
+
+  // Task pane åbnes igen på samme dokument: samtalen er der, og den går med som historik.
+  await tp.page.reload();
+  await tp.tab("Chat");
+  await expect(tp.page.getByText("Hvad handler rapporten om?")).toBeVisible();
+  await expect(tp.page.getByText("Rapporten handler om")).toBeVisible();
+  tp.model.reply = () => ({ stream: ["Den er på 12 sider."] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvor lang er den?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Den er på 12 sider.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
+
+  // "Ny samtale" sletter den også fra lageret.
+  await tp.page.getByRole("button", { name: "Ny samtale" }).click();
+  await tp.page.reload();
+  await tp.tab("Chat");
+  await expect(tp.page.getByPlaceholder("Spørg om dit dokument…")).toBeVisible();
+  await expect(tp.page.getByText("Hvad handler rapporten om?")).toHaveCount(0);
+});
+
+test("samtalen huskes ikke for dokumenter uden adresse, eller når det er slået fra (#26)", async ({ open }) => {
+  const stored = (page: import("@playwright/test").Page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("miai.chat.")));
+  const ask = async (tp: Awaited<ReturnType<typeof open>>) => {
+    tp.model.reply = () => ({ stream: ["Svar."] });
+    await tp.tab("Chat");
+    await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Spørgsmål?");
+    await tp.page.keyboard.press("Enter");
+    await expect(tp.page.getByText("Svar.")).toBeVisible();
+  };
+  const unsaved = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
+  await ask(unsaved);
+  expect(await stored(unsaved.page)).toEqual([]);
+
+  const off = await open({ host: "Word", apiSets: { WordApi: "1.4" }, documentUrl: "C:\\Dokumenter\\Notat.docx", settings: { chatHistory: false } });
+  await ask(off);
+  expect(await stored(off.page)).toEqual([]);
+});

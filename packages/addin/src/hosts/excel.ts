@@ -3,7 +3,7 @@ import { mdToPlain } from "../markdown";
 import type { DocRef } from "../refs";
 import { runExcelScript } from "../script";
 import { FORMAT_PROPS } from "./excelFormats";
-import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, TextFormat } from "./types";
+import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, SelectionInfo, TextFormat } from "./types";
 
 const MAX_ROWS = 200;
 const MAX_COLS = 30;
@@ -409,6 +409,16 @@ export class ExcelAdapter implements HostAdapter {
         });
     };
     return { results, undo, undoKind: "cells" };
+  }
+
+  /** Det markerede område med arknavn (#26). */
+  async selectionInfo(): Promise<SelectionInfo | null> {
+    return Excel.run(async (ctx) => {
+      const sel = ctx.workbook.getSelectedRange();
+      sel.load("address");
+      await ctx.sync();
+      return { kind: "range", address: sel.address };
+    });
   }
 
   /** Markerer cellerne eller tabellen og skifter til arket (#22). Ændrer intet. */

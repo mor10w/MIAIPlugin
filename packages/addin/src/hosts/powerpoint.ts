@@ -1,3 +1,5 @@
+import { selectedText, wordCount } from "./selection";
+import type { SelectionInfo } from "./types";
 import type { DocRef } from "../refs";
 import {
   applyEdits,
@@ -54,6 +56,12 @@ const H = 540;
 
 export class PowerPointAdapter implements HostAdapter {
   readonly host = "powerpoint" as const;
+
+  /** Antal markerede ord, eller null når intet er markeret (#26). */
+  async selectionInfo(): Promise<SelectionInfo | null> {
+    const words = wordCount(await selectedText());
+    return words ? { kind: "text", words } : null;
+  }
 
   /** Går til sliden (#22). Ændrer intet. */
   goTo(ref: DocRef): Promise<void> {

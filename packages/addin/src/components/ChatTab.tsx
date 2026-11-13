@@ -1,9 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Caption1, Switch, Text, Textarea, Tooltip, makeStyles, mergeClasses, tokens } from "@fluentui/react-components";
 import { ChatAdd20Regular, ChatSparkle20Regular, Flash20Regular, Globe16Regular, Send20Filled, Sparkle16Regular, Stop20Regular } from "@fluentui/react-icons";
 import type { AgentPlan, ApplyMode, ChatMessage, DocContext, SourceRef } from "@miai/shared";
 import { useBackend } from "../backend";
 import type { HostAdapter } from "../hosts";
+import { documentUrl, watchSelection } from "../hosts/selection";
+import type { SelectionInfo } from "../hosts/types";
+import { clearChat, documentKey, loadChat, saveChat } from "../chatStore";
 import { useI18n } from "../i18n";
 import { TaskNotices } from "./TaskNotices";
 import { extractGraphic } from "../svg";
@@ -94,7 +97,15 @@ const useStyles = makeStyles({
  * En besked i samtalen. Et svar kan være en plan fra agenten (#19): den vises med bekræft, udfør og
  * fortryd, og `log` (udfaldet) går med i historikken, så modellen ved, hvad der faktisk skete.
  */
-type Message = ChatMessage & { model?: string; sources?: SourceRef[]; plan?: AgentPlan; planCtx?: DocContext; log?: string };
+type Message = ChatMessage & {
+  model?: string;
+  sources?: SourceRef[];
+  plan?: AgentPlan;
+  planCtx?: DocContext;
+  log?: string;
+  /** Hentet fra en tidligere samtale om dokumentet (#26): svaret var en plan, som ikke længere kan udføres herfra. */
+  planned?: boolean;
+};
 
 /**
  * Henviser svaret til agenten? Chat-prompten beder modellen om det, når brugeren vil have dokumentet
@@ -104,7 +115,8 @@ export const refersToAgent = (answer: string) => /(?<![\p{L}])agent(?:en|ens)?(?
 
 /** Beskeden, som modellen ser den i historikken: en plan beskrives med sine handlinger og udfaldet. */
 export function historyContent(m: Message): string {
-  if (!m.plan) return m.content;
+  // En plan fra en tidligere samtale: kun opsummeringen og udfaldet er gemt.
+  if (!m.plan) return m.planned && m.log ? `${m.content}\nOutcome:\n${m.log}` : m.content;
   const actions = m.plan.actions.length ? `\nProposed actions (JSON): ${JSON.stringify(m.plan.actions).slice(0, 3_000)}` : "\n(no actions proposed)";
   const outcome = m.log ? `\nOutcome:\n${m.log}` : "\nOutcome: not carried out yet – the user has not approved the plan.";
   return `${m.content}${actions}${outcome}`.slice(0, 6_000);
@@ -114,7 +126,59 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const { t, lang } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
+  const api = useBackend();
   const [messages, setMessages] = useState<Message[]>([]);
+  // Samtalen huskes pr. dokument (#26), når det er slået til, og dokumentet har en adresse.
+  const docKey = useMemo(() => documentKey(documentUrl()), []);
+  const [remember, setRemember] = useState(false);
+  const loaded = useRef(false);
+  useEffect(() => {
+    api.settings().then(
+      (v) => {
+        const on = v.settings.chatHistory !== false;
+        setRemember(on);
+        if (on && !loaded.current) {
+          const stored = loadChat(docKey);
+          if (stored.length) setMessages((now) => (now.length ? now : stored));
+        }
+        loaded.current = true;
+      },
+      () => (loaded.current = true),
+    );
+  }, [api, docKey]);
+  useEffect(() => {
+    if (!remember || !loaded.current) return;
+    // Planer gemmes som tekst (opsummering og udfald) – ikke med dokumentets indhold.
+    saveChat(
+      docKey,
+      messages.flatMap((m) =>
+        m.role === "system" ? [] : [{ role: m.role, content: m.content, model: m.model, ...(m.plan || m.planned ? { planned: true, log: m.log } : {}) }],
+      ),
+    );
+  }, [messages, remember, docKey]);
+  // Markeringen lige nu (#26): vises ved skrivefeltet og følger brugerens markering.
+  const [selection, setSelection] = useState<SelectionInfo | null | undefined>(undefined);
+  useEffect(() => {
+    if (!adapter.selectionInfo) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () =>
+      void adapter.selectionInfo!().then(
+        (info) => alive && setSelection(info),
+        () => alive && setSelection(undefined),
+      );
+    refresh();
+    // Markeringen ændrer sig mange gange, mens der trækkes med musen: vent, til den står stille.
+    const stop = watchSelection(() => {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 200);
+    });
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      stop();
+    };
+  }, [adapter]);
   // Chatten kan selv ændre dokumentet (#19): et ændringsønske bliver til en plan i samtalen.
   const canAct = adapter.supports("agent");
   const [act, setAct] = useState(true);
@@ -123,7 +187,6 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
   // Henvisninger til celler og slides i svarene kan klikkes (#22).
   const docRefs = useDocRefs(adapter, lastCtx);
-  const api = useBackend();
   // Søgning i egne mapper (F15): kun når bridgen har et aktivt vidensindeks.
   const [knowledgeOn, setKnowledgeOn] = useState(false);
   const [useKnowledge, setUseKnowledge] = useState(true);
@@ -296,6 +359,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                   )}
                 </div>
               )}
+              {m.planned && !m.plan && <Caption1 className={s.muted}>{t(m.log ? "chatOldPlanDone" : "chatOldPlan")}</Caption1>}
               {m.sources && <SourceList sources={m.sources} api={api.knowledge} />}
               {i === lastAssistant && !running && !m.plan && (
                 <div className={s.applyZone}>
@@ -388,11 +452,15 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
               <Switch className={s.switch} label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
             </Tooltip>
           )}
-          {lastCtx?.address && useContext ? (
-            <Caption1 className={s.muted}>
-              {t("contextSent")} {lastCtx.address}
+          {useContext && selection !== undefined && (
+            <Caption1 className={s.muted} aria-live="polite">
+              {selection === null
+                ? t(adapter.host === "powerpoint" ? "selectionNonePpt" : "selectionNone")
+                : selection.kind === "range"
+                  ? t("selectionRange", { address: selection.address })
+                  : t("selectionWords", { n: selection.words })}
             </Caption1>
-          ) : null}
+          )}
           {messages.length > 0 && (
             <Tooltip content={t("newChat")} relationship="label">
               <Button
@@ -403,6 +471,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
                 onClick={() => {
                   setMessages([]);
                   setLastCtx(null);
+                  clearChat(docKey);
                 }}
               />
             </Tooltip>
