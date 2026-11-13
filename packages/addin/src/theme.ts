@@ -68,6 +68,8 @@ export const ui = {
   motion: "160ms",
   /** Hvor langt indhold glider ind ved indtoning. */
   appearOffset: "4px",
+  /** Største bredde på et filnavn i en vedhæftning, før det afkortes. */
+  chipNameMax: "140px",
   /** Højde på agentens kodevisning (kodetilstand), før den scroller. */
   codeMaxHeight: "240px",
   /** Mindste bredde på slide-miniaturer i designforhåndsvisningen (to kolonner i et bredt panel). */

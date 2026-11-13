@@ -33,6 +33,8 @@ export function describeError(t: T, code?: string, status?: number): string | un
       return t("err_policy");
     case "CONTEXT_OVERFLOW":
       return t("err_context");
+    case "NO_VISION":
+      return t("err_noVision");
     default:
       return undefined;
   }

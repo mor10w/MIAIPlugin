@@ -151,3 +151,11 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - **Samtalen** gemmes i task panes `localStorage` under en nøgle afledt af dokumentets adresse (`Office.context.document.url`, hashet). Der gemmes kun tekst: rolle, indhold, model og for planer opsummering og udfald – ikke planens handlinger eller dokumentkontekst. Grænser: 40 beskeder og 60.000 tegn pr. dokument, 20 dokumenter (de ældste ryger ud).
 - **Fravalg:** indstillingen `chatHistory` (til som standard) og *Ny samtale*, der også sletter fra lageret. Dokumenter uden adresse huskes ikke, så der skrives intet i selve dokumentet.
 - **Overvejet og fravalgt:** at gemme samtalen i dokumentets egne indstillinger. Det ville følge filen til andre brugere og markere dokumentet som ændret.
+
+**Vedhæftninger i chatten (#27):**
+- **Forespørgslen** har `attachments`: billeder som data-URL (png, jpeg, webp, gif; højst 4 mio. tegn) og tekst fra filer (højst 60.000 tegn), højst 6 pr. besked.
+- **Motoren** lægger dem på brugerens seneste besked for alle opgaver (`withAttachments`): tekst som en afgrænset blok markeret som data, billeder som OpenAI-dele (`image_url`). Billeder tæller med i kontekstbudgettet.
+- **Uden vision:** afviser endpointen en forespørgsel med billeder, oversættes HTTP-fejlen til `NO_VISION` med en vej videre. Værktøjer, der stille ignorerer billedet, kan ikke opdages.
+- **Add-in'et** skalerer billeder ned til højst 1568 px (PNG, ellers JPEG) og læser tekstfiler selv. PDF og Office-filer sendes til bridgens `/api/extract`, der bruger videnbasens udtræk på en midlertidig fil, som slettes.
+- **Historik:** tekstfilernes indhold følger med i senere beskeder (afkortet); billeder nævnes kun. Vedhæftninger gemmes ikke i den huskede samtale (#26).
+- **Rettet undervejs:** ruten for eksport af ark satte loftet for forespørgslens størrelse et sted, Fastify ikke læser, så ark over 2 MB blev afvist.

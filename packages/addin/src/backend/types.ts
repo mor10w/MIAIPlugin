@@ -60,4 +60,6 @@ export interface Backend {
   readonly knowledge?: KnowledgeApi;
   /** Gemmer et Excel-ark som .xlsx-fil (tillæg ADR-0012) og svarer med filens sti. Kun i bridge-tilstand. */
   exportSheet?(data: ExportSheetRequest): Promise<{ ok: true; path: string }>;
+  /** Tekst fra en PDF- eller Office-fil, brugeren vedhæfter i chatten (#27). Kun i bridge-tilstand. */
+  extractFile?(file: File): Promise<string>;
 }

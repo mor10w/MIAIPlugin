@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Attachment, MAX_ATTACHMENTS } from "./attachments.js";
 
 export const HostKind = z.enum(["word", "excel", "powerpoint", "outlook", "unknown"]);
 export type HostKind = z.infer<typeof HostKind>;
@@ -153,6 +154,8 @@ export const TaskRequest = z.object({
   model: z.string().optional(),
   /** Chat: uddrag fra brugerens egne mapper (F15). Udfyldes af bridgen. */
   sources: z.array(Source).max(20).default([]),
+  /** Billeder og tekst fra filer, brugeren har vedhæftet beskeden (#27). */
+  attachments: z.array(Attachment).max(MAX_ATTACHMENTS).default([]),
 });
 export type TaskRequest = z.input<typeof TaskRequest>;
 export type ParsedTaskRequest = z.output<typeof TaskRequest>;

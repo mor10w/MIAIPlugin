@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve, sep } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import fastifyStatic from "@fastify/static";
 import {
@@ -28,8 +29,14 @@ import { tokenMatches } from "./identity.js";
 import { buildXlsx, exportPath } from "./export.js";
 import { runTask } from "./runner.js";
 import { folderAllowed, KnowledgeIndex } from "./knowledge/index.js";
+import { extractText, isSupported } from "./knowledge/extract.js";
 import { openFile } from "./knowledge/open.js";
 import { pickLang, renderStatusPage } from "./statusPage.js";
+
+/** Loft for en opgaveforespørgsel: op til seks billeder a 4 mio. tegn plus kontekst. */
+const TASK_BODY_LIMIT = 28 * 1024 * 1024;
+/** Så meget tekst returneres højst fra en vedhæftet fil; add-in'et afkorter yderligere. */
+const MAX_EXTRACT_CHARS = 200_000;
 
 /** Samme direktiver som add-in'et selv sætter i bridge-tilstand (packages/addin/src/csp.ts). */
 export const BRIDGE_CSP =
@@ -207,8 +214,32 @@ export async function buildServer({
     return { ok: true };
   });
 
+  /**
+   * Tekst fra en fil, brugeren vedhæfter i chatten (#27): PDF og Office-filer trækkes ud med samme
+   * udtræk som videnbasen. Filen skrives til en midlertidig mappe, som slettes igen; intet gemmes.
+   */
+  app.post("/api/extract", { bodyLimit: 30 * 1024 * 1024 }, async (req, reply) => {
+    const parsed = z.object({ name: z.string().min(1).max(255), data: z.string().min(1).max(28_000_000) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
+    const ext = extname(parsed.data.name).toLowerCase();
+    if (!isSupported(parsed.data.name)) return reply.code(400).send({ error: `Filtypen ${ext || parsed.data.name} kan ikke læses.` });
+    const dir = mkdtempSync(join(tmpdir(), "miai-fil-"));
+    try {
+      // Filnavnet fra klienten bruges ikke på disken – kun filtypen.
+      const file = join(dir, `fil${ext}`);
+      writeFileSync(file, Buffer.from(parsed.data.data, "base64"));
+      const text = await extractText(file);
+      return { text: text.slice(0, MAX_EXTRACT_CHARS) };
+    } catch (err) {
+      return reply.code(422).send({ error: `Kunne ikke læse ${parsed.data.name}: ${(err as Error).message}` });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   /** Kør en opgave (indbygget eller brugerdefineret). Svarer altid med en SSE-strøm af TaskEvent. */
-  app.post("/api/tasks/:id", async (req, reply) => {
+  // Vedhæftede billeder (#27) sendes som data-URL i forespørgslen, så loftet er højere end standardens 2 MB.
+  app.post("/api/tasks/:id", { bodyLimit: TASK_BODY_LIMIT }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const task = mergedCatalog(store.getSettings(), store.dir).defs.find((t) => t.id === id);
     if (!task) return reply.code(404).send({ error: `Ukendt opgave '${id}'` });
@@ -284,7 +315,7 @@ export async function buildServer({
   // Mappen kommer fra et fast enum (aldrig fra brugeren), filnavnet valideres mod
   // EXPORT_FILE_NAME, der er ingen overskrivning (409), og kroppens loft hæves for
   // denne rute (standard er 2 MB; et stort ark med lange celler kan være over).
-  app.post("/api/export", { config: { bodyLimit: 16 * 1024 * 1024 } }, async (req, reply) => {
+  app.post("/api/export", { bodyLimit: 16 * 1024 * 1024 }, async (req, reply) => {
     const parsed = ExportSheetRequest.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: z.prettifyError(parsed.error) });
     const started = Date.now();

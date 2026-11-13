@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { hasImages, withAttachments } from "./attachments.js";
 import { isDegenerating } from "./degenerate.js";
 import { extractJson } from "./json.js";
 import {
@@ -127,6 +128,24 @@ export interface TaskSummary {
 }
 
 /** Kører en opgave og udsender TaskEvents. Kaster ved fejl (kalderen omsætter til en "error"-event). */
+/**
+ * Billeder til en model, der ikke kan se (#27): de fleste værktøjer afviser forespørgslen med en
+ * HTTP-fejl, som ikke siger brugeren noget. Den oversættes til en forklaring med en vej videre.
+ */
+async function* withVisionError<T>(stream: AsyncGenerator<T>, model: string | undefined): AsyncGenerator<T> {
+  try {
+    yield* stream;
+  } catch (err) {
+    if (model && err instanceof UpstreamError && err.code === "UPSTREAM_HTTP" && err.status !== 401 && err.status !== 403 && err.status !== 429)
+      throw new UpstreamError(
+        `${model} kunne ikke bruge det vedhæftede billede: ${err.message}. Modellen understøtter måske ikke billeder – vælg en model med vision, eller fjern billedet.`,
+        "NO_VISION",
+        err.status,
+      );
+    throw err;
+  }
+}
+
 export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, deps: EngineDeps): Promise<TaskSummary> {
   const { settings, endpoint: ep, policy, emit, signal, client } = deps;
   if (!isUrlAllowed(ep.baseUrl, policy)) {
@@ -203,10 +222,13 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     let finishReason: string | null | undefined;
     // Værktøjskald bygges op over stream-chunks (arguments ankommer som fragmenter).
     const tcParts = new Map<number, { id: string; name: string; args: string }>();
-    for await (const chunk of streamChat(
-      ep,
-      { model, messages: msgs, temperature, maxTokens, presencePenalty, responseFormat, signal, tools: useTools ? tools?.specs : undefined },
-      client,
+    for await (const chunk of withVisionError(
+      streamChat(
+        ep,
+        { model, messages: msgs, temperature, maxTokens, presencePenalty, responseFormat, signal, tools: useTools ? tools?.specs : undefined },
+        client,
+      ),
+      hasImages(req.attachments) ? `${ep.name} (${model})` : undefined,
     )) {
       if (chunk.text) push(chunk.text);
       addUsage(chunk.usage);
@@ -253,7 +275,11 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   const agentExport = deps.tools !== undefined && agentExportAllowed(settings, policy) ? "on" : "";
   inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "", agentExport } };
   const built = task.buildMessages(inputReq);
-  const messages: ApiMessage[] = mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built;
+  // Vedhæftninger (#27) lægges på brugerens seneste besked: tekstfiler som data, billeder som billeddele.
+  const messages: ApiMessage[] = withAttachments(
+    mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built,
+    req.attachments,
+  );
 
   let output: string;
   if (task.output.kind === "text") {
