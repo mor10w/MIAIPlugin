@@ -44,7 +44,7 @@ export async function buildXlsx(req: ExportSheetRequest): Promise<Buffer> {
   }
   if (rows * cols > MAX_EXPORT_CELLS) throw new Error(`For mange celler (maks. ${MAX_EXPORT_CELLS.toLocaleString("da-DK")})`);
 
-  const [from, to = from] = req.address.replace(/\$/g, "").toUpperCase().split(":");
+  const [from] = req.address.replace(/\$/g, "").toUpperCase().split(":");
   const col = (s: string) => [...s.replace(/\d+/g, "")].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0);
   const row = (s: string) => Number(s.replace(/[A-Z]+/g, ""));
   const c0 = col(from) - 1;

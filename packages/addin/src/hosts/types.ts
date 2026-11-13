@@ -1,4 +1,15 @@
-import type { AgentAction, ApplyMode, DesignPlan, DiagramResult, DocContext, ExportSheetRequest, FormulaResult, GrammarResult, HostKind, SlidesResult } from "@miai/shared";
+import type {
+  AgentAction,
+  ApplyMode,
+  DesignPlan,
+  DiagramResult,
+  DocContext,
+  ExportSheetRequest,
+  FormulaResult,
+  GrammarResult,
+  HostKind,
+  SlidesResult,
+} from "@miai/shared";
 
 export type TextFormat = "plain" | "markdown" | "tsv";
 

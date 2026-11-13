@@ -35,11 +35,20 @@ export const ExportSheetRequest = z.object({
   /** Det used range, der læses (fx "A1:F20"), uden arknavn. */
   address: z.string().min(2).max(40),
   /** Cellernes værdier (""/null = tom celle). */
-  values: z.array(z.array(z.union([z.string().max(1_000), z.number(), z.boolean()]).nullable())).min(1).max(5_000),
+  values: z
+    .array(z.array(z.union([z.string().max(1_000), z.number(), z.boolean()]).nullable()))
+    .min(1)
+    .max(5_000),
   /** Formler ("" = ingen formel i cellen, ellers fx "=SUM(B2:B5)"). */
-  formulas: z.array(z.array(z.string().max(1_000))).min(1).max(5_000),
+  formulas: z
+    .array(z.array(z.string().max(1_000)))
+    .min(1)
+    .max(5_000),
   /** Talformat pr. celle ("" = standard). */
-  numberFormats: z.array(z.array(z.string().max(80))).min(1).max(5_000),
+  numberFormats: z
+    .array(z.array(z.string().max(80)))
+    .min(1)
+    .max(5_000),
   /** Kolonnebredder i tegn (Office.js' columnWidth); tom = default. */
   columnWidths: z.array(z.number().min(1).max(500)).max(256).default([]),
 });

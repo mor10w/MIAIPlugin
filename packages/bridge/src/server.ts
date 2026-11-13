@@ -301,10 +301,18 @@ export async function buildServer({
       mkdirSync(dirname(path), { recursive: true }); // mappen skal eksistere (fx på en ny profil)
       writeFileSync(path, buf);
     } catch (err) {
-      if (store.getSettings().auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "export", host: parsed.data.folder, status: "error" });
+      if (store.getSettings().auditLog)
+        await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "export", host: parsed.data.folder, status: "error" });
       return reply.code(500).send({ error: (err as Error).message });
     }
-    if (store.getSettings().auditLog) await appendAudit(auditFile(store.dir), { ts: new Date().toISOString(), kind: "export", host: parsed.data.folder, status: "ok", durationMs: Date.now() - started });
+    if (store.getSettings().auditLog)
+      await appendAudit(auditFile(store.dir), {
+        ts: new Date().toISOString(),
+        kind: "export",
+        host: parsed.data.folder,
+        status: "ok",
+        durationMs: Date.now() - started,
+      });
     return { ok: true, path };
   });
 

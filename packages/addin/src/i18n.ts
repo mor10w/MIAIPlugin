@@ -694,7 +694,8 @@ const en: Dict = {
     "For what the built-in actions cannot do (e.g. pivot tables and data validation). You see the code before it runs; it runs in a sandbox without network access and can be undone for the active sheet. Needs a strong model (14B+).",
   agentScriptsForbidden: "Your organisation has turned code mode off.",
   agentExport: "The agent may save an Excel sheet as a .xlsx file on the desktop",
-  agentExportHint: "The file lands on the desktop (Documents/Downloads if asked). A taken name is rejected – existing files are never overwritten. Requires MIAI Bridge.",
+  agentExportHint:
+    "The file lands on the desktop (Documents/Downloads if asked). A taken name is rejected – existing files are never overwritten. Requires MIAI Bridge.",
   agentExportForbidden: "Your organisation has turned export off.",
   agentBefore: "before",
   agentAfter: "after",
