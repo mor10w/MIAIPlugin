@@ -204,6 +204,13 @@ export const AgentAction = z.discriminatedUnion("action", [
     title: z.string().max(120).optional(),
     reason,
   }),
+  z.object({ action: z.literal("addSheet"), name: SheetName.describe("Name of the new, empty sheet (max 31 characters)"), reason }),
+  z.object({
+    action: z.literal("renameSheet"),
+    sheet: z.string().min(1).max(255).describe("Current name of the sheet"),
+    name: SheetName.describe("New name (max 31 characters)"),
+    reason,
+  }),
   z.object({
     action: z.literal("readRange"),
     address: z.string().min(2).max(300).describe("Range to look at before planning, with sheet name when it is on another sheet, e.g. 'Budget!A1:F40'"),
