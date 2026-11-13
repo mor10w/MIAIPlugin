@@ -61,9 +61,9 @@ const mk = (c: Partial<EvalCaseInput> & Pick<EvalCaseInput, "id" | "task">) =>
 
 describe("eval-sættet", () => {
   const cases = loadCases();
-  it("har 30–60 cases på både dansk og engelsk (#2: 30–50, udvidet med agent og design)", () => {
+  it("har 30–80 cases på både dansk og engelsk (#2: 30–50, udvidet med agent, design og regressioner)", () => {
     expect(cases.length).toBeGreaterThanOrEqual(30);
-    expect(cases.length).toBeLessThanOrEqual(60);
+    expect(cases.length).toBeLessThanOrEqual(80);
     expect(cases.filter((c) => c.lang === "da").length).toBeGreaterThan(10);
     expect(cases.filter((c) => c.lang === "en").length).toBeGreaterThan(10);
   });

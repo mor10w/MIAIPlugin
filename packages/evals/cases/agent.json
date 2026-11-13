@@ -499,5 +499,57 @@
       }
     ],
     "rubric": "Ét runScript, der bruger context.workbook.worksheets.getActiveWorksheet() (eller arket) og pivotTables.add med kildeområdet A1:C5 (eller tabellen) og E1 som destination, tilføjer Region som række og Omsætning som data, og kalder context.sync(). Koden er komplet og bruger kun context/Excel."
+  },
+  {
+    "id": "agent-excel-nyt-ark-oversigt-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (flere ark)",
+    "note": "#21: agenten opretter et nyt ark og skriver på det med arknavn i adresserne og en formel på tværs af ark.",
+    "context": {
+      "host": "excel",
+      "text": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "table": "Region\tMåned\tOmsætning\nNord\tJan\t120\nSyd\tJan\t340\nØst\tJan\t90\nVest\tJan\t210",
+      "address": "Salg!A1:C5",
+      "excel": {
+        "tables": [],
+        "columnFormats": ["C: #,##0"],
+        "activeSheet": "Salg",
+        "sheets": [
+          {
+            "name": "Salg",
+            "used": "A1:C5",
+            "headers": ["Region", "Måned", "Omsætning"]
+          },
+          {
+            "name": "Noter",
+            "headers": []
+          }
+        ]
+      }
+    },
+    "params": {
+      "prompt": "Lav et nyt ark, Oversigt, med den samlede omsætning"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 2,
+        "max": 5,
+        "include": ["addSheet"],
+        "exclude": ["runScript", "clear", "deleteRows"],
+        "valid": true
+      },
+      {
+        "type": "regex",
+        "pattern": "Oversigt!"
+      },
+      {
+        "type": "regex",
+        "pattern": "SUM\\(Salg!C2:C5\\)",
+        "flags": "i"
+      }
+    ],
+    "rubric": "addSheet Oversigt, en etiket og =SUM(Salg!C2:C5) på Oversigt-arket (adresser med 'Oversigt!'); intet ændres på Salg."
   }
 ]

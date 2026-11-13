@@ -134,6 +134,10 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_conditionalFormat", { address: a.address, rule: t(`agentCf_${a.rule}` as const, { value: a.value ?? "" }) });
     case "addChart":
       return t("agentAct_addChart", { type: t(`agentChart_${a.type}` as const), source: a.source }) + (a.title ? ` “${clip(a.title, 40)}”` : "");
+    case "addSheet":
+      return t("agentAct_addSheet", { name: a.name });
+    case "renameSheet":
+      return t("agentAct_renameSheet", { sheet: a.sheet, name: a.name });
     case "freezeRows":
       return a.rows === 0 ? t("agentAct_unfreeze") : t("agentAct_freezeRows", { n: a.rows });
     case "runScript":

@@ -117,3 +117,10 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 **Test:** `shared` tester prompt-gating og `checkPlan` (no-bridge, ugyldige navne, forkert vært), og bridgen tester `exportPath` (traversal), `buildXlsx` (round-trip læst tilbage med exceljs) og ruten (200/409/400).
 
 **Chatten udfører selv (#19):** et ændringsønske i chatten (ordgenkendelse i `editIntent.ts`, eller knappen under et svar, der henviser til agenten) kører agent-opgaven og viser planen i samtalen med samme bekræft, udfør og fortryd. Historikken går med til agenten: en plan beskrives med sine handlinger og udfaldet (`historyContent`), så opfølgninger og rettelser kan forstås. Intet ændres uden godkendelse; kontakten *Må ændre dokumentet* slår det fra.
+
+**Flere ark i Excel (#21):**
+- **Kontekst:** alle ark med brugt område og overskrifter (højst 30 ark), det aktive ark og projektmappens tabeller med arknavn i adressen.
+- **Adresser** kan have arknavn (`Salg!A1:C5`, `'Mit ark'!B2`); uden arknavn gælder det aktive ark. `checkPlan` afviser ark, der hverken findes eller oprettes af planen (`bad-sheet`), og tjekker tabeloverlap pr. ark.
+- **Udførelse:** handlingerne grupperes pr. ark og køres med samme fremgangsmåde og fortryd som før, ét ark ad gangen. `addSheet` udføres først, så planen kan skrive på det nye ark; `renameSheet` til sidst, så alle adresser bruger navnene fra før planen.
+- **Fortryd:** navnene sættes tilbage, hvert arks ændringer fortrydes i omvendt rækkefølge, og ark, planen har oprettet, slettes.
+- **Begrænsning:** frysning af rækker gælder det aktive ark.

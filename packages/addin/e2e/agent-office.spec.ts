@@ -376,6 +376,95 @@ test("Excel, kodetilstand: sandkassen afviser netværk, og et fejlende script ru
   expect(prompt).toContain('getRange("A2")');
 });
 
+const sheets = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => (window as unknown as { __miai: { sheets: () => Record<string, Sheet> } }).__miai.sheets());
+
+test("Excel, flere ark (#21): nyt ark med opsummering, skrivning på et andet ark og omdøbning; fortryd rydder det hele", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      ...SALG,
+      sheets: [
+        {
+          sheet: "Noter",
+          values: [
+            ["Emne", "Tekst"],
+            ["Status", "Kladde"],
+          ],
+          formats: { "A1:B1": { bold: true } },
+        },
+      ],
+    },
+  });
+  const before = await sheets(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Laver et oversigtsark og opdaterer noterne.",
+      actions: [
+        { action: "addSheet", name: "Oversigt", reason: "Opsummering" },
+        {
+          action: "setValues",
+          address: "Oversigt!A1",
+          values: [
+            ["Nøgletal", "Værdi"],
+            ["Omsætning i alt", null],
+          ],
+          reason: "Etiketter",
+        },
+        { action: "setFormula", address: "Oversigt!B2", formula: "=SUM(Ark1!C2:C5)", reason: "Sum på tværs af ark" },
+        { action: "setValues", address: "Noter!B2", values: [["Endelig"]], reason: "Status" },
+        { action: "sortRange", target: "Salg", by: "Omsætning", order: "desc", reason: "Størst først" },
+        { action: "renameSheet", sheet: "Noter", name: "Bemærkninger", reason: "Tydeligere navn" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
+  // Modellen ser alle ark med overskrifter og det aktive ark, og tabellen med arknavn.
+  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  expect(prompt).toContain("Sheets:\n- Ark1 (active): A1:C5, headers: Region | Måned | Omsætning\n- Noter: A1:B2, headers: Emne | Tekst");
+  expect(prompt).toContain("- Salg (Ark1!A1:C5)");
+  await expect(tp.page.getByRole("checkbox", { name: "Nyt ark “Oversigt”" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Omdøb arket “Noter” til “Bemærkninger”" })).toBeChecked();
+
+  await tp.page.getByRole("button", { name: "Udfør 6 handlinger" }).click();
+  await expect(tp.page.getByText("6 af 6 handlinger udført.")).toBeVisible();
+  const after = await sheets(tp.page);
+  expect(Object.keys(after)).toEqual(["Ark1", "Bemærkninger", "Oversigt"]);
+  expect(after.Oversigt.values).toEqual([
+    ["Nøgletal", "Værdi"],
+    ["Omsætning i alt", "=SUM(Ark1!C2:C5)"],
+  ]);
+  expect(after["Bemærkninger"].values[1]).toEqual(["Status", "Endelig"]);
+  // Skrivning på et andet ark bevarer dets formater.
+  expect(after["Bemærkninger"].formats.A1).toMatchObject({ bold: true });
+  expect(after.Ark1.values.map((r) => r[0])).toEqual(["Region", "Syd", "Vest", "Nord", "Øst"]);
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await sheets(tp.page)).toEqual(before);
+});
+
+test("Excel, flere ark (#21): et ark, der ikke findes, og et optaget navn fravælges i planen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { ...SALG, sheets: [{ sheet: "Noter", values: [["Emne"]] }] } });
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Skriver på ark.",
+      actions: [
+        { action: "setValues", address: "Findes!A1", values: [["x"]], reason: "" },
+        { action: "addSheet", name: "noter", reason: "" },
+        { action: "setValues", address: "Noter!A2", values: [["ok"]], reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Arket findes ikke (eller navnet er optaget)")).toHaveCount(2);
+  await expect(tp.page.getByRole("checkbox", { name: "Skriv 1 celler fra Findes!A1" })).not.toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Nyt ark “noter”" })).not.toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Skriv 1 celler fra Noter!A2" })).toBeChecked();
+});
+
 type Deck = {
   id: string;
   layout: string;

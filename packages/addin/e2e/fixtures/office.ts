@@ -41,6 +41,13 @@ export interface FakeOfficeOptions {
     formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
     /** Excel-tabeller, fx [{ name: "Salg", range: "A1:C4" }]. */
     tables?: { name: string; range: string }[];
+    /** Flere ark i projektmappen (#21); arket ovenfor er det aktive. */
+    sheets?: {
+      sheet: string;
+      values?: (string | number)[][];
+      formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
+      tables?: { name: string; range: string }[];
+    }[];
   };
   displayLanguage?: string;
   /** Outlook: mailen i læsetilstand (read) eller et udkast i skrivetilstand (compose). */
@@ -548,447 +555,494 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   // Et ark med værdier, formater (talformat, fed, fyld) og tabeller, der ændres af det,
   // adapterne skriver. Tilstanden kan læses med window.__miai.sheet().
   if (o.host === "Excel") {
-    const sheet = o.excel?.sheet ?? "Ark1";
-    const grid: unknown[][] = (o.excel?.values ?? [[""]]).map((r) => [...r]);
-    interface Fmt {
-      numberFormat?: string;
-      bold?: boolean;
-      fill?: string;
+    // Projektmappen kan have flere ark (#21). Hvert ark har sin egen tilstand; buildSheet laver arket.
+    interface SheetDef {
+      sheet: string;
+      values?: (string | number)[][];
+      formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
+      tables?: { name: string; range: string }[];
     }
-    const fmts = new Map<string, Fmt>();
-    const key = (r: number, c: number) => `${r},${c}`;
-    const fmtOf = (r: number, c: number): Fmt => fmts.get(key(r, c)) ?? {};
-    const setFmt = (r: number, c: number, f: Fmt) => fmts.set(key(r, c), { ...fmtOf(r, c), ...f });
-    const tables: { name: string; range: string; style?: string }[] = (o.excel?.tables ?? []).map((t) => ({ ...t }));
-    const widths = new Map<number, number>();
-    const charts: { name: string; type: string; source: string; title?: string; at?: string }[] = [];
-    const condFormats: { id: string; address: string; type: string; rule?: unknown }[] = [];
-    let frozen: number | null = null;
-    let cfSeq = 0;
-    /** Sorterer rækkerne r0+1..r0+rows-1 (overskriften står) efter kolonne c0+key; formater følger rækken. */
-    const sortRows = (r0: number, c0: number, rows: number, cols: number, key: number, ascending: boolean) => {
-      const body = Array.from({ length: rows - 1 }, (_, i) => r0 + 1 + i).map((r) => ({
-        v: Array.from({ length: cols }, (_, c) => grid[r]?.[c0 + c] ?? ""),
-        f: Array.from({ length: cols }, (_, c) => fmts.get(key2(r, c0 + c))),
-      }));
-      const cmp = (a: unknown, b: unknown) => (typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "da"));
-      body.sort((a, b) => (ascending ? 1 : -1) * cmp(a.v[key], b.v[key]));
-      body.forEach((row, i) =>
-        row.v.forEach((v, c) => {
-          put(r0 + 1 + i, c0 + c, v);
-          if (row.f[c]) fmts.set(key2(r0 + 1 + i, c0 + c), row.f[c]!);
-          else fmts.delete(key2(r0 + 1 + i, c0 + c));
-        }),
-      );
-    };
-    const key2 = (r: number, c: number) => `${r},${c}`;
-    /**
-     * Flytter celler (værdier og formater) i kolonnerne c0..c1 fra række `from` og ned med `delta`
-     * (negativ = op). Tabeller helt under og inden for kolonnerne flytter med; en tabel, der kun
-     * delvist ligger i kolonnerne, afvises som i Excel.
-     */
-    const shift = (from: number, delta: number, c0: number, c1: number) => {
-      for (const t of tables) {
-        const [tr, tc, trows, tcols] = parseA(t.range);
-        if (tr + trows - 1 < from || tc > c1 || tc + tcols - 1 < c0) continue;
-        if (tr < from || tc < c0 || tc + tcols - 1 > c1) throw new Error("InvalidOperation: This operation is attempting to shift cells in a table");
-        t.range = `${col(tc)}${tr + 1 + delta}:${col(tc + tcols - 1)}${tr + trows + delta}`;
-      }
-      const height = Math.max(grid.length, ...[...fmts.keys()].map((k) => Number(k.split(",")[0]) + 1));
-      const cells: { r: number; c: number; v: unknown; f?: Fmt }[] = [];
-      for (let r = from; r < height; r++)
-        for (let c = c0; c <= c1; c++) {
-          cells.push({ r, c, v: grid[r]?.[c] ?? "", f: fmts.get(key(r, c)) });
-          if (grid[r]) grid[r][c] = "";
-          fmts.delete(key(r, c));
-        }
-      for (const x of cells) {
-        const r = x.r + delta;
-        if (r < 0) continue;
-        if (x.v !== "") put(r, x.c, x.v);
-        if (x.f) fmts.set(key(r, x.c), x.f);
-      }
-      while (grid.length && grid[grid.length - 1].every((v) => v === "" || v === undefined)) grid.pop();
-    };
-    const col = (i: number) => String.fromCharCode(65 + i);
-    const cellOf = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
-    /** "B2" eller "B2:D4" → [r0, c0, rows, cols] (kun enkelt-bogstavs kolonner i simuleringen). */
-    const parseA = (a: string): [number, number, number, number] => {
-      const [from, to = from] = a.replace(/^.*!/, "").toUpperCase().split(":");
-      const f = cellOf(from);
-      const t = cellOf(to);
-      return [f.r, f.c, t.r - f.r + 1, t.c - f.c + 1];
-    };
-    for (const [a, f] of Object.entries(o.excel?.formats ?? {})) {
-      const [r0, c0, rows, cols] = parseA(a);
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) setFmt(r0 + r, c0 + c, f);
+    interface Built {
+      name: () => string;
+      worksheet: unknown;
+      state: () => unknown;
+      used: () => unknown;
+      tableObjs: () => unknown[];
     }
-    const addr = (r0: number, c0: number, rows: number, cols: number) =>
-      `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
-    const width = () => Math.max(1, ...grid.map((r) => r.length));
-    const put = (r: number, c: number, v: unknown) => {
-      while (grid.length <= r) grid.push([]);
-      grid[r][c] = v;
-    };
-    (w.__miai as Record<string, unknown>).sheet = () => ({
-      values: grid.map((r) => Array.from({ length: width() }, (_, c) => r[c] ?? "")),
-      formats: Object.fromEntries(
-        [...fmts]
-          .map(([k, f]) => [k, Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined))] as [string, Fmt])
-          .filter(([, f]) => Object.keys(f).length)
-          .map(([k, f]) => [
-            k
-              .split(",")
-              .map(Number)
-              .reverse()
-              .map((n, i) => (i === 0 ? col(n) : n + 1))
-              .join(""),
-            f,
-          ]),
-      ),
-      tables: tables.map((t) => ({ name: t.name, range: t.range, ...(t.style ? { style: t.style } : {}) })),
-      widths: Object.fromEntries([...widths].map(([c, wd]) => [col(c), wd])),
-      charts: charts.map((c) => ({ ...c })),
-      conditionalFormats: condFormats.map(({ id: _, ...c }) => c),
-      frozenRows: frozen,
-    });
-
-    function rng(r0: number, c0: number, rows: number, cols: number): unknown {
-      // Udfyldt med "" uden for arkets data, som i Excel.
-      const slice = () => Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r0 + r]?.[c0 + c] ?? ""));
-      const each = (fn: (r: number, c: number) => void) => {
-        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) fn(r0 + r, c0 + c);
+    const built: Built[] = [];
+    let tableSeq = 0;
+    const buildSheet = (def: SheetDef): Built => {
+      let sheet = def.sheet;
+      const grid: unknown[][] = (def.values ?? [[""]]).map((r) => [...r]);
+      interface Fmt {
+        numberFormat?: string;
+        bold?: boolean;
+        fill?: string;
+      }
+      const fmts = new Map<string, Fmt>();
+      const key = (r: number, c: number) => `${r},${c}`;
+      const fmtOf = (r: number, c: number): Fmt => fmts.get(key(r, c)) ?? {};
+      const setFmt = (r: number, c: number, f: Fmt) => fmts.set(key(r, c), { ...fmtOf(r, c), ...f });
+      const tables: { name: string; range: string; style?: string }[] = (def.tables ?? []).map((t) => ({ ...t }));
+      const widths = new Map<number, number>();
+      const charts: { name: string; type: string; source: string; title?: string; at?: string }[] = [];
+      const condFormats: { id: string; address: string; type: string; rule?: unknown }[] = [];
+      let frozen: number | null = null;
+      let cfSeq = 0;
+      /** Sorterer rækkerne r0+1..r0+rows-1 (overskriften står) efter kolonne c0+key; formater følger rækken. */
+      const sortRows = (r0: number, c0: number, rows: number, cols: number, key: number, ascending: boolean) => {
+        const body = Array.from({ length: rows - 1 }, (_, i) => r0 + 1 + i).map((r) => ({
+          v: Array.from({ length: cols }, (_, c) => grid[r]?.[c0 + c] ?? ""),
+          f: Array.from({ length: cols }, (_, c) => fmts.get(key2(r, c0 + c))),
+        }));
+        const cmp = (a: unknown, b: unknown) => (typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), "da"));
+        body.sort((a, b) => (ascending ? 1 : -1) * cmp(a.v[key], b.v[key]));
+        body.forEach((row, i) =>
+          row.v.forEach((v, c) => {
+            put(r0 + 1 + i, c0 + c, v);
+            if (row.f[c]) fmts.set(key2(r0 + 1 + i, c0 + c), row.f[c]!);
+            else fmts.delete(key2(r0 + 1 + i, c0 + c));
+          }),
+        );
       };
-      const write = (v: unknown[][]) => v.forEach((row, r) => row.forEach((x, c) => x !== null && put(r0 + r, c0 + c, x)));
-      const target = {
-        address: addr(r0, c0, rows, cols),
-        rowCount: rows,
-        columnCount: cols,
-        rowIndex: r0,
-        columnIndex: c0,
-        isNullObject: false,
-        load() {},
-        getCell: (r: number, c: number) => rng(r0 + r, c0 + c, 1, 1),
-        getResizedRange: (dr: number, dc: number) => rng(r0, c0, rows + dr, cols + dc),
-        getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
-        getRow: (i: number) => rng(r0 + i, c0, 1, cols),
-        getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
-        sort: strict("Excel.RangeSort", {
-          apply(fields: { key: number; ascending?: boolean }[], _matchCase?: boolean, hasHeaders?: boolean) {
-            record({ kind: "sort", address: addr(r0, c0, rows, cols), fields, hasHeaders });
-            if (!hasHeaders) throw new Error("Simuleringen kræver en overskriftsrække");
-            sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
-          },
-        }),
-        conditionalFormats: strict("Excel.ConditionalFormatCollection", {
-          add(type: string) {
-            const cf = { id: `cf${++cfSeq}`, address: addr(r0, c0, rows, cols), type } as { id: string; address: string; type: string; rule?: unknown };
-            condFormats.push(cf);
-            record({ kind: "conditionalFormat", address: cf.address, type });
-            const fmt = () => ({ fill: {}, font: {} });
-            const sub = (name: string) => ({
-              format: fmt(),
-              set rule(v: unknown) {
-                cf.rule = v;
-              },
-              set criteria(v: unknown) {
-                cf.rule = v;
-              },
-              _name: name,
-            });
-            return strict("Excel.ConditionalFormat", {
-              load() {},
-              get id() {
-                return cf.id;
-              },
-              colorScale: sub("colorScale"),
-              dataBar: sub("dataBar"),
-              cellValue: sub("cellValue"),
-              preset: sub("preset"),
-              topBottom: sub("topBottom"),
-            });
-          },
-          getItem: (id: string) =>
-            strict("Excel.ConditionalFormat(item)", {
-              delete() {
-                const i = condFormats.findIndex((c) => c.id === id);
-                if (i < 0) throw new Error(`ItemNotFound: ${id}`);
-                condFormats.splice(i, 1);
-              },
-            }),
-        }),
-        format: strict("Excel.RangeFormat", {
-          load() {},
-          get columnWidth() {
-            return widths.get(c0) ?? 48;
-          },
-          set columnWidth(v: number) {
-            for (let c = 0; c < cols; c++) widths.set(c0 + c, v);
-          },
-          autofitColumns() {
-            record({ kind: "autofitColumns", address: addr(r0, c0, rows, cols) });
-            for (let c = 0; c < cols; c++) widths.set(c0 + c, 10 + 7 * Math.max(1, ...grid.map((row) => String(row[c0 + c] ?? "").length)));
-          },
-        }),
-        delete(direction: string) {
-          record({ kind: "rangeDelete", address: addr(r0, c0, rows, cols), direction });
-          each((r, c) => {
+      const key2 = (r: number, c: number) => `${r},${c}`;
+      /**
+       * Flytter celler (værdier og formater) i kolonnerne c0..c1 fra række `from` og ned med `delta`
+       * (negativ = op). Tabeller helt under og inden for kolonnerne flytter med; en tabel, der kun
+       * delvist ligger i kolonnerne, afvises som i Excel.
+       */
+      const shift = (from: number, delta: number, c0: number, c1: number) => {
+        for (const t of tables) {
+          const [tr, tc, trows, tcols] = parseA(t.range);
+          if (tr + trows - 1 < from || tc > c1 || tc + tcols - 1 < c0) continue;
+          if (tr < from || tc < c0 || tc + tcols - 1 > c1) throw new Error("InvalidOperation: This operation is attempting to shift cells in a table");
+          t.range = `${col(tc)}${tr + 1 + delta}:${col(tc + tcols - 1)}${tr + trows + delta}`;
+        }
+        const height = Math.max(grid.length, ...[...fmts.keys()].map((k) => Number(k.split(",")[0]) + 1));
+        const cells: { r: number; c: number; v: unknown; f?: Fmt }[] = [];
+        for (let r = from; r < height; r++)
+          for (let c = c0; c <= c1; c++) {
+            cells.push({ r, c, v: grid[r]?.[c] ?? "", f: fmts.get(key(r, c)) });
             if (grid[r]) grid[r][c] = "";
             fmts.delete(key(r, c));
-          });
-          shift(r0 + rows, -rows, c0, c0 + cols - 1);
-        },
-        insert(direction: string) {
-          record({ kind: "rangeInsert", address: addr(r0, c0, rows, cols), direction });
-          shift(r0, rows, c0, c0 + cols - 1);
-          return rng(r0, c0, rows, cols);
-        },
-        worksheet: undefined as unknown,
-        get values() {
-          return slice();
-        },
-        set values(v: unknown[][]) {
-          record({ kind: "values", address: addr(r0, c0, rows, cols), values: v });
-          write(v);
-        },
-        get formulas() {
-          return slice();
-        },
-        set formulas(v: unknown[][]) {
-          record({ kind: "formulas", address: addr(r0, c0, rows, cols), formulas: v });
-          write(v);
-        },
-        get numberFormat() {
-          return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => fmtOf(r0 + r, c0 + c).numberFormat ?? "General"));
-        },
-        set numberFormat(v: string[][]) {
-          v.forEach((row, r) => row.forEach((f, c) => setFmt(r0 + r, c0 + c, { numberFormat: f === "General" ? undefined : f })));
-        },
-        copyFrom(src: { rowIndex: number; columnIndex: number }, type: string) {
-          record({ kind: "copyFrom", address: addr(r0, c0, rows, cols), type });
-          each((r, c) => fmts.set(key(r, c), { ...fmtOf(src.rowIndex + (r - r0), src.columnIndex + (c - c0)) }));
-        },
-        getCellProperties: () => ({
-          value: Array.from({ length: rows }, (_, r) =>
-            Array.from({ length: cols }, (_, c) => {
-              const f = fmtOf(r0 + r, c0 + c);
-              return { format: { font: { bold: !!f.bold }, fill: { color: f.fill ?? "#FFFFFF" } } };
-            }),
-          ),
-        }),
-        setCellProperties(p: { format: { font: { bold: boolean }; fill: { color: string } } }[][]) {
-          p.forEach((row, r) =>
-            row.forEach((x, c) =>
-              setFmt(r0 + r, c0 + c, { bold: x.format.font.bold || undefined, fill: x.format.fill.color === "#FFFFFF" ? undefined : x.format.fill.color }),
-            ),
-          );
-        },
-        clear(applyTo: string) {
-          record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo });
-          if (applyTo === "Formats") each((r, c) => fmts.delete(key(r, c)));
-          else each((r, c) => put(r, c, ""));
-        },
-        get valueTypes() {
-          return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
-        },
+          }
+        for (const x of cells) {
+          const r = x.r + delta;
+          if (r < 0) continue;
+          if (x.v !== "") put(r, x.c, x.v);
+          if (x.f) fmts.set(key(r, x.c), x.f);
+        }
+        while (grid.length && grid[grid.length - 1].every((v) => v === "" || v === undefined)) grid.pop();
       };
-      target.worksheet = worksheet;
-      return strict("Excel.Range", target);
-    }
-    const used = () => rng(0, 0, grid.length, width());
-    const parse = (a: string) => rng(...parseA(a));
-    const tableObj = (t: { name: string; range: string; style?: string }) =>
-      strict("Excel.Table", {
-        name: t.name,
-        load() {},
-        get style() {
-          return t.style ?? "TableStyleMedium2";
-        },
-        set style(v: string) {
-          record({ kind: "tableStyle", table: t.name, style: v });
-          t.style = v;
-        },
-        convertToRange() {
-          record({ kind: "convertToRange", table: t.name });
-          tables.splice(tables.indexOf(t), 1);
-          return parse(t.range);
-        },
-        getRange: () => parse(t.range),
-        sort: strict("Excel.TableSort", {
-          apply(fields: { key: number; ascending?: boolean }[]) {
-            const [r0, c0, rows, cols] = parseA(t.range);
-            record({ kind: "tableSort", table: t.name, fields });
-            sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
-          },
-        }),
-        getDataBodyRange: () => {
-          const [r0, c0, rows, cols] = parseA(t.range);
-          return rng(r0 + 1, c0, rows - 1, cols);
-        },
-        getHeaderRowRange: () => {
-          const [r0, c0, , cols] = parseA(t.range);
-          return rng(r0, c0, 1, cols);
-        },
-        rows: strict("Excel.TableRowCollection", {
+      const col = (i: number) => String.fromCharCode(65 + i);
+      const cellOf = (x: string) => ({ c: x.charCodeAt(0) - 65, r: Number(x.slice(1)) - 1 });
+      /** "B2" eller "B2:D4" → [r0, c0, rows, cols] (kun enkelt-bogstavs kolonner i simuleringen). */
+      const parseA = (a: string): [number, number, number, number] => {
+        const [from, to = from] = a.replace(/^.*!/, "").toUpperCase().split(":");
+        const f = cellOf(from);
+        const t = cellOf(to);
+        return [f.r, f.c, t.r - f.r + 1, t.c - f.c + 1];
+      };
+      for (const [a, f] of Object.entries(def.formats ?? {})) {
+        const [r0, c0, rows, cols] = parseA(a);
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) setFmt(r0 + r, c0 + c, f);
+      }
+      const addr = (r0: number, c0: number, rows: number, cols: number) =>
+        `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
+      const width = () => Math.max(1, ...grid.map((r) => r.length));
+      const put = (r: number, c: number, v: unknown) => {
+        while (grid.length <= r) grid.push([]);
+        grid[r][c] = v;
+      };
+      const state = () => ({
+        values: grid.map((r) => Array.from({ length: width() }, (_, c) => r[c] ?? "")),
+        formats: Object.fromEntries(
+          [...fmts]
+            .map(([k, f]) => [k, Object.fromEntries(Object.entries(f).filter(([, v]) => v !== undefined))] as [string, Fmt])
+            .filter(([, f]) => Object.keys(f).length)
+            .map(([k, f]) => [
+              k
+                .split(",")
+                .map(Number)
+                .reverse()
+                .map((n, i) => (i === 0 ? col(n) : n + 1))
+                .join(""),
+              f,
+            ]),
+        ),
+        tables: tables.map((t) => ({ name: t.name, range: t.range, ...(t.style ? { style: t.style } : {}) })),
+        widths: Object.fromEntries([...widths].map(([c, wd]) => [col(c), wd])),
+        charts: charts.map((c) => ({ ...c })),
+        conditionalFormats: condFormats.map(({ id: _, ...c }) => c),
+        frozenRows: frozen,
+      });
+
+      function rng(r0: number, c0: number, rows: number, cols: number): unknown {
+        // Udfyldt med "" uden for arkets data, som i Excel.
+        const slice = () => Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r0 + r]?.[c0 + c] ?? ""));
+        const each = (fn: (r: number, c: number) => void) => {
+          for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) fn(r0 + r, c0 + c);
+        };
+        const write = (v: unknown[][]) => v.forEach((row, r) => row.forEach((x, c) => x !== null && put(r0 + r, c0 + c, x)));
+        const target = {
+          address: addr(r0, c0, rows, cols),
+          rowCount: rows,
+          columnCount: cols,
+          rowIndex: r0,
+          columnIndex: c0,
+          isNullObject: false,
           load() {},
-          get count() {
-            return parseA(t.range)[2] - 1;
-          },
-          add(index: number | undefined, values: unknown[][]) {
-            // Som Excel: rækkerne lægges ind i tabellen og får formatet fra tabellens sidste række.
-            const [r0, c0, rows, cols] = parseA(t.range);
-            record({ kind: "tableRowsAdd", table: t.name, index, values });
-            if (index !== undefined && index < rows - 1) {
-              // Midt i tabellen: rækkerne under rykker ned.
-              const at = r0 + 1 + index;
-              grid.splice(at, 0, ...values.map(() => [] as unknown[]));
-              const moved = [...fmts].map(([kk, f]) => {
-                const [r, c] = kk.split(",").map(Number);
-                return [key(r >= at ? r + values.length : r, c), f] as const;
+          getCell: (r: number, c: number) => rng(r0 + r, c0 + c, 1, 1),
+          getResizedRange: (dr: number, dc: number) => rng(r0, c0, rows + dr, cols + dc),
+          getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
+          getRow: (i: number) => rng(r0 + i, c0, 1, cols),
+          getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+          sort: strict("Excel.RangeSort", {
+            apply(fields: { key: number; ascending?: boolean }[], _matchCase?: boolean, hasHeaders?: boolean) {
+              record({ kind: "sort", address: addr(r0, c0, rows, cols), fields, hasHeaders });
+              if (!hasHeaders) throw new Error("Simuleringen kræver en overskriftsrække");
+              sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
+            },
+          }),
+          conditionalFormats: strict("Excel.ConditionalFormatCollection", {
+            add(type: string) {
+              const cf = { id: `cf${++cfSeq}`, address: addr(r0, c0, rows, cols), type } as { id: string; address: string; type: string; rule?: unknown };
+              condFormats.push(cf);
+              record({ kind: "conditionalFormat", address: cf.address, type });
+              const fmt = () => ({ fill: {}, font: {} });
+              const sub = (name: string) => ({
+                format: fmt(),
+                set rule(v: unknown) {
+                  cf.rule = v;
+                },
+                set criteria(v: unknown) {
+                  cf.rule = v;
+                },
+                _name: name,
               });
-              fmts.clear();
-              for (const [kk, f] of moved) fmts.set(kk, f);
-              values.forEach((row, i) => row.forEach((v, c) => put(at + i, c0 + c, v ?? "")));
-              t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
-              return;
-            }
-            values.forEach((row, i) => {
-              const r = r0 + rows + i;
-              for (let c = 0; c < cols; c++) {
-                put(r, c0 + c, row[c] ?? "");
-                fmts.set(key(r, c0 + c), { ...fmtOf(r0 + rows - 1, c0 + c) });
-              }
+              return strict("Excel.ConditionalFormat", {
+                load() {},
+                get id() {
+                  return cf.id;
+                },
+                colorScale: sub("colorScale"),
+                dataBar: sub("dataBar"),
+                cellValue: sub("cellValue"),
+                preset: sub("preset"),
+                topBottom: sub("topBottom"),
+              });
+            },
+            getItem: (id: string) =>
+              strict("Excel.ConditionalFormat(item)", {
+                delete() {
+                  const i = condFormats.findIndex((c) => c.id === id);
+                  if (i < 0) throw new Error(`ItemNotFound: ${id}`);
+                  condFormats.splice(i, 1);
+                },
+              }),
+          }),
+          format: strict("Excel.RangeFormat", {
+            load() {},
+            get columnWidth() {
+              return widths.get(c0) ?? 48;
+            },
+            set columnWidth(v: number) {
+              for (let c = 0; c < cols; c++) widths.set(c0 + c, v);
+            },
+            autofitColumns() {
+              record({ kind: "autofitColumns", address: addr(r0, c0, rows, cols) });
+              for (let c = 0; c < cols; c++) widths.set(c0 + c, 10 + 7 * Math.max(1, ...grid.map((row) => String(row[c0 + c] ?? "").length)));
+            },
+          }),
+          delete(direction: string) {
+            record({ kind: "rangeDelete", address: addr(r0, c0, rows, cols), direction });
+            each((r, c) => {
+              if (grid[r]) grid[r][c] = "";
+              fmts.delete(key(r, c));
             });
-            t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
+            shift(r0 + rows, -rows, c0, c0 + cols - 1);
           },
-          getItemAt: (k: number) =>
-            strict("Excel.TableRow", {
-              getRange: () => {
-                const [r0, c0, , cols] = parseA(t.range);
-                return rng(r0 + 1 + k, c0, 1, cols);
-              },
-              delete() {
-                const [r0, c0, rows, cols] = parseA(t.range);
-                record({ kind: "tableRowDelete", table: t.name, index: k });
-                const gone = r0 + 1 + k;
-                grid.splice(gone, 1);
-                // Formaterne følger cellerne: rækken forsvinder, og rækkerne under rykker op.
-                const moved = [...fmts].flatMap(([kk, f]) => {
+          insert(direction: string) {
+            record({ kind: "rangeInsert", address: addr(r0, c0, rows, cols), direction });
+            shift(r0, rows, c0, c0 + cols - 1);
+            return rng(r0, c0, rows, cols);
+          },
+          worksheet: undefined as unknown,
+          get values() {
+            return slice();
+          },
+          set values(v: unknown[][]) {
+            record({ kind: "values", address: addr(r0, c0, rows, cols), values: v });
+            write(v);
+          },
+          get formulas() {
+            return slice();
+          },
+          set formulas(v: unknown[][]) {
+            record({ kind: "formulas", address: addr(r0, c0, rows, cols), formulas: v });
+            write(v);
+          },
+          get numberFormat() {
+            return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => fmtOf(r0 + r, c0 + c).numberFormat ?? "General"));
+          },
+          set numberFormat(v: string[][]) {
+            v.forEach((row, r) => row.forEach((f, c) => setFmt(r0 + r, c0 + c, { numberFormat: f === "General" ? undefined : f })));
+          },
+          copyFrom(src: { rowIndex: number; columnIndex: number }, type: string) {
+            record({ kind: "copyFrom", address: addr(r0, c0, rows, cols), type });
+            each((r, c) => fmts.set(key(r, c), { ...fmtOf(src.rowIndex + (r - r0), src.columnIndex + (c - c0)) }));
+          },
+          getCellProperties: () => ({
+            value: Array.from({ length: rows }, (_, r) =>
+              Array.from({ length: cols }, (_, c) => {
+                const f = fmtOf(r0 + r, c0 + c);
+                return { format: { font: { bold: !!f.bold }, fill: { color: f.fill ?? "#FFFFFF" } } };
+              }),
+            ),
+          }),
+          setCellProperties(p: { format: { font: { bold: boolean }; fill: { color: string } } }[][]) {
+            p.forEach((row, r) =>
+              row.forEach((x, c) =>
+                setFmt(r0 + r, c0 + c, { bold: x.format.font.bold || undefined, fill: x.format.fill.color === "#FFFFFF" ? undefined : x.format.fill.color }),
+              ),
+            );
+          },
+          clear(applyTo: string) {
+            record({ kind: "clear", address: addr(r0, c0, rows, cols), applyTo });
+            if (applyTo === "Formats") each((r, c) => fmts.delete(key(r, c)));
+            else each((r, c) => put(r, c, ""));
+          },
+          get valueTypes() {
+            return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
+          },
+        };
+        target.worksheet = worksheet;
+        return strict("Excel.Range", target);
+      }
+      const used = () => rng(0, 0, grid.length, width());
+      const parse = (a: string) => rng(...parseA(a));
+      const tableObj = (t: { name: string; range: string; style?: string }) =>
+        strict("Excel.Table", {
+          name: t.name,
+          load() {},
+          get style() {
+            return t.style ?? "TableStyleMedium2";
+          },
+          set style(v: string) {
+            record({ kind: "tableStyle", table: t.name, style: v });
+            t.style = v;
+          },
+          convertToRange() {
+            record({ kind: "convertToRange", table: t.name });
+            tables.splice(tables.indexOf(t), 1);
+            return parse(t.range);
+          },
+          getRange: () => parse(t.range),
+          sort: strict("Excel.TableSort", {
+            apply(fields: { key: number; ascending?: boolean }[]) {
+              const [r0, c0, rows, cols] = parseA(t.range);
+              record({ kind: "tableSort", table: t.name, fields });
+              sortRows(r0, c0, rows, cols, fields[0].key, fields[0].ascending !== false);
+            },
+          }),
+          getDataBodyRange: () => {
+            const [r0, c0, rows, cols] = parseA(t.range);
+            return rng(r0 + 1, c0, rows - 1, cols);
+          },
+          getHeaderRowRange: () => {
+            const [r0, c0, , cols] = parseA(t.range);
+            return rng(r0, c0, 1, cols);
+          },
+          rows: strict("Excel.TableRowCollection", {
+            load() {},
+            get count() {
+              return parseA(t.range)[2] - 1;
+            },
+            add(index: number | undefined, values: unknown[][]) {
+              // Som Excel: rækkerne lægges ind i tabellen og får formatet fra tabellens sidste række.
+              const [r0, c0, rows, cols] = parseA(t.range);
+              record({ kind: "tableRowsAdd", table: t.name, index, values });
+              if (index !== undefined && index < rows - 1) {
+                // Midt i tabellen: rækkerne under rykker ned.
+                const at = r0 + 1 + index;
+                grid.splice(at, 0, ...values.map(() => [] as unknown[]));
+                const moved = [...fmts].map(([kk, f]) => {
                   const [r, c] = kk.split(",").map(Number);
-                  return r === gone ? [] : [[key(r > gone ? r - 1 : r, c), f] as const];
+                  return [key(r >= at ? r + values.length : r, c), f] as const;
                 });
                 fmts.clear();
                 for (const [kk, f] of moved) fmts.set(kk, f);
-                t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows - 1}`;
+                values.forEach((row, i) => row.forEach((v, c) => put(at + i, c0 + c, v ?? "")));
+                t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
+                return;
+              }
+              values.forEach((row, i) => {
+                const r = r0 + rows + i;
+                for (let c = 0; c < cols; c++) {
+                  put(r, c0 + c, row[c] ?? "");
+                  fmts.set(key(r, c0 + c), { ...fmtOf(r0 + rows - 1, c0 + c) });
+                }
+              });
+              t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows + values.length}`;
+            },
+            getItemAt: (k: number) =>
+              strict("Excel.TableRow", {
+                getRange: () => {
+                  const [r0, c0, , cols] = parseA(t.range);
+                  return rng(r0 + 1 + k, c0, 1, cols);
+                },
+                delete() {
+                  const [r0, c0, rows, cols] = parseA(t.range);
+                  record({ kind: "tableRowDelete", table: t.name, index: k });
+                  const gone = r0 + 1 + k;
+                  grid.splice(gone, 1);
+                  // Formaterne følger cellerne: rækken forsvinder, og rækkerne under rykker op.
+                  const moved = [...fmts].flatMap(([kk, f]) => {
+                    const [r, c] = kk.split(",").map(Number);
+                    return r === gone ? [] : [[key(r > gone ? r - 1 : r, c), f] as const];
+                  });
+                  fmts.clear();
+                  for (const [kk, f] of moved) fmts.set(kk, f);
+                  t.range = `${col(c0)}${r0 + 1}:${col(c0 + cols - 1)}${r0 + rows - 1}`;
+                },
+              }),
+          }),
+        });
+      const worksheet = strict("Excel.Worksheet", {
+        get name() {
+          return sheet;
+        },
+        set name(v: string) {
+          if (built.some((b) => b.name().toLowerCase() === v.toLowerCase())) throw new Error(`InvalidArgument: arket ${v} findes allerede`);
+          record({ kind: "sheetRename", from: sheet, to: v });
+          sheet = v;
+        },
+        load() {},
+        delete() {
+          if (built.length === 1) throw new Error("InvalidOperation: projektmappen skal have mindst ét ark");
+          record({ kind: "sheetDelete", name: sheet });
+          built.splice(built.indexOf(self), 1);
+        },
+        charts: strict("Excel.ChartCollection", {
+          load() {},
+          get items() {
+            return charts.map((c) => strict("Excel.Chart(item)", { name: c.name, delete: () => charts.splice(charts.indexOf(c), 1) }));
+          },
+          add(type: string, source: { address: string }, seriesBy: string) {
+            const c = { name: `Diagram ${charts.length + 1}`, type, source: source.address.replace(/^.*!/, "") } as (typeof charts)[number];
+            charts.push(c);
+            record({ kind: "chartAdd", type, source: c.source, seriesBy });
+            return strict("Excel.Chart", {
+              load() {},
+              get name() {
+                return c.name;
+              },
+              title: strict("Excel.ChartTitle", {
+                set text(v: string) {
+                  c.title = v;
+                },
+              }),
+              setPosition(start: { address: string }) {
+                c.at = start.address.replace(/^.*!/, "");
+              },
+            });
+          },
+          getItem: (name: string) =>
+            strict("Excel.Chart(item)", {
+              delete() {
+                const i = charts.findIndex((c) => c.name === name);
+                if (i < 0) throw new Error(`ItemNotFound: ${name}`);
+                charts.splice(i, 1);
               },
             }),
         }),
+        freezePanes: strict("Excel.WorksheetFreezePanes", {
+          freezeRows(n: number) {
+            record({ kind: "freezeRows", n });
+            frozen = n;
+          },
+          unfreeze() {
+            record({ kind: "unfreeze" });
+            frozen = null;
+          },
+          freezeAt(r: { rowCount: number }) {
+            frozen = r.rowCount;
+          },
+          getLocationOrNullObject: () =>
+            frozen === null
+              ? strict("Excel.Range(null)", { isNullObject: true, load() {} })
+              : (() => {
+                  const r = rng(0, 0, frozen, 1) as Record<string, unknown>;
+                  return r;
+                })(),
+        }),
+        // Et helt tomt ark (fx et nyt) har intet brugt område.
+        getUsedRangeOrNullObject: () => (grid.length === 0 ? strict("Excel.Range(null)", { isNullObject: true, load() {} }) : used()),
+        getRange: (a?: string) => (a ? parse(a) : used()),
+        tables: strict("Excel.TableCollection", {
+          load() {},
+          get items() {
+            return tables.map(tableObj);
+          },
+          getItem: (name: string) => {
+            const t = tables.find((x) => x.name === name);
+            if (!t) throw new Error(`ItemNotFound: ${name}`);
+            return tableObj(t);
+          },
+          add(r: { address: string }, hasHeaders: boolean) {
+            const range = r.address.replace(/^.*!/, "");
+            const [r0, c0, rows, cols] = parseA(range);
+            if (
+              tables.some((t) => {
+                const [a, b, n, m] = parseA(t.range);
+                return a <= r0 + rows - 1 && r0 <= a + n - 1 && b <= c0 + cols - 1 && c0 <= b + m - 1;
+              })
+            )
+              throw new Error("InvalidOperation: A table can't overlap another table");
+            const t = { name: `Tabel${++tableSeq}`, range };
+            record({ kind: "tableAdd", address: range, hasHeaders });
+            tables.push(t);
+            return tableObj(t);
+          },
+        }),
       });
-    const tableCollection = () =>
-      strict("Excel.TableCollection(workbook)", {
-        load() {},
-        get items() {
-          return tables.map(tableObj);
-        },
-      });
-    const worksheet = strict("Excel.Worksheet", {
-      name: sheet,
-      load() {},
-      delete() {
-        throw new Error("Simuleringen har kun ét ark");
-      },
-      charts: strict("Excel.ChartCollection", {
-        load() {},
-        get items() {
-          return charts.map((c) => strict("Excel.Chart(item)", { name: c.name, delete: () => charts.splice(charts.indexOf(c), 1) }));
-        },
-        add(type: string, source: { address: string }, seriesBy: string) {
-          const c = { name: `Diagram ${charts.length + 1}`, type, source: source.address.replace(/^.*!/, "") } as (typeof charts)[number];
-          charts.push(c);
-          record({ kind: "chartAdd", type, source: c.source, seriesBy });
-          return strict("Excel.Chart", {
-            load() {},
-            get name() {
-              return c.name;
-            },
-            title: strict("Excel.ChartTitle", {
-              set text(v: string) {
-                c.title = v;
-              },
-            }),
-            setPosition(start: { address: string }) {
-              c.at = start.address.replace(/^.*!/, "");
-            },
-          });
-        },
-        getItem: (name: string) =>
-          strict("Excel.Chart(item)", {
-            delete() {
-              const i = charts.findIndex((c) => c.name === name);
-              if (i < 0) throw new Error(`ItemNotFound: ${name}`);
-              charts.splice(i, 1);
-            },
-          }),
-      }),
-      freezePanes: strict("Excel.WorksheetFreezePanes", {
-        freezeRows(n: number) {
-          record({ kind: "freezeRows", n });
-          frozen = n;
-        },
-        unfreeze() {
-          record({ kind: "unfreeze" });
-          frozen = null;
-        },
-        freezeAt(r: { rowCount: number }) {
-          frozen = r.rowCount;
-        },
-        getLocationOrNullObject: () =>
-          frozen === null
-            ? strict("Excel.Range(null)", { isNullObject: true, load() {} })
-            : (() => {
-                const r = rng(0, 0, frozen, 1) as Record<string, unknown>;
-                return r;
-              })(),
-      }),
-      getUsedRangeOrNullObject: used,
-      getRange: (a?: string) => (a ? parse(a) : used()),
-      tables: strict("Excel.TableCollection", {
-        load() {},
-        get items() {
-          return tables.map(tableObj);
-        },
-        getItem: (name: string) => {
-          const t = tables.find((x) => x.name === name);
-          if (!t) throw new Error(`ItemNotFound: ${name}`);
-          return tableObj(t);
-        },
-        add(r: { address: string }, hasHeaders: boolean) {
-          const range = r.address.replace(/^.*!/, "");
-          const [r0, c0, rows, cols] = parseA(range);
-          if (
-            tables.some((t) => {
-              const [a, b, n, m] = parseA(t.range);
-              return a <= r0 + rows - 1 && r0 <= a + n - 1 && b <= c0 + cols - 1 && c0 <= b + m - 1;
-            })
-          )
-            throw new Error("InvalidOperation: A table can't overlap another table");
-          const t = { name: `Tabel${tables.length + 1}`, range };
-          record({ kind: "tableAdd", address: range, hasHeaders });
-          tables.push(t);
-          return tableObj(t);
-        },
-      }),
-    });
+      const self: Built = { name: () => sheet, worksheet, state, used, tableObjs: () => tables.map(tableObj) };
+      return self;
+    };
+    built.push(buildSheet({ sheet: o.excel?.sheet ?? "Ark1", values: o.excel?.values, formats: o.excel?.formats, tables: o.excel?.tables }));
+    for (const d of o.excel?.sheets ?? []) built.push(buildSheet(d));
+    // Det første ark er det aktive (markeringen); __miai.sheet() viser det, __miai.sheets() alle ark.
+    (w.__miai as Record<string, unknown>).sheet = () => built[0].state();
+    (w.__miai as Record<string, unknown>).sheets = () => Object.fromEntries(built.map((b) => [b.name(), b.state()]));
+    const findSheet = (name: string) => {
+      const b = built.find((x) => x.name().toLowerCase() === name.toLowerCase());
+      if (!b) throw new Error(`ItemNotFound: arket ${name} findes ikke`);
+      return b;
+    };
     const workbook = strict("Excel.Workbook", {
-      getSelectedRange: used,
+      getSelectedRange: () => built[0].used(),
       worksheets: strict("Excel.WorksheetCollection", {
         load() {},
-        items: [worksheet],
-        getItem: () => worksheet,
-        getActiveWorksheet: () => worksheet,
+        get items() {
+          return built.map((b) => b.worksheet);
+        },
+        getItem: (name: string) => findSheet(name).worksheet,
+        getActiveWorksheet: () => built[0].worksheet,
+        add(name: string) {
+          if (built.some((b) => b.name().toLowerCase() === name.toLowerCase())) throw new Error(`InvalidArgument: arket ${name} findes allerede`);
+          record({ kind: "sheetAdd", name });
+          const b = buildSheet({ sheet: name, values: [] });
+          built.push(b);
+          return b.worksheet;
+        },
       }),
       get tables() {
-        return tableCollection();
+        return strict("Excel.TableCollection(workbook)", {
+          load() {},
+          get items() {
+            return built.flatMap((b) => b.tableObjs());
+          },
+        });
       },
       pivotTables: strict("Excel.PivotTableCollection", { load() {}, items: [] }),
       comments: { add: (address: string, text: string) => record({ kind: "comment", address, text }) },

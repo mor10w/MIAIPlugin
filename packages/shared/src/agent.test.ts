@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentPlan, cellCount, checkPlan, isDestructive, MAX_AGENT_ACTIONS, numberedRows, rangeBox } from "./agent.js";
+import { AgentPlan, cellCount, checkPlan, isDestructive, MAX_AGENT_ACTIONS, numberedRows, rangeBox, renderExcelStructure, sheetOfAddress } from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
 import { TaskRequest } from "./types.js";
 import { TASKS } from "./tasks.js";
@@ -368,6 +368,50 @@ describe("agent i PowerPoint og Excel", () => {
       TaskRequest.parse({ context: { host: "word", text: doc, isWholeDocument: true }, params: { prompt: "s", agentExport: "on" } }),
     );
     expect(word[0].content).not.toContain("saveSheet");
+  });
+
+  it("checkPlan (Excel, flere ark #21): arknavne skal findes eller oprettes af planen, og tabeller tjekkes pr. ark", () => {
+    const excel = {
+      tables: [{ name: "Salg", address: "Ark1!A1:C5", headers: ["Region", "Måned", "Omsætning"] }],
+      columnFormats: [],
+      activeSheet: "Ark1",
+      sheets: [
+        { name: "Ark1", used: "A1:C5", headers: ["Region", "Måned", "Omsætning"] },
+        { name: "Mit ark", headers: [] },
+      ],
+    };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "addSheet", name: "Oversigt", reason: "" },
+        { action: "setValues", address: "Oversigt!A1", values: [["x"]], reason: "" },
+        { action: "setFormula", address: "'Mit ark'!B2", formula: "=SUM(Ark1!C2:C5)", reason: "" },
+        { action: "setValues", address: "Findes!A1", values: [["x"]], reason: "" },
+        { action: "addSheet", name: "ark1", reason: "" },
+        { action: "renameSheet", sheet: "Mit ark", name: "Noter", reason: "" },
+        { action: "renameSheet", sheet: "Væk", name: "Nyt", reason: "" },
+        // Samme celler som tabellens overskrift – men på et andet ark, så det er i orden.
+        { action: "deleteRows", address: "'Mit ark'!A1:C2", reason: "" },
+        { action: "deleteRows", address: "A1:C2", reason: "" },
+        { action: "formatTable", target: "Oversigt!A1:B4", style: "TableStyleLight9", reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      "bad-sheet",
+      "bad-sheet",
+      undefined,
+      "bad-sheet",
+      undefined,
+      "in-table",
+      undefined,
+    ]);
+    expect(() => AgentPlan.parse({ summary: "s", actions: [{ action: "addSheet", name: "A/B", reason: "" }] })).toThrow();
+    expect(sheetOfAddress("'Mit ark'!B2")).toBe("Mit ark");
+    expect(sheetOfAddress("B2")).toBeUndefined();
+    expect(renderExcelStructure(excel)).toContain("Sheets:\n- Ark1 (active): A1:C5, headers: Region | Måned | Omsætning\n- Mit ark: empty");
   });
 
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {
