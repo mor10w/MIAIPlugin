@@ -2,7 +2,8 @@
 // opdateringsfeedet (build.publish i package.json – en "generic" URL på GitHub Pages) i
 // baggrunden og installerer dem, når appen genstartes. macOS kræver en signeret app;
 // uden signering logges fejlen, og appen virker som før.
-import { app } from "electron";
+import { app, net, shell } from "electron";
+import { DEV_FEED, devBuildNumber, devBuildSupported, devMenuState, fetchDevInfo } from "./devBuild.js";
 
 /** Tjek ved start og derefter hver 6. time. */
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -12,6 +13,8 @@ let updater = null;
 
 export async function setupUpdates({ log, onChange }) {
   if (!app.isPackaged || process.env.MIAI_NO_UPDATES) return;
+  // En udviklerudgave følger udviklerkanalen (menupunktet nedenfor), ikke de udgivne versioner.
+  if (devBuildNumber(app.getVersion()) !== null) return;
   try {
     // CommonJS-pakke: default-eksporten indeholder autoUpdater.
     const mod = await import("electron-updater");
@@ -38,4 +41,35 @@ export async function setupUpdates({ log, onChange }) {
 export function updateMenuItem() {
   if (!ready || !updater) return [];
   return [{ label: `Genstart og opdater til ${ready}`, click: () => updater.quitAndInstall() }];
+}
+
+// --- Udviklerudgaven (ADR-0016, tillæg) --------------------------------------------------------
+// Hvert push til main bygger en .dmg til Apple Silicon. Appen installerer den ikke selv (det kræver
+// en signeret app); menupunktet åbner hentningen i browseren, og brugeren trækker appen over som
+// ved første installation.
+
+let devInfo = null; // seneste dev.json fra feedet
+
+export function setupDevBuilds({ log, onChange }) {
+  if (!app.isPackaged || process.env.MIAI_NO_UPDATES) return;
+  if (!devBuildSupported(process.platform, process.arch)) return;
+  const feed = process.env.MIAI_DEV_FEED || DEV_FEED;
+  // net.fetch følger systemets proxyindstillinger, det gør Nodes fetch ikke.
+  const check = async () => {
+    const info = await fetchDevInfo(feed, (url, init) => net.fetch(String(url), init));
+    if (info?.version === devInfo?.version) return;
+    devInfo = info;
+    if (info) log(`udviklerudgave ${info.version} findes på ${feed}`);
+    onChange();
+  };
+  void check();
+  setInterval(() => void check(), INTERVAL_MS).unref?.();
+}
+
+/** Menupunkt for udviklerudgaven: "Hent udviklerudgave …", eller at den nyeste er installeret. */
+export function devMenuItem() {
+  const state = devMenuState(app.getVersion(), devInfo);
+  if (state.kind === "none") return [];
+  if (state.kind === "current") return [{ label: state.label, enabled: false }];
+  return [{ label: state.label, click: () => void shell.openExternal(state.url) }];
 }

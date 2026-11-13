@@ -84,3 +84,23 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
 - **Pages som filserver:** GitHub Pages har en grænse på ca. 1 GB. En release fylder ca. 0,5 GB: dmg og zip til to Mac-arkitekturer samt én Windows-installer. Ved salg bør filerne ligge på et CDN eller organisationens egen server. Feed-URL'en ændres i `build.publish`.
 - **Windows-installeren er testet i CI's pakning, ikke på en rigtig pc.** Office' registreringsnøgle, `certutil`-dialogen og SmartScreen skal afprøves; tjeklisten står i UDVIKLING.md.
 - **Sideloading** (wef-mappe/registreringsdatabase) er ifølge Microsoft til udvikling. For organisationer er central udrulning (ADR-0015) den anbefalede vej; MIAI App er til dem uden M365-administration.
+
+## Tillæg: udviklerudgave ved hvert push til `main`
+
+En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er der brug for at kunne afprøve det, der lige er merget, uden den ceremoni.
+
+- **Hvad:** `.github/workflows/dev-build.yml` bygger en `.dmg` til Apple Silicon ved hvert push til `main`, der rører appen (ikke ved rene dokumentations-, eval- eller e2e-ændringer).
+- **Version:** `<version i package.json>-dev.<kørselsnummer>`, fx `0.1.0-dev.42`. Intet git-tag og ingen ændring i repoet; nummeret sættes kun i bygget.
+- **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json` (version, filnavn, commit, dato), fordi repoet er privat.
+- **I appen:** menupunktet *Hent udviklerudgave X…* vises, når `dev.json` peger på et nyere byg end det installerede. Det åbner hentningen i browseren; appen installerer ikke selv. Kun en udviklerversion og et rent `.dmg`-filnavn i feedets egen mappe accepteres, så feedet ikke kan sende brugeren andre steder hen.
+- **To spor, der ikke blandes:** en installeret udviklerudgave følger kun udviklersporet (electron-updater er slået fra i den), og "seneste release" på Pages omfatter ikke forhåndsudgivelser. `MIAI_NO_UPDATES=1` slår begge fra.
+- **Signering:** ad hoc (`identity: "-"`) uden hardened runtime. Apple Silicon kræver en gyldig signatur for overhovedet at starte en app, og hardened runtime uden et Team ID afviser Electrons egne biblioteker. Workflowet kontrollerer signaturen og starter appen, før noget udgives.
+- **Kun Mac på Apple Silicon indtil videre.** Intel-Mac og Windows er udeladt for at holde byggetiden nede; Windows er udskudt til #40.
+
+**Konsekvenser:**
+
+- Gatekeeper kender ikke en ad hoc-signatur. Efter hver hentning skal appen godkendes under Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel*.
+- En ad hoc-signatur er ny for hvert byg. macOS kan derfor spørge igen om adgang til nøgleringen og om tilladelser, der er givet til den forrige udgave. Det forsvinder med et Developer ID-certifikat (afsnit 3).
+- Mac-runnere koster ti gange så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
+- Udviklerudgaven fylder ca. 0,1 GB af Pages' 1 GB oven i en release.
+- Udviklerudgaven er til afprøvning. Den er ikke testet ud over CI og skal ikke gives til kunder.

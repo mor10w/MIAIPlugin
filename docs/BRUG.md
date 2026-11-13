@@ -83,6 +83,13 @@ MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hve
 
 **Opdateringer** hentes automatisk i baggrunden og installeres næste gang appen startes, eller fra menuen *Genstart og opdater til …*. På Mac kræver det en signeret app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)).
 
+**Udviklerudgave (Mac med Apple Silicon):** mens MIAI er under udvikling, bygges en ny udgave, hver gang koden ændres. Er der en nyere end din, viser menuen *Hent udviklerudgave …*:
+1. Vælg menupunktet. Browseren henter `.dmg`-filen.
+2. Afslut MIAI, åbn `.dmg`'en og træk **MIAI** til Applications (erstat den gamle).
+3. Start MIAI. macOS afviser den første gang: åbn Systemindstillinger → Anonymitet & sikkerhed og vælg *Åbn alligevel*.
+
+Spørger macOS bagefter om adgang til nøgleringen, så vælg *Tillad altid*. Udviklerudgaven er til afprøvning og kan indeholde fejl.
+
 Blokerer macOS installationen i Office ("Adgang nægtet"), skal MIAI have **Fuld diskadgang** under Systemindstillinger → Anonymitet og sikkerhed. Appen tilbyder at åbne stedet.
 
 Alt kører lokalt: ingen vendor-cloud, ingen CORS (add-in og bridge er samme origin), indstillinger ligger i `~/Library/Application Support/MIAI/config.json`.
