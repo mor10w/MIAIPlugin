@@ -121,3 +121,40 @@ test("web-søgning: slået fra som standard i bridge-tilstand, værktøjet sende
   await expect(tp.page.getByText("Svar uden søgning.")).toBeVisible();
   expect(tp.model.lastRequest).not.toHaveProperty("tools");
 });
+
+test("Excel: celleadresser i svaret kan klikkes og markerer området – ikke i kode og ikke ord, der ligner celler (#22)", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Region", "Omsætning"],
+        ["Nord", 120],
+        ["Syd", 340],
+      ],
+      sheets: [{ sheet: "Budget", values: [["Region", "Budget"]] }],
+    },
+  });
+  tp.model.reply = () => ({
+    stream: chunks("Summen af B2:B3 er **460**, og den største står i B3. Budgettet står i Budget!B2. I Q1 2026 brugte vi `=SUM(B2:B3)`."),
+  });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad er den samlede omsætning?");
+  await tp.page.keyboard.press("Enter");
+  // Modellen bedes pege på celler med adresser.
+  await expect(tp.page.getByText("Summen af")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).toContain("the user can click an address to jump to it");
+  // Tre henvisninger: området, cellen inden for data og adressen med arknavn. Ikke "Q1" og ikke formlen i koden.
+  await expect(tp.page.locator("button.docref")).toHaveText(["B2:B3", "B3", "Budget!B2"]);
+
+  const selected = () =>
+    tp.page.evaluate(() =>
+      (window as unknown as { __miai: { calls: { kind: string; address?: string }[] } }).__miai.calls.filter((c) => c.kind === "select").map((c) => c.address),
+    );
+  await tp.page.getByRole("button", { name: "B2:B3" }).click();
+  await expect.poll(selected).toEqual(["Ark1!B2:B3"]);
+  // En adresse på et andet ark skifter til arket og markerer cellen.
+  await tp.page.getByRole("button", { name: "Budget!B2" }).click();
+  await expect.poll(selected).toEqual(["Ark1!B2:B3", "Budget!B2"]);
+});

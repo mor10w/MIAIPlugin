@@ -783,6 +783,12 @@ export const TASKS: TaskDefinition[] = [
             'Mermaid rules: put EVERY node and subgraph label in double quotes, e.g. A["Platformarkitekt (eksisterende gruppe)"] – unquoted parentheses, brackets or braces break the diagram; use <br/> for line breaks and no other HTML (no <b> or <i>). ' +
             "The add-in shows the figure and has a button that inserts it into the document as an image – never explain how to insert or export it, and never mention copy/paste, Mermaid Live, plugins or other external tools.",
           ctx.host === "excel" ? EXCEL_SCOPE_RULES : undefined,
+          // Henvisninger kan klikkes i add-in'et (#22), så svaret skal pege præcist på stedet.
+          ctx.host === "excel"
+            ? "Refer to cells by their addresses (B7, C2:C5, or Budget!B2 on another sheet) – the user can click an address to jump to it."
+            : ctx.host === "powerpoint"
+              ? "Refer to slides by number ('slide 3') – the user can click it to go to the slide."
+              : undefined,
           ctx.host === "outlook" ? undefined : CHAT_EDIT_RULES,
           contextNote,
           ctx.surroundings && `Workbook overview (computed by the add-in over the full used range):\n${doc(ctx.surroundings)}`,

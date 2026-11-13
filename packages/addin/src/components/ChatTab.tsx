@@ -15,6 +15,7 @@ import { SourceList } from "./SourceList";
 import { looksLikeEditRequest } from "../editIntent";
 import { useAgentOptions } from "../useAgentOptions";
 import { planWithReads } from "../agentRun";
+import { useDocRefs } from "../useDocRefs";
 import { AgentPlanView } from "./AgentPlanView";
 
 /** Chat → agent: brugerens ønske og chatsvaret, som agenten skal bruge som indhold. */
@@ -118,6 +119,10 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const canAct = adapter.supports("agent");
   const [act, setAct] = useState(true);
   const agentOpts = useAgentOptions(messages.length);
+  /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
+  const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
+  // Henvisninger til celler og slides i svarene kan klikkes (#22).
+  const docRefs = useDocRefs(adapter, lastCtx);
   const api = useBackend();
   // Søgning i egne mapper (F15): kun når bridgen har et aktivt vidensindeks.
   const [knowledgeOn, setKnowledgeOn] = useState(false);
@@ -130,8 +135,6 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   }, [api]);
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
-  /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
-  const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
   const ctxRef = useRef<DocContext>({ host: adapter.host, text: "", isWholeDocument: false });
   const { state, start, stop } = useTask();
   const logRef = useRef<HTMLDivElement>(null);
@@ -267,6 +270,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
               ) : (
                 <Markdown
                   text={m.content}
+                  refs={docRefs}
                   onDiagramError={(err) =>
                     setDiagramErrors((d) => {
                       if ((d[i] ?? null) === err) return d;
