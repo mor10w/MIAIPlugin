@@ -10,6 +10,8 @@ const MAX_COLS = 30;
 const MAX_STAT_ROWS = 5_000;
 /** Uden statistik: overskrifter + så mange rækker af used range. */
 const HEADER_ROWS = 6;
+/** Agentens overblik over projektmappen dækker højst så mange ark. */
+const MAX_SHEETS = 30;
 
 const toTsv = (values: unknown[][]) => values.map((r) => r.map((v) => String(v ?? "").replace(/[\t\n\r]+/g, " ")).join("\t")).join("\n");
 
@@ -169,7 +171,7 @@ export class ExcelAdapter implements HostAdapter {
 
       const f = topLeft.formulas[0][0];
       const table = toTsv(view.values);
-      const excel = opts.structure ? await this.structure(ctx, ws, used) : undefined;
+      const excel = opts.structure ? await this.structure(ctx, ws, used, sheetList.items, sheetUsed) : undefined;
       return {
         ...(excel ? { excel } : {}),
         host: "excel",
@@ -184,13 +186,30 @@ export class ExcelAdapter implements HostAdapter {
   }
 
   /**
-   * Agent-tilstand: arkets Excel-tabeller (navn, område, overskrifter) og hver kolonnes talformat
-   * i første datarække, så agenten kan tilføje rækker i tabellen og skrive tal i det rigtige format.
+   * Agent-tilstand: projektmappens ark (navn, brugt område, overskrifter) og Excel-tabeller (navn,
+   * område med arknavn, overskrifter), og det aktive arks talformater i første datarække. Så kan
+   * agenten arbejde på tværs af ark (#21), tilføje rækker i tabeller og skrive tal i det rigtige format.
    */
-  private async structure(ctx: Excel.RequestContext, ws: Excel.Worksheet, used: Excel.Range): Promise<NonNullable<DocContext["excel"]>> {
-    const tbls = ws.tables;
+  private async structure(
+    ctx: Excel.RequestContext,
+    ws: Excel.Worksheet,
+    used: Excel.Range,
+    sheets: Excel.Worksheet[],
+    sheetUsed: Excel.Range[],
+  ): Promise<NonNullable<DocContext["excel"]>> {
+    const tbls = ctx.workbook.tables;
     tbls.load("items/name");
+    // Overskrifter: første række i hvert arks brugte område (højst MAX_SHEETS ark og MAX_COLS kolonner).
+    const listed = sheets.slice(0, MAX_SHEETS);
+    for (const r of sheetUsed.slice(0, MAX_SHEETS)) if (!r.isNullObject) r.load("columnCount");
     await ctx.sync();
+    const headerRows = listed.map((_, i) => {
+      const r = sheetUsed[i];
+      if (r.isNullObject) return undefined;
+      const h = r.getRow(0).getResizedRange(0, Math.min(r.columnCount, MAX_COLS) - r.columnCount);
+      h.load("values");
+      return h;
+    });
     const ranges = tbls.items.map((t) => {
       const r = t.getRange();
       r.load("address");
@@ -207,9 +226,16 @@ export class ExcelAdapter implements HostAdapter {
     const columnFormats = firstData
       ? (firstData.numberFormat[0] ?? []).flatMap((fmt, i) => (fmt && fmt !== "General" ? [`${colName(firstData!.columnIndex + i)}: ${fmt}`] : []))
       : [];
+    const text = (v: unknown) => String(v ?? "").slice(0, 255);
     return {
-      tables: ranges.map((x) => ({ name: x.name, address: x.r.address, headers: (x.h.values[0] ?? []).map((v) => String(v ?? "")) })),
+      tables: ranges.map((x) => ({ name: x.name, address: x.r.address, headers: (x.h.values[0] ?? []).map(text) })),
       columnFormats,
+      activeSheet: ws.name,
+      sheets: listed.map((sh, i) => ({
+        name: sh.name,
+        used: sheetUsed[i].isNullObject ? undefined : splitAddress(sheetUsed[i].address).range,
+        headers: (headerRows[i]?.values[0] ?? []).map(text),
+      })),
     };
   }
 
@@ -297,6 +323,90 @@ export class ExcelAdapter implements HostAdapter {
       if (actions.length > 1) throw new Error("Et script skal stå alene i planen.");
       return runExcelScript(script, sheetName);
     }
+
+    // Flere ark (#21): handlingerne grupperes pr. ark og udføres ark for ark med samme fremgangsmåde
+    // og fortryd. Nye ark oprettes først, så planen kan skrive på dem; omdøbning sker til sidst, så
+    // alle adresser i planen bruger navnene fra før planen.
+    const tableSheet = new Map((dc.excel?.tables ?? []).map((t) => [t.name, t.address.includes("!") ? splitAddress(t.address).sheet : sheetName]));
+    const sheetFor = (a: AgentAction): string => {
+      const ref = "address" in a ? a.address : "target" in a ? a.target : "source" in a ? a.source : "table" in a ? a.table : undefined;
+      if (!ref) return sheetName;
+      if (ADDRESS.test(ref)) return ref.includes("!") ? splitAddress(ref).sheet : sheetName;
+      return tableSheet.get(ref) ?? sheetName;
+    };
+    const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
+    const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+    const added: string[] = [];
+    if (actions.some((a) => a.action === "addSheet"))
+      await Excel.run(async (ctx) => {
+        for (const [i, a] of actions.entries()) {
+          if (a.action !== "addSheet") continue;
+          try {
+            ctx.workbook.worksheets.add(a.name);
+            await ctx.sync();
+            added.push(a.name);
+          } catch (e) {
+            results[i] = { ok: false, error: "failed", detail: message(e) };
+          }
+        }
+      });
+
+    const structural = (a: AgentAction) => a.action === "addSheet" || a.action === "renameSheet";
+    const order = [...new Set(actions.filter((a) => !structural(a)).map(sheetFor))];
+    const undos: (() => Promise<void>)[] = [];
+    for (const name of order) {
+      const idx = actions.flatMap((a, i) => (!structural(a) && sheetFor(a) === name ? [i] : []));
+      try {
+        const out = await this.applyOnSheet(
+          idx.map((i) => actions[i]),
+          dc,
+          opts,
+          name,
+          name === sheetName,
+        );
+        idx.forEach((i, k) => (results[i] = out.results[k]));
+        // Et ark, planen selv har oprettet, fjernes helt ved fortryd.
+        if (!added.includes(name)) undos.push(out.undo);
+      } catch (e) {
+        for (const i of idx) results[i] = { ok: false, error: "failed", detail: message(e) };
+      }
+    }
+
+    const renamed: { from: string; to: string }[] = [];
+    if (actions.some((a) => a.action === "renameSheet"))
+      await Excel.run(async (ctx) => {
+        for (const [i, a] of actions.entries()) {
+          if (a.action !== "renameSheet") continue;
+          try {
+            ctx.workbook.worksheets.getItem(a.sheet).name = a.name;
+            await ctx.sync();
+            renamed.push({ from: a.sheet, to: a.name });
+          } catch (e) {
+            results[i] = { ok: false, error: "failed", detail: message(e) };
+          }
+        }
+      });
+
+    const undo = async () => {
+      // Omvendt rækkefølge: navnene tilbage, så arkene kan findes; så hvert arks ændringer; så de nye ark væk.
+      if (renamed.length)
+        await Excel.run(async (ctx) => {
+          for (const r of [...renamed].reverse()) ctx.workbook.worksheets.getItem(r.to).name = r.from;
+          await ctx.sync();
+        });
+      for (const u of [...undos].reverse()) await u();
+      if (added.length)
+        await Excel.run(async (ctx) => {
+          for (const name of [...added].reverse()) ctx.workbook.worksheets.getItem(name).delete();
+          await ctx.sync();
+        });
+    };
+    return { results, undo, undoKind: "cells" };
+  }
+
+  /** Udfører handlingerne for ét ark (se applyAgent). `active`: arket er det, markeringen står på. */
+  private async applyOnSheet(actions: AgentAction[], dc: DocContext, opts: AgentOptions, sheetName: string, active: boolean): Promise<AgentOutcome> {
     const has = (v: string) => Office.context.requirements.isSetSupported("ExcelApi", v);
     const formats = has("1.9");
     return Excel.run(async (ctx) => {
@@ -312,7 +422,10 @@ export class ExcelAdapter implements HostAdapter {
         }
         return range.replace(/\$/g, "");
       };
-      const knownTables = (dc.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address) }));
+      // Kun tabellerne på dette ark (tabeladresser har arknavn; uden arknavn gælder det aktive ark).
+      const knownTables = (dc.excel?.tables ?? [])
+        .filter((t) => (t.address.includes("!") ? splitAddress(t.address).sheet === sheetName : active))
+        .map((t) => ({ name: t.name, box: rangeBox(t.address) }));
       const isTableName = (target: string) => !ADDRESS.test(target);
 
       // 1) Find målområderne. formatTable på et område gemmer også områdets formater (til fortryd).

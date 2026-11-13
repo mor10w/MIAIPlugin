@@ -211,6 +211,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Kodetilstand slået fra: et script fra modellen er fravalgt med "Kodetilstanden er slået fra"
 - [ ] Kodetilstand slået til: "Lav en pivottabel med omsætning pr. region": koden kan ses, scriptet kører, og Fortryd fjerner pivottabellen og gendanner arket
 - [ ] Et script, der fejler midtvejs: arket er som før, og "Bed modellen rette scriptet" giver et nyt script med fejlen rettet
+- [ ] Flere ark: "Lav et nyt ark med den samlede omsætning" opretter arket med en formel på tværs af ark; skrivning på et andet ark end det aktive; omdøb et ark; Fortryd sletter det nye ark og sætter navn og celler tilbage (også med mellemrum i arknavnet)
 - [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):

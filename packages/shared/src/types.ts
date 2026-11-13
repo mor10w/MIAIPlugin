@@ -50,6 +50,13 @@ export const DocContext = z.object({
         .default([]),
       /** Talformat pr. kolonne i used range (fx "A: General", "C: #,##0.00 kr"). */
       columnFormats: z.array(z.string().max(120)).max(100).default([]),
+      /** Det aktive ark (#21): adresser uden arknavn gælder dette ark. */
+      activeSheet: z.string().max(255).optional(),
+      /** Alle ark i projektmappen (#21) med brugt område og overskrifter, så agenten kan arbejde på tværs af ark. */
+      sheets: z
+        .array(z.object({ name: z.string().max(255), used: z.string().max(100).optional(), headers: z.array(z.string().max(255)).max(100).default([]) }))
+        .max(50)
+        .optional(),
     })
     .optional(),
   /**

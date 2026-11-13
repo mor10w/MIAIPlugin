@@ -38,6 +38,13 @@ export const TableStyle = z
   .regex(/^TableStyle(?:Light(?:[1-9]|1\d|2[01])|Medium(?:[1-9]|1\d|2[0-8])|Dark(?:[1-9]|1[01]))$/)
   .describe("Built-in Excel table style, e.g. TableStyleMedium2 (banded rows, accent header – Excel's default) or TableStyleLight9 (light, accent header)");
 
+/** Et gyldigt arknavn i Excel: højst 31 tegn, uden : \\ / ? * [ ] og uden apostrof først eller sidst. */
+const SheetName = z
+  .string()
+  .min(1)
+  .max(31)
+  .regex(/^(?!')[^:\\/?*[\]]+(?<!')$/);
+
 /** Indbyggede typografier, agenten må bruge (ingen fri formatering: skrifttype, farve og størrelse følger dokumentets typografier). */
 export const WordStyle = z.enum(["normal", "heading1", "heading2", "heading3", "bullet", "numbered", "quote"]);
 export type WordStyle = z.infer<typeof WordStyle>;
@@ -197,6 +204,13 @@ export const AgentAction = z.discriminatedUnion("action", [
     title: z.string().max(120).optional(),
     reason,
   }),
+  z.object({ action: z.literal("addSheet"), name: SheetName.describe("Name of the new, empty sheet (max 31 characters)"), reason }),
+  z.object({
+    action: z.literal("renameSheet"),
+    sheet: z.string().min(1).max(255).describe("Current name of the sheet"),
+    name: SheetName.describe("New name (max 31 characters)"),
+    reason,
+  }),
   z.object({
     action: z.literal("freezeRows"),
     rows: z.number().int().min(0).max(50).describe("Number of top rows to keep visible when scrolling (1 = the header row); 0 removes freezing"),
@@ -248,6 +262,8 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "conditionalFormat",
   "addChart",
   "freezeRows",
+  "addSheet",
+  "renameSheet",
   "runScript",
   "saveSheet",
 ];
@@ -279,6 +295,14 @@ export function renderSlides(slides: NonNullable<DocContext["slides"]>, layouts?
 /** Excel-strukturen til prompten: tabeller og kolonnernes talformat. */
 export function renderExcelStructure(x: NonNullable<DocContext["excel"]>): string {
   const lines: string[] = [];
+  if (x.sheets?.length)
+    lines.push(
+      "Sheets:",
+      ...x.sheets.map(
+        (sh) =>
+          `- ${sh.name}${sh.name === x.activeSheet ? " (active)" : ""}: ${sh.used ? `${sh.used}${sh.headers.length ? `, headers: ${sh.headers.join(" | ")}` : ""}` : "empty"}`,
+      ),
+    );
   if (x.tables.length) lines.push("Tables:", ...x.tables.map((t) => `- ${t.name} (${t.address}): ${t.headers.join(" | ")}`));
   if (x.columnFormats.length) lines.push(`Number formats: ${x.columnFormats.join("; ")}`);
   return lines.join("\n");
@@ -327,6 +351,8 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "- conditionalFormat {address, rule, value?}: highlight values with Excel's standard formats – colorScale, dataBar, greaterThan/lessThan (with value), duplicates, top10. Address = the values without the header.",
       "- addChart {source, type, title?}: a chart (column, bar, line, pie, area, scatter) of a table or a range with headers; it is placed next to the data.",
       "- freezeRows {rows}: keep the top rows visible when scrolling (1 = the header row; 0 = remove).",
+      "- addSheet {name}: add a new, empty sheet. renameSheet {sheet, name}: rename a sheet.",
+      "Other sheets: every address may carry a sheet name – Salg!A1:C5, or 'Mit ark'!B2 when the name has spaces. Without a sheet name the address is on the active sheet. A sheet added with addSheet can be written to in the same plan (e.g. addSheet Oversigt, then setValues on Oversigt!A1 and setFormula =SUM(Salg!C2:C40) on Oversigt!B2). Tables are found by name on whichever sheet they are. The sheets and their headers are listed under Sheets; you only see the values of the selection.",
       "For 'make the table nice/modern/readable': formatTable, then setNumberFormat for number and date columns where needed, then autofitColumns. Do not change cell values for this.",
       "Formatting is preserved: values never change cell formats, and new cells directly below or next to data get the neighbouring cells' formats. Fonts, colours and borders come only from the table style – there is no action for free formatting.",
       "Use addresses that match the sheet overview; row numbers are shown in the first column of the selected values. Never write over existing data unless the user asked for it. Addresses refer to the sheet before any of your actions – the add-in deletes rows last, from the bottom up.",
@@ -379,6 +405,8 @@ export type AgentProblem =
   | "bad-layout"
   /** Excel: tabellen findes ikke på arket. */
   | "bad-table"
+  /** Excel: arket findes ikke i projektmappen (eller navnet er allerede brugt). */
+  | "bad-sheet"
   /** Kodetilstanden er ikke slået til (eller forbudt af politikken). */
   | "scripts-off"
   /** Eksporten er ikke slået til (eller forbudt af politikken), eller der er ingen bridge. */
@@ -420,7 +448,23 @@ export function rangeBox(address: string): { r0: number; c0: number; r1: number;
 
 type Box = ReturnType<typeof rangeBox>;
 const overlaps = (a: Box, b: Box) => a.r0 <= b.r1 && b.r0 <= a.r1 && a.c0 <= b.c1 && b.c0 <= a.c1;
-const tablesOf = (ctx: Pick<DocContext, "excel">) => (ctx.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address) }));
+/** Arknavnet i en adresse ("Salg!A1", "'Mit ark'!B2"), eller undefined hvis adressen gælder det aktive ark. */
+export function sheetOfAddress(address: string): string | undefined {
+  const i = address.lastIndexOf("!");
+  if (i < 0) return undefined;
+  return address
+    .slice(0, i)
+    .replace(/^'(.*)'$/, "$1")
+    .replace(/''/g, "'");
+}
+
+const tablesOf = (ctx: Pick<DocContext, "excel">) =>
+  (ctx.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address), sheet: sheetOfAddress(t.address) ?? ctx.excel?.activeSheet }));
+/** Tabellerne på samme ark som adressen (uden arknavn: det aktive ark). Kendes arket ikke, tæller alle med. */
+const tablesOn = (ctx: Pick<DocContext, "excel">, address: string) => {
+  const sheet = sheetOfAddress(address) ?? ctx.excel?.activeSheet;
+  return tablesOf(ctx).filter((t) => !sheet || !t.sheet || t.sheet === sheet);
+};
 
 /**
  * Markerede værdier med arkets rækkenummer først, så modellen kan pege på rækker (deleteRows)
@@ -446,6 +490,12 @@ export function checkPlan(
 ): CheckedAction[] {
   const allowed = agentActionsFor(ctx.host);
   const hasScript = plan.actions.some((a) => a.action === "runScript");
+  // Arknavne sammenlignes uden forskel på store og små bogstaver, som i Excel. Uden arkliste
+  // (ældre kontekst) kan arknavne ikke tjekkes her; Excel afviser dem så ved udførelsen.
+  const existingSheets = new Set((ctx.excel?.sheets ?? []).map((sh) => sh.name.toLowerCase()));
+  const knownSheets = ctx.excel?.sheets?.length
+    ? new Set([...existingSheets, ...plan.actions.flatMap((a) => (a.action === "addSheet" ? [a.name.toLowerCase()] : []))])
+    : undefined;
   const paras = ctx.paragraphs;
   const slides = ctx.slides;
   const text = paras ? paras.map((p) => p.text).join("\n") : (ctx.text ?? "");
@@ -468,7 +518,18 @@ export function checkPlan(
   return plan.actions.slice(0, MAX_AGENT_ACTIONS).map((action): CheckedAction => {
     if (!allowed.includes(action.action)) return { action, problem: "wrong-host" };
     if (hasScript && plan.actions.length > 1 && action.action !== "runScript") return { action, problem: "with-script" };
+    // Flere ark (#21): et arknavn i en adresse skal findes i projektmappen eller oprettes af planen.
+    if (ctx.host === "excel") {
+      const ref = "address" in action ? action.address : "target" in action ? action.target : "source" in action ? action.source : undefined;
+      const sheet = ref && RANGE.test(ref) ? sheetOfAddress(ref) : undefined;
+      if (sheet && knownSheets && !knownSheets.has(sheet.toLowerCase())) return { action, problem: "bad-sheet" };
+    }
     switch (action.action) {
+      case "addSheet":
+        return ok(action, knownSheets && existingSheets.has(action.name.toLowerCase()) ? "bad-sheet" : undefined);
+      case "renameSheet":
+        if (!knownSheets) return ok(action);
+        return ok(action, !existingSheets.has(action.sheet.toLowerCase()) || knownSheets.has(action.name.toLowerCase()) ? "bad-sheet" : undefined);
       case "runScript": {
         if (!opts.scripts) return ok(action, "scripts-off");
         return ok(action, checkScript(action.code).ok ? undefined : "unsafe-script");
@@ -543,7 +604,7 @@ export function checkPlan(
         const b = rangeBox(action.address);
         if (b.r1 - b.r0 + 1 > MAX_AGENT_ROWS) return ok(action, "too-large");
         // Kun hele tabelrækker i en tabels data: overskriften eller rækker, der stikker ud af tabellen, ville ødelægge den.
-        return ok(action, tablesOf(ctx).some((t) => overlaps(b, t.box) && !(b.r0 > t.box.r0 && b.r1 <= t.box.r1)) ? "in-table" : undefined);
+        return ok(action, tablesOn(ctx, action.address).some((t) => overlaps(b, t.box) && !(b.r0 > t.box.r0 && b.r1 <= t.box.r1)) ? "in-table" : undefined);
       }
       case "deleteEmptyRows":
       case "formatTable": {
@@ -552,7 +613,7 @@ export function checkPlan(
         if (action.action === "deleteEmptyRows") return ok(action);
         // En ny tabel må ikke overlappe en eksisterende (Excel afviser det).
         const b = rangeBox(action.target);
-        return ok(action, b.r1 === b.r0 ? "invalid" : tablesOf(ctx).some((t) => overlaps(b, t.box)) ? "in-table" : undefined);
+        return ok(action, b.r1 === b.r0 ? "invalid" : tablesOn(ctx, action.target).some((t) => overlaps(b, t.box)) ? "in-table" : undefined);
       }
     }
   });

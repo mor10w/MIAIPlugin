@@ -223,6 +223,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
      - **Data:** skriv værdier, skriv en formel, tilføj eller slet rækker (også *"fjern de tomme rækker"*), ryd et område og sortér.
      - **Udseende:** giv en tabel et moderne udseende med en af Excels tabeltypografier, sæt talformat, tilpas kolonnebredden og brug betinget formatering (farveskala, datalinjer, fremhæv over/under en værdi, dubletter, top 10).
      - **Visning:** lav et diagram og frys overskriftsrækken.
+     - **Flere ark:** agenten kender alle ark i projektmappen (navn, brugt område og overskrifter) og kan skrive på et andet ark, oprette et nyt ark og omdøbe et ark, fx *"lav et nyt ark med den samlede omsætning"*. Fortryd dækker alle berørte ark. Værdierne ser den kun for markeringen.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
