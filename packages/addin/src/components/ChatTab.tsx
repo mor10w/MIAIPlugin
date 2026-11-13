@@ -71,7 +71,9 @@ const useStyles = makeStyles({
   inputRow: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "flex-end" },
   grow: { flex: 1, minWidth: 0 },
   footer: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: tokens.spacingHorizontalS },
-  switch: { flex: 1, minWidth: 0 },
+  // Kontakterne må ikke klemmes sammen (teksterne overlappede i et smalt panel): de ombrydes til hver sin linje.
+  switch: { flexShrink: 0, maxWidth: "100%" },
+  footerEnd: { marginLeft: "auto" },
   muted: { color: tokens.colorNeutralForeground3 },
   /** Zone med apply-knapper + agent-forslag under det seneste chat-svar. */
   applyZone: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
@@ -363,10 +365,10 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
         </div>
         <div className={s.footer}>
           <Switch className={s.switch} label={t("useSelection")} checked={useContext} onChange={(_, d) => setUseContext(d.checked)} />
-          {knowledgeOn && <Switch label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
+          {knowledgeOn && <Switch className={s.switch} label={t("useKnowledge")} checked={useKnowledge} onChange={(_, d) => setUseKnowledge(d.checked)} />}
           {canAct && (
             <Tooltip content={t("chatActHint")} relationship="description">
-              <Switch label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
+              <Switch className={s.switch} label={t("chatAct")} checked={act} onChange={(_, d) => setAct(d.checked)} />
             </Tooltip>
           )}
           {lastCtx?.address && useContext ? (
@@ -377,6 +379,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
           {messages.length > 0 && (
             <Tooltip content={t("newChat")} relationship="label">
               <Button
+                className={s.footerEnd}
                 size="small"
                 appearance="subtle"
                 icon={<ChatAdd20Regular />}
