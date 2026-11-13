@@ -43,6 +43,11 @@ const STYLE: Record<WordStyle, string> = {
 };
 
 /** Agent-sessionens afsnit: som modellen så dem, ændret før start (stale) og slettet undervejs (gone). */
+/** Række og kolonne hentes for højst så mange afsnit i tabeller (hvert koster et opslag i Word). */
+const MAX_TABLE_PARAGRAPHS = 1_500;
+/** Tabeltypografi til nye tabeller, når dokumentet ikke har en tabel at følge. */
+const DEFAULT_TABLE_STYLE = "GridTable4_Accent1";
+
 interface Session {
   paras: Word.Paragraph[];
   stale: Set<number>;
@@ -99,19 +104,30 @@ export class WordAdapter implements HostAdapter {
     const paras = target.paragraphs;
     paras.load("items/text,items/style,items/styleBuiltIn,items/isListItem,items/tableNestingLevel");
     await ctx.sync();
+    // Tabelceller (#24): række og kolonne for afsnit i tabeller, så agenten kan tilføje og slette rækker.
+    const cells = paras.items.map((p, i) => (p.tableNestingLevel > 0 && i < MAX_TABLE_PARAGRAPHS ? p.parentTableCellOrNullObject : undefined));
+    for (const c of cells) c?.load("rowIndex,cellIndex");
+    if (cells.some(Boolean)) await ctx.sync();
     const out: NonNullable<DocContext["paragraphs"]> = [];
     let chars = 0;
-    for (const p of paras.items) {
+    let table = 0;
+    paras.items.every((p, i) => {
       chars += p.text.length + 1;
-      if (chars > maxChars) break;
+      if (chars > maxChars) return false;
+      const inTable = p.tableNestingLevel > 0;
+      // Tabeller nummereres i dokumentets rækkefølge: en ny tabel begynder efter et afsnit uden for en tabel.
+      if (inTable && !(paras.items[i - 1]?.tableNestingLevel > 0)) table++;
+      const c = cells[i];
       out.push({
         text: p.text,
         // Indbygget navn (fx "Heading2") er det samme på alle sprog; ellers dokumentets eget typografinavn.
         style: p.styleBuiltIn && p.styleBuiltIn !== "Other" ? p.styleBuiltIn : p.style || "Normal",
         ...(p.isListItem ? { list: true } : {}),
-        ...(p.tableNestingLevel > 0 ? { table: true } : {}),
+        ...(inTable ? { table: true } : {}),
+        ...(c && !c.isNullObject ? { cell: { table, row: c.rowIndex + 1, col: c.cellIndex + 1 } } : {}),
       });
-    }
+      return true;
+    });
     return out;
   }
 
@@ -477,6 +493,61 @@ export class WordAdapter implements HostAdapter {
         src.delete();
         await ctx.sync();
         session.gone.add(a.paragraph);
+        return { ok: true, count: 1 };
+      }
+      case "insertTable": {
+        if (!has("1.3")) return { ok: false, error: "no-structure" };
+        const cols = Math.max(...a.rows.map((r) => r.length));
+        const values = a.rows.map((r) => [...r, ...Array(cols - r.length).fill("")]);
+        // Den nye tabel får samme typografi som dokumentets første tabel, så den ligner resten.
+        const existing = ctx.document.body.tables;
+        existing.load("items/style");
+        await ctx.sync();
+        const style = existing.items[0]?.style;
+        let table: Word.Table;
+        if (a.position === "before" || a.position === "after") {
+          const p = this.paragraph(dc, session, a.paragraph);
+          if (!("delete" in p)) return p;
+          table = p.insertTable(values.length, cols, a.position === "before" ? "Before" : "After", values);
+        } else if (dc.isWholeDocument || !session.paras.length)
+          table = ctx.document.body.insertTable(values.length, cols, a.position === "start" ? "Start" : "End", values);
+        else
+          table =
+            a.position === "start"
+              ? session.paras[0].insertTable(values.length, cols, "Before", values)
+              : session.paras[session.paras.length - 1].insertTable(values.length, cols, "After", values);
+        table.headerRowCount = 1;
+        if (style) table.style = style;
+        else table.styleBuiltIn = DEFAULT_TABLE_STYLE as Word.BuiltInStyleName;
+        await ctx.sync();
+        return { ok: true, count: values.length };
+      }
+      case "addTableRow":
+      case "deleteTableRow": {
+        if (!has("1.3")) return { ok: false, error: "no-structure" };
+        const p = this.paragraph(dc, session, a.paragraph);
+        if (!("delete" in p)) return p;
+        const cell = p.parentTableCellOrNullObject;
+        cell.load("isNullObject");
+        await ctx.sync();
+        if (cell.isNullObject) return { ok: false, error: "failed", detail: `¶${a.paragraph} står ikke i en tabel` };
+        const row = cell.parentRow;
+        if (a.action === "deleteTableRow") {
+          row.delete();
+          await ctx.sync();
+          // Alle afsnit i rækken er væk; senere handlinger på dem skal afvises.
+          const at = dc.paragraphs?.[a.paragraph - 1]?.cell;
+          dc.paragraphs?.forEach((x, i) => {
+            if (at ? x.cell?.table === at.table && x.cell.row === at.row : i === a.paragraph - 1) session.gone.add(i + 1);
+          });
+          return { ok: true, count: 1 };
+        }
+        row.load("cellCount");
+        await ctx.sync();
+        // Præcis én værdi pr. celle i rækken: manglende celler bliver tomme.
+        const values = Array.from({ length: row.cellCount }, (_, i) => a.values[i] ?? "");
+        row.insertRows(a.position === "before" ? "Before" : "After", 1, [values]);
+        await ctx.sync();
         return { ok: true, count: 1 };
       }
       default:

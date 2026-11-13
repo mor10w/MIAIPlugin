@@ -137,3 +137,11 @@ Brugeren kan bede agenten om at flytte et ark ud i en ny fil ("sæt dette ark i 
 - **I planen:** *Vis i dokumentet* markerer handlingens mål (`targetOf`): celler eller tabel i Excel, slide i PowerPoint, tekst eller afsnit i Word. Afsnitsnumre vises kun, når planen gælder hele dokumentet.
 - Navigation ændrer intet i dokumentet, og fejl (fx et ark, der er slettet) ignoreres stille.
 - **Mangler:** afsnitshenvisninger i Words chatsvar (chatten ser ikke afsnitsnumre).
+
+**Tabeller i Word (#24):**
+- **Kontekst:** afsnit i tabelceller vises som `(table 1, row 2, col 1)`. Række og kolonne hentes fra `parentTableCellOrNullObject` (højst 1.500 celleafsnit); tabeller nummereres i dokumentets rækkefølge.
+- **`insertTable {position, paragraph?, rows}`:** første række er overskriftsrækken (`headerRowCount = 1`). Tabellen får typografien fra dokumentets første tabel, ellers den indbyggede `GridTable4_Accent1`. Alle rækker skal have lige mange celler.
+- **`addTableRow {paragraph, position?, values}`** og **`deleteTableRow {paragraph}`** peger på rækken via et afsnit i den. `checkPlan` afviser afsnit uden for tabeller (`not-in-table`), for mange værdier og sletning af tabellens eneste række.
+- **Fortryd** er den samme som for de øvrige Word-handlinger: sessionens sporede ændringer afvises (WordApi 1.6), ellers gendannes indholdet fra øjebliksbilledet.
+- **Fra chatten:** Markdown-tabeller indsættes som HTML-tabeller (`insertHtml`), som Word gør til tabeller.
+- **Mangler:** kolonner kan ikke tilføjes eller slettes, og celler kan ikke flettes.

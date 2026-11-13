@@ -30,6 +30,8 @@ export interface FakeOfficeOptions {
     style?: string;
     list?: boolean;
     table?: boolean;
+    /** Tabelcelle som [række, kolonne] (1 = første), #24. Sammenhængende celler udgør én tabel. */
+    cell?: [number, number];
     bold?: boolean;
     marks?: { start: number; end: number; bold?: boolean; italic?: boolean; link?: string }[];
   }[];
@@ -234,17 +236,55 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       /** Direkte formatering på hele afsnittet (arves ved indsættelse). */
       bold: boolean;
       marks: Mark[];
+      /** Tabelcelle (#24): intern tabel-id samt række og kolonne (0 = første). */
+      cell?: { t: number; row: number; col: number };
     }
+    let tableSeq = 0;
+    const tableStyles = new Map<number, { style?: string; styleBuiltIn?: string; headerRowCount?: number }>();
     const listStyles = new Set(["ListBullet", "ListNumber"]);
-    let paras: P[] = o.paragraphs!.map((p) => ({
-      text: p.text,
-      style: p.style ?? "Normal",
-      list: !!p.list || listStyles.has(p.style ?? ""),
-      table: !!p.table,
-      bold: !!p.bold,
-      marks: (p.marks ?? []).map((m) => ({ ...m })),
-    }));
-    const clone = (ps: P[]) => ps.map((p) => ({ ...p, marks: p.marks.map((m) => ({ ...m })) }));
+    let paras: P[] = o.paragraphs!.map((p, i, all) => {
+      // En ny tabel begynder, når afsnittet før ikke er en celle.
+      if (p.cell && !all[i - 1]?.cell) tableStyles.set(++tableSeq, { style: "Tabelgitter" });
+      return {
+        text: p.text,
+        style: p.style ?? "Normal",
+        list: !!p.list || listStyles.has(p.style ?? ""),
+        table: !!p.table || !!p.cell,
+        bold: !!p.bold,
+        marks: (p.marks ?? []).map((m) => ({ ...m })),
+        ...(p.cell ? { cell: { t: tableSeq, row: p.cell[0] - 1, col: p.cell[1] - 1 } } : {}),
+      };
+    });
+    const clone = (ps: P[]) => ps.map((p) => ({ ...p, marks: p.marks.map((m) => ({ ...m })), ...(p.cell ? { cell: { ...p.cell } } : {}) }));
+    const rowOf = (c: { t: number; row: number }) => paras.filter((x) => x.cell?.t === c.t && x.cell.row === c.row);
+    /** Indsætter en tabel før/efter afsnittet på plads `at` (eller sidst): ét afsnit pr. celle. */
+    const insertTableAt = (at: number, values: string[][]) => {
+      const t = ++tableSeq;
+      tableStyles.set(t, {});
+      const cells: P[] = values.flatMap((row, r) =>
+        row.map((text, c) => ({ text, style: "Normal", list: false, table: true, bold: false, marks: [], cell: { t, row: r, col: c } })),
+      );
+      paras.splice(at, 0, ...cells);
+      const st = tableStyles.get(t)!;
+      return strict("Word.Table", {
+        load() {},
+        set headerRowCount(v: number) {
+          st.headerRowCount = v;
+        },
+        set style(v: string) {
+          st.style = v;
+        },
+        set styleBuiltIn(v: string) {
+          st.styleBuiltIn = v;
+        },
+      });
+    };
+    (w.__miai as Record<string, unknown>).tables = () =>
+      [...new Set(paras.flatMap((p) => (p.cell ? [p.cell.t] : [])))].map((t) => {
+        const cells = paras.filter((p) => p.cell?.t === t);
+        const rows = Math.max(...cells.map((p) => p.cell!.row)) + 1;
+        return { ...tableStyles.get(t), rows: Array.from({ length: rows }, (_, r) => cells.filter((p) => p.cell!.row === r).map((p) => p.text)) };
+      });
     const state = { tracking: "Off" };
     const tracked: { date: string; before: P[] }[] = [];
     /** Den tidligste afviste ændring – tilstanden før den gendannes ved næste sync. */
@@ -302,6 +342,43 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         detachFromList() {
           change("detachFromList", { text: p.text });
           p.list = false;
+        },
+        // Tabelcellen, afsnittet står i (#24). Afsnit uden cellekoordinater (ældre testdata) har ingen.
+        get parentTableCellOrNullObject() {
+          const c = p.cell;
+          if (!c) return strict("Word.TableCell(null)", { isNullObject: true, load() {} });
+          return strict("Word.TableCell", {
+            isNullObject: false,
+            load() {},
+            rowIndex: c.row,
+            cellIndex: c.col,
+            parentRow: strict("Word.TableRow", {
+              load() {},
+              get cellCount() {
+                return rowOf(c).length;
+              },
+              insertRows(loc: string, _n: number, values: string[][]) {
+                change("tableRowInsert", { loc, values: values[0] });
+                const row = rowOf(c);
+                const at = loc === "Before" ? c.row : c.row + 1;
+                const index = loc === "Before" ? paras.indexOf(row[0]) : paras.indexOf(row[row.length - 1]) + 1;
+                for (const x of paras) if (x.cell?.t === c.t && x.cell.row >= at) x.cell.row++;
+                // Som Word: den nye række får naborækkens formatering.
+                paras.splice(index, 0, ...row.map((src, i) => ({ ...src, text: values[0][i] ?? "", marks: [], cell: { t: c.t, row: at, col: i } })));
+              },
+              delete() {
+                change("tableRowDelete", { values: rowOf(c).map((x) => x.text) });
+                const gone = new Set(rowOf(c));
+                const r = c.row;
+                paras = paras.filter((x) => !gone.has(x));
+                for (const x of paras) if (x.cell?.t === c.t && x.cell.row > r) x.cell.row--;
+              },
+            }),
+          });
+        },
+        insertTable(_rows: number, _cols: number, loc: string, values: string[][]) {
+          change("insertTable", { loc, anchor: p.text, values });
+          return insertTableAt(paras.indexOf(p) + (loc === "Before" ? 0 : 1), values);
         },
         insertParagraph(text: string, loc: string) {
           // Som Word: det nye afsnit arver naboens typografi, liste, tabel og direkte formatering.
@@ -416,6 +493,14 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     const empty = strict("Word.Range(selection)", { text: "", load() {} });
     const body = strict("Word.Body", {
       getRange: () => whole,
+      get tables() {
+        const ids = [...new Set(paras.flatMap((p) => (p.cell ? [p.cell.t] : [])))];
+        return { load() {}, items: ids.map((t) => ({ style: tableStyles.get(t)?.style })) };
+      },
+      insertTable(_rows: number, _cols: number, loc: string, values: string[][]) {
+        change("insertTable", { loc, values });
+        return insertTableAt(loc === "Start" ? 0 : paras.length, values);
+      },
       insertParagraph(text: string, loc: string) {
         const ref = loc === "Start" ? paras[0] : paras[paras.length - 1];
         return (paragraphObj(ref).insertParagraph as (t: string, l: string) => unknown)(text, loc === "Start" ? "Before" : "After");
