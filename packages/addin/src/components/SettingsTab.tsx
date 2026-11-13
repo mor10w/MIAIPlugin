@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { policyReloadPending, syncCspAfterSave } from "../csp";
 import {
   Accordion,
   AccordionHeader,
@@ -123,6 +124,12 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
   const [hostsText, setHostsText] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [msg, setMsg] = useState<{ intent: "success" | "error" | "info"; text: string }>();
+  // Task pane er genindlæst, fordi politikkens hosts blev ændret (#28): sig det, så brugeren kan teste forbindelsen igen.
+  useEffect(() => {
+    if (policyReloadPending(true)) setMsg({ intent: "success", text: t("policyReloaded") });
+    // Kun ved første visning.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [testing, setTesting] = useState(false);
   const [preset, setPreset] = useState(PRESETS[1].id);
   const [showAudit, setShowAudit] = useState(false);
@@ -232,6 +239,8 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     }
     try {
       await api.saveSettings(next, nextPolicy);
+      // Nye hosts i politikken kræver en genindlæsning, før browseren tillader dem (CSP, #28).
+      if (nextPolicy && syncCspAfterSave(api.mode, nextPolicy)) return;
       if (nextPolicy) setPolicy(nextPolicy);
       onLanguage(next.uiLanguage);
       onSaved?.();
@@ -271,7 +280,9 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     setMsg(undefined);
     try {
       // Gem først, så bridgen tester den aktuelle konfiguration.
-      await api.saveSettings(settings, locked ? undefined : { ...policy, allowedHosts: hostsText.split(/\s+/).filter(Boolean) });
+      const nextPolicy = locked ? undefined : { ...policy, allowedHosts: hostsText.split(/\s+/).filter(Boolean) };
+      await api.saveSettings(settings, nextPolicy);
+      if (nextPolicy && syncCspAfterSave(api.mode, nextPolicy)) return;
       const m = await api.models();
       setModels(m.map((x) => x.id));
       setMsg({ intent: "success", text: t("modelsFound", { n: m.length }) });

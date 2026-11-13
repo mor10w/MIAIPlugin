@@ -98,3 +98,14 @@ Pivottabeller og datavalidering var de to mest almindelige grunde til at slå ko
 - **Fortryd:** pivottabellerne slettes, og området får sin tidligere valideringsregel tilbage (eller ingen).
 
 Kodetilstanden er fortsat til det, de faste værktøjer ikke dækker, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
+
+## Tillæg: Content-Security-Policy på task pane (#28)
+
+Sandkassen beskytter mod kode fra modellen. CSP'en er laget udenom: browseren håndhæver selv, hvor task pane må sende data hen, uanset hvordan koden er kommet ind.
+
+- **Direktiver:** `connect-src` (fetch, XHR, WebSocket, sendBeacon), `img-src 'self' data: blob:`, `media-src`, `object-src 'none'`, `form-action 'none'` og `base-uri 'self'`.
+- **Direkte tilstand:** `connect-src` er add-in'ets egen adresse plus politikkens hosts (http og https på alle porte; `*.domæne` og IPv6 understøttes). CSP'en sættes som `<meta>` ved start, før noget vises. Navne, der ikke kan udtrykkes sikkert i en CSP, udelades.
+- **Bridge:** task pane taler kun med bridgen, så `connect-src 'self'`. Bridgen sender samme CSP som header, og add-in'et sætter den også selv.
+- **Ændret politik:** en CSP kan kun strammes, mens siden er åben. Fjernes hosts, strammes den med det samme. Tilføjes hosts, genindlæses task pane, åbner Indstillinger igen og siger, at forbindelsen kan testes.
+- **Bevidst ikke `script-src`/`default-src`:** Office.js hentes fra Microsofts CDN og indlæser selv mere kode, og kodetilstanden bruger `new Function`. En stram script-politik kan ikke afprøves i rigtig Office herfra; målet er at spærre dataudslip.
+- **Dækker ikke:** navigation væk fra siden (`window.location`) og Office.js' egne API'er. Office.js' telemetri til Microsoft bliver blokeret af `connect-src`; det er uden betydning for funktionen, men skal bekræftes i rigtig Office (tjeklisten i UDVIKLING.md).

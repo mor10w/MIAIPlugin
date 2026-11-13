@@ -158,6 +158,8 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Markeringen under chattens skrivefelt følger med, når der markeres noget andet (Word, Excel, PowerPoint; Windows og Mac)
 - [ ] Samtalen er der igen, når task pane lukkes og åbnes på samme gemte dokument (også OneDrive/SharePoint); "Ny samtale" sletter den; et nyt, ikke gemt dokument huskes ikke
 - [ ] Endpoint uden for politik afvises; låst maskinpolitik (bridge) kan ikke ændres
+- [ ] Content-Security-Policy (#28): add-in'et virker som før i Word, Excel, PowerPoint og Outlook på Windows, Mac og web (Office.js indlæses, opgaver kører, figurer vises og indsættes); konsollen viser kun blokerede kald til Microsofts telemetri, ikke til modellen
+- [ ] Tilføj en host under Tilladte hosts og gem: task pane genindlæses, Indstillinger åbner igen, og den nye host kan kaldes
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
 

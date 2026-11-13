@@ -410,6 +410,7 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
    }
    ```
    - Politikken er altid låst. Brugerne kan ikke ændre den, og Indstillinger viser "Organisationen (central udrulning)".
+   - Browseren håndhæver også politikken: add-in'et sætter en Content-Security-Policy, så task pane kun kan sende data til sin egen adresse og de tilladte hosts. Sæt gerne samme CSP som header på jeres webserver (`connect-src 'self' https://llm.firma.local:*; img-src 'self' data: blob:; object-src 'none'; form-action 'none'; base-uri 'self'`).
    - Indstillingerne er standard for alle, der ikke selv har gemt noget.
    - Kan filen ikke læses, låses politikken til standardens hosts, så en fejl i filen aldrig åbner for mere.
 4. **Tillad CORS fra add-in'ets adresse på inference-serveren**, fx `OLLAMA_ORIGINS=https://miai.firma.local` eller vLLM `--allowed-origins`.
