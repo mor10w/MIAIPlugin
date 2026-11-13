@@ -467,6 +467,54 @@ describe("agent i PowerPoint og Excel", () => {
     expect(msgs[1].content).toContain("return ONLY actions that fix what failed");
   });
 
+  it("checkPlan (Excel #25): pivottabellens felter og datavalideringens regel", () => {
+    const excel = {
+      tables: [{ name: "Salg", address: "Ark1!A1:C5", headers: ["Region", "Måned", "Omsætning"] }],
+      columnFormats: [],
+      activeSheet: "Ark1",
+      sheets: [
+        { name: "Ark1", used: "A1:C5", headers: ["Region", "Måned", "Omsætning"] },
+        { name: "Data", used: "B2:D9", headers: ["Kunde", "Antal", "Pris"] },
+      ],
+    };
+    const pivot = { action: "addPivotTable", source: "Salg", rows: ["Region"], values: [{ field: "omsætning" }], destination: "F1", reason: "" };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        pivot,
+        { ...pivot, rows: ["Land"] },
+        { ...pivot, source: "Data!B2:D9", rows: ["Kunde"], values: [{ field: "Pris", summarize: "max" }] },
+        { ...pivot, source: "Data!B2:D9", rows: ["Region"] },
+        // Midt i arket kendes overskrifterne ikke – Excel afgør det.
+        { ...pivot, source: "Data!B4:D9", rows: ["Hvad som helst"], values: [{ field: "x" }] },
+        { ...pivot, destination: "F1:G2" },
+        { ...pivot, columns: ["Region"] },
+        { ...pivot, destination: "Findes!A1" },
+        { action: "setValidation", address: "B2:B5", list: ["Ja", "Nej"], reason: "" },
+        { action: "setValidation", address: "B2:B5", list: ["Ja"], min: 1, reason: "" },
+        { action: "setValidation", address: "B2:B5", reason: "" },
+        { action: "setValidation", address: "B2:B5", min: 5, max: 1, reason: "" },
+        { action: "setValidation", address: "B2:B5", max: 100, whole: true, reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([
+      undefined,
+      "bad-field",
+      undefined,
+      "bad-field",
+      undefined,
+      "bad-address",
+      "invalid",
+      "bad-sheet",
+      undefined,
+      "invalid",
+      "invalid",
+      "invalid",
+      undefined,
+    ]);
+    expect(plan.actions[0]).toMatchObject({ columns: [], values: [{ field: "omsætning", summarize: "sum" }] });
+  });
+
   it("rangeBox og numberedRows: arkets rækkenumre foran de markerede værdier", () => {
     expect(rangeBox("Ark1!$B$2:D4")).toEqual({ r0: 1, c0: 1, r1: 3, c1: 3 });
     expect(rangeBox("AA10")).toEqual({ r0: 9, c0: 26, r1: 9, c1: 26 });

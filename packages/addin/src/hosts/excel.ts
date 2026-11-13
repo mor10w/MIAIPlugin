@@ -332,6 +332,8 @@ export class ExcelAdapter implements HostAdapter {
     // alle adresser i planen bruger navnene fra før planen.
     const tableSheet = new Map((dc.excel?.tables ?? []).map((t) => [t.name, t.address.includes("!") ? splitAddress(t.address).sheet : sheetName]));
     const sheetFor = (a: AgentAction): string => {
+      // En pivottabel hører til det ark, den placeres på (kilden kan stå på et andet ark).
+      if (a.action === "addPivotTable") return a.destination.includes("!") ? splitAddress(a.destination).sheet : sheetName;
       const ref = "address" in a ? a.address : "target" in a ? a.target : "source" in a ? a.source : "table" in a ? a.table : undefined;
       if (!ref) return sheetName;
       if (ADDRESS.test(ref)) return ref.includes("!") ? splitAddress(ref).sheet : sheetName;
@@ -523,6 +525,17 @@ export class ExcelAdapter implements HostAdapter {
           case "freezeRows":
             if (!has("1.7")) fail(i, "Kræver ExcelApi 1.7");
             return undefined;
+          case "addPivotTable":
+            if (!has("1.8")) fail(i, "Kræver ExcelApi 1.8");
+            return undefined;
+          case "setValidation": {
+            if (!has("1.8")) {
+              fail(i, "Kræver ExcelApi 1.8");
+              return undefined;
+            }
+            const r = local(i, a.address);
+            return r ? sheet.getRange(r) : undefined;
+          }
           case "saveSheet":
             if (!opts.exportSheet) fail(i, "Eksport kræver MIAI Bridge (Indstillinger → Eksport)");
             return undefined;
@@ -542,6 +555,9 @@ export class ExcelAdapter implements HostAdapter {
       for (const t of styled) t?.load("name,style");
       const appendTables = actions.map((a) => (a.action === "appendRows" ? sheet.tables.getItem(a.table) : undefined));
       for (const t of appendTables) t?.rows.load("count");
+      // Datavalidering før ændringen (til fortryd).
+      const oldValidation = actions.map((a, i) => (a.action === "setValidation" && targets[i] ? targets[i]!.dataValidation : undefined));
+      for (const v of oldValidation) v?.load("rule");
       // Frysning før ændringen (til fortryd).
       const freezeBefore = actions.some((a, i) => a.action === "freezeRows" && results[i].ok) ? sheet.freezePanes.getLocationOrNullObject() : undefined;
       freezeBefore?.load("address");
@@ -699,6 +715,67 @@ export class ExcelAdapter implements HostAdapter {
         }
       });
       await ctx.sync();
+
+      // Pivottabeller og datavalidering (#25) udføres én ad gangen med egen synkronisering: afviser
+      // Excel en af dem (fx et felt, der ikke findes), fejler kun den handling, og det halve ryddes op.
+      const pivots: string[] = [];
+      const validated: { address: string; rule: Excel.DataValidationRule }[] = [];
+      const activeName = dc.address?.includes("!") ? splitAddress(dc.address).sheet : sheetName;
+      const rangeOn = (address: string) => {
+        const onSheet = address.includes("!");
+        return ctx.workbook.worksheets
+          .getItem(onSheet ? splitAddress(address).sheet : activeName)
+          .getRange((onSheet ? splitAddress(address).range : address).replace(/\$/g, ""));
+      };
+      for (const [i, a] of actions.entries()) {
+        if (!results[i].ok) continue;
+        if (a.action === "addPivotTable") {
+          const dest = local(i, a.destination);
+          if (!dest) continue;
+          const name = `MIAI-pivot-${Date.now().toString(36)}-${i}`;
+          // Feltnavne skrives som i kildens overskrifter (modellen kan have ramt store/små bogstaver forkert).
+          const headers = dc.excel?.tables.find((t) => t.name === a.source)?.headers ?? [];
+          const field = (f: string) => headers.find((h) => h.trim().toLowerCase() === f.trim().toLowerCase()) ?? f;
+          try {
+            const pivot = sheet.pivotTables.add(name, isTableName(a.source) ? ctx.workbook.tables.getItem(a.source) : rangeOn(a.source), sheet.getRange(dest));
+            for (const f of a.rows) pivot.rowHierarchies.add(pivot.hierarchies.getItem(field(f)));
+            for (const f of a.columns) pivot.columnHierarchies.add(pivot.hierarchies.getItem(field(f)));
+            for (const v of a.values)
+              pivot.dataHierarchies.add(pivot.hierarchies.getItem(field(v.field))).summarizeBy = PIVOT_FUNCTIONS[v.summarize] as Excel.AggregationFunction;
+            await ctx.sync();
+            pivots.push(name);
+          } catch (e) {
+            fail(i, e instanceof Error ? e.message : String(e));
+            try {
+              sheet.pivotTables.getItem(name).delete();
+              await ctx.sync();
+            } catch {
+              // Pivottabellen nåede ikke at blive oprettet.
+            }
+          }
+        } else if (a.action === "setValidation" && targets[i]) {
+          try {
+            // Den tidligere regel uden tomme felter, så den kan sættes igen ved fortryd.
+            const before = Object.fromEntries(Object.entries(oldValidation[i]?.rule ?? {}).filter(([, v]) => v !== null && v !== undefined));
+            const between = a.min !== undefined && a.max !== undefined;
+            const numeric = {
+              formula1: (a.min ?? a.max)!,
+              ...(between ? { formula2: a.max! } : {}),
+              operator: (between ? "Between" : a.min !== undefined ? "GreaterThanOrEqualTo" : "LessThanOrEqualTo") as Excel.DataValidationOperator,
+            };
+            targets[i]!.dataValidation.rule = a.list
+              ? { list: { inCellDropDown: true, source: a.list.join(",") } }
+              : a.whole
+                ? { wholeNumber: numeric }
+                : { decimal: numeric };
+            await ctx.sync();
+            validated.push({ address: targets[i]!.address, rule: before as Excel.DataValidationRule });
+          } catch (e) {
+            fail(i, e instanceof Error ? e.message : String(e));
+          }
+        }
+      }
+
       // saveSheet (tillæg ADR-0012): arket læses og eksporteres som .xlsx via bridgen.
       // Det sker efter ændringerne, så filen viser arket med de udførte handlinger.
       for (let i = 0; i < actions.length; i++) {
@@ -851,6 +928,13 @@ export class ExcelAdapter implements HostAdapter {
             if (snap.props) r.setCellProperties(snap.props);
           }
           for (const w of oldWidths) ws.getRange(splitAddress(w.address).range).getColumn(w.column).format.columnWidth = w.width;
+          // Pivottabeller fjernes, og datavalideringen får sin tidligere regel (eller ingen).
+          for (const name of pivots) ws.pivotTables.getItem(name).delete();
+          for (const v of [...validated].reverse()) {
+            const dv = ws.getRange(splitAddress(v.address).range).dataValidation;
+            dv.clear();
+            if (Object.keys(v.rule).length) dv.rule = v.rule;
+          }
           // Diagrammer og betinget formatering, agenten har lavet, fjernes; frysningen sættes tilbage.
           for (const ch of charts) if (ch.name) ws.charts.getItem(ch.name).delete();
           for (const cf of condFormats) if (cf.id) ws.getRange(splitAddress(cf.address).range).conditionalFormats.getItem(cf.id).delete();
@@ -888,6 +972,9 @@ function groups(rows: number[]): [number, number][] {
   }
   return out;
 }
+
+/** Pivottabellens beregninger → Excels (AggregationFunction). */
+const PIVOT_FUNCTIONS: Record<string, string> = { sum: "Sum", count: "Count", average: "Average", max: "Max", min: "Min" };
 
 /** Agentens diagramtyper → Excels. */
 const CHART_TYPES: Record<string, string> = {

@@ -217,6 +217,32 @@ export const AgentAction = z.discriminatedUnion("action", [
     reason,
   }),
   z.object({
+    action: z.literal("addPivotTable"),
+    source: z.string().min(1).max(255).describe("Excel table name, or the data range INCLUDING its header row (e.g. 'Salg!A1:D200')"),
+    rows: z.array(z.string().min(1).max(255)).min(1).max(4).describe("Header texts of the fields to group by as rows, e.g. ['Region']"),
+    columns: z.array(z.string().min(1).max(255)).max(3).default([]).describe("Header texts of fields to spread across columns (often empty)"),
+    values: z
+      .array(
+        z.object({
+          field: z.string().min(1).max(255).describe("Header text of the field to summarise"),
+          summarize: z.enum(["sum", "count", "average", "max", "min"]).default("sum"),
+        }),
+      )
+      .min(1)
+      .max(4),
+    destination: z.string().min(2).max(300).describe("Top-left cell for the pivot table, in an empty area or on a new sheet, e.g. 'F1' or 'Pivot!A1'"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("setValidation"),
+    address: z.string().min(2).max(300).describe("Cells that get the rule, without the header, e.g. 'D2:D200'"),
+    list: z.array(z.string().min(1).max(100)).min(1).max(50).optional().describe("Allowed values shown as a drop-down list, e.g. ['Ny', 'I gang', 'Færdig']"),
+    min: z.number().optional().describe("Smallest allowed number (when no list)"),
+    max: z.number().optional().describe("Largest allowed number (when no list)"),
+    whole: z.boolean().optional().describe("true = only whole numbers"),
+    reason,
+  }),
+  z.object({
     action: z.literal("freezeRows"),
     rows: z.number().int().min(0).max(50).describe("Number of top rows to keep visible when scrolling (1 = the header row); 0 removes freezing"),
     reason,
@@ -267,6 +293,8 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "conditionalFormat",
   "addChart",
   "freezeRows",
+  "addPivotTable",
+  "setValidation",
   "addSheet",
   "renameSheet",
   "readRange",
@@ -329,7 +357,7 @@ export function renderParagraphs(paras: NonNullable<DocContext["paragraphs"]>): 
  * this/klasser/import, og egenskaber, der starter med _, er spærret.
  */
 export const SCRIPT_GUIDE = [
-  "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. pivot tables, data validation, named ranges, sorting by several columns, chart settings). It must be the ONLY action in the plan.",
+  "- runScript {description, code}: ADVANCED, only when none of the actions above can do it (e.g. named ranges, sorting by several columns, chart settings, pivot table filters). It must be the ONLY action in the plan.",
   "  `code` is the body of an async function with `context` (Excel.RequestContext) and `Excel` in scope. Use Office.js (ExcelApi): `const sheet = context.workbook.worksheets.getActiveWorksheet();`, call `.load(...)` and `await context.sync()` before reading properties, and finish with `await context.sync()`.",
   "  Only these globals exist: Math, JSON, Number, String, Boolean, Array, Object, Date, Map, Set, Promise, Error, isNaN, parseInt, parseFloat, console. No fetch, window, document, eval, this, classes or import; property names starting with _ are blocked.",
   "  Write complete, working code (no placeholders). Optionally `return` a short text describing what changed – it is shown to the user. Never change other sheets than the active one unless asked.",
@@ -372,6 +400,8 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "- conditionalFormat {address, rule, value?}: highlight values with Excel's standard formats – colorScale, dataBar, greaterThan/lessThan (with value), duplicates, top10. Address = the values without the header.",
       "- addChart {source, type, title?}: a chart (column, bar, line, pie, area, scatter) of a table or a range with headers; it is placed next to the data.",
       "- freezeRows {rows}: keep the top rows visible when scrolling (1 = the header row; 0 = remove).",
+      "- addPivotTable {source, rows, columns?, values, destination}: a pivot table of a table (by name) or a range with headers. rows/columns/values name fields by their header text; each value has summarize sum (default), count, average, max or min. Put it in an empty area ('F1') or on a new sheet (addSheet Pivot, then destination 'Pivot!A1').",
+      "- setValidation {address, list? | min?, max?, whole?}: data validation – a drop-down list of allowed values, or a number between min and max (whole: true for whole numbers).",
       "- addSheet {name}: add a new, empty sheet. renameSheet {sheet, name}: rename a sheet.",
       "Other sheets: every address may carry a sheet name – Salg!A1:C5, or 'Mit ark'!B2 when the name has spaces. Without a sheet name the address is on the active sheet. A sheet added with addSheet can be written to in the same plan (e.g. addSheet Oversigt, then setValues on Oversigt!A1 and setFormula =SUM(Salg!C2:C40) on Oversigt!B2). Tables are found by name on whichever sheet they are. The sheets and their headers are listed under Sheets; you only see the values of the selection.",
       "For 'make the table nice/modern/readable': formatTable, then setNumberFormat for number and date columns where needed, then autofitColumns. Do not change cell values for this.",
@@ -429,6 +459,8 @@ export type AgentProblem =
   | "bad-table"
   /** Excel: arket findes ikke i projektmappen (eller navnet er allerede brugt). */
   | "bad-sheet"
+  /** Excel: et felt i en pivottabel findes ikke blandt kildens overskrifter. */
+  | "bad-field"
   /** Kodetilstanden er ikke slået til (eller forbudt af politikken). */
   | "scripts-off"
   /** Eksporten er ikke slået til (eller forbudt af politikken), eller der er ingen bridge. */
@@ -482,6 +514,19 @@ export function sheetOfAddress(address: string): string | undefined {
 
 const tablesOf = (ctx: Pick<DocContext, "excel">) =>
   (ctx.excel?.tables ?? []).map((t) => ({ name: t.name, box: rangeBox(t.address), sheet: sheetOfAddress(t.address) ?? ctx.excel?.activeSheet }));
+/** Overskrifterne for et område, når det begynder i arkets første brugte række (ellers ukendt). */
+function headersOf(ctx: Pick<DocContext, "excel">, address: string): string[] | undefined {
+  const name = (sheetOfAddress(address) ?? ctx.excel?.activeSheet)?.toLowerCase();
+  const sheet = ctx.excel?.sheets?.find((sh) => sh.name.toLowerCase() === name);
+  if (!sheet?.used || !sheet.headers.length) return undefined;
+  const used = rangeBox(sheet.used);
+  const b = rangeBox(address);
+  if (b.r0 !== used.r0 || b.c0 < used.c0) return undefined;
+  const from = b.c0 - used.c0;
+  // Overskrifterne er afkortet til de første kolonner; rækker området længere ud, kendes de ikke alle.
+  return b.c1 - used.c0 < sheet.headers.length ? sheet.headers.slice(from, b.c1 - used.c0 + 1) : undefined;
+}
+
 /** Tabellerne på samme ark som adressen (uden arknavn: det aktive ark). Kendes arket ikke, tæller alle med. */
 const tablesOn = (ctx: Pick<DocContext, "excel">, address: string) => {
   const sheet = sheetOfAddress(address) ?? ctx.excel?.activeSheet;
@@ -553,9 +598,14 @@ export function checkPlan(
     if (hasScript && plan.actions.length > 1 && action.action !== "runScript") return { action, problem: "with-script" };
     // Flere ark (#21): et arknavn i en adresse skal findes i projektmappen eller oprettes af planen.
     if (ctx.host === "excel") {
-      const ref = "address" in action ? action.address : "target" in action ? action.target : "source" in action ? action.source : undefined;
-      const sheet = ref && RANGE.test(ref) ? sheetOfAddress(ref) : undefined;
-      if (sheet && knownSheets && !knownSheets.has(sheet.toLowerCase())) return { action, problem: "bad-sheet" };
+      const refs = [
+        "address" in action ? action.address : "target" in action ? action.target : "source" in action ? action.source : undefined,
+        "destination" in action ? action.destination : undefined,
+      ];
+      for (const ref of refs) {
+        const sheet = ref && RANGE.test(ref) ? sheetOfAddress(ref) : undefined;
+        if (sheet && knownSheets && !knownSheets.has(sheet.toLowerCase())) return { action, problem: "bad-sheet" };
+      }
     }
     switch (action.action) {
       case "readRange":
@@ -583,6 +633,28 @@ export function checkPlan(
         return ok(action, (action.rule === "greaterThan" || action.rule === "lessThan") && action.value === undefined ? "invalid" : undefined);
       case "freezeRows":
         return ok(action);
+      case "addPivotTable": {
+        if (!CELL.test(action.destination.split("!").pop()!.replace(/\$/g, ""))) return ok(action, "bad-address");
+        const table = (ctx.excel?.tables ?? []).find((t) => t.name === action.source);
+        if (!table && !RANGE.test(action.source)) return ok(action, ctx.excel?.tables.length ? "bad-table" : "bad-address");
+        if (!table && rangeBox(action.source).r1 === rangeBox(action.source).r0) return ok(action, "invalid");
+        // Felterne skal være overskrifter i kilden. De kendes for tabeller og for et område, der
+        // begynder i arkets første brugte række; ellers afgør Excel det ved udførelsen.
+        const headers = table?.headers ?? headersOf(ctx, action.source);
+        const fields = [...action.rows, ...action.columns, ...action.values.map((v) => v.field)];
+        if (headers && fields.some((f) => !headers.some((h) => h.trim().toLowerCase() === f.trim().toLowerCase()))) return ok(action, "bad-field");
+        // Samme felt kan ikke både være række og kolonne.
+        return ok(action, action.rows.some((r) => action.columns.includes(r)) ? "invalid" : undefined);
+      }
+      case "setValidation": {
+        if (!RANGE.test(action.address)) return ok(action, "bad-address");
+        if (cellCount(action.address) > MAX_AGENT_CELLS * 10) return ok(action, "too-large");
+        const numeric = action.min !== undefined || action.max !== undefined;
+        // Enten en liste eller en talgrænse; listens værdier adskilles med komma i Excel og må ikke selv indeholde et.
+        if (!!action.list === numeric) return ok(action, "invalid");
+        if (action.list?.some((v) => v.includes(","))) return ok(action, "invalid");
+        return ok(action, action.min !== undefined && action.max !== undefined && action.min > action.max ? "invalid" : undefined);
+      }
       case "saveSheet": {
         if (!opts.export) return ok(action, "no-bridge");
         return ok(action, EXPORT_FILE_NAME.test(action.fileName) ? undefined : "invalid");

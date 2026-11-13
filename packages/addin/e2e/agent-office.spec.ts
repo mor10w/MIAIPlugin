@@ -10,6 +10,8 @@ type Sheet = {
   charts: { name: string; type: string; source: string; title?: string; at?: string }[];
   conditionalFormats: { address: string; type: string }[];
   frozenRows: number | null;
+  pivots: { source: string; at: string; rows: string[]; columns: string[]; values: { field: string; fn: string }[] }[];
+  validations: Record<string, Record<string, unknown>>;
 };
 const sheet = (page: import("@playwright/test").Page) => page.evaluate(() => (window as unknown as { __miai: { sheet: () => Sheet } }).__miai.sheet());
 
@@ -558,6 +560,76 @@ test("Excel, flere trin (#20): en handling, der fejler, kan rettes af modellen; 
   const after = await sheet(tp.page);
   expect(after.values.map((r) => r[0])).toEqual(["Region", "Syd", "Vest", "Nord", "Øst"]);
   expect(after.values[0][4]).toBe("Sorteret");
+});
+
+test("Excel (#25): pivottabel på et nyt ark og datavalidering uden kodetilstand; fortryd fjerner dem igen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  const before = await sheets(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Laver en pivottabel og begrænser indtastningen.",
+      actions: [
+        { action: "addSheet", name: "Pivot", reason: "Plads til pivottabellen" },
+        // Feltnavnet rammer ikke store/små bogstaver; det rettes efter tabellens overskrifter.
+        {
+          action: "addPivotTable",
+          source: "Salg",
+          rows: ["region"],
+          values: [{ field: "Omsætning", summarize: "average" }],
+          destination: "Pivot!A1",
+          reason: "Omsætning pr. region",
+        },
+        { action: "setValidation", address: "B2:B5", list: ["Jan", "Feb", "Mar"], reason: "Kun kendte måneder" },
+        { action: "setValidation", address: "C2:C5", min: 0, max: 1000, whole: true, reason: "Rimelige beløb" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  // Værktøjerne er altid med i prompten – kodetilstanden er slået fra.
+  const sys = tp.model.lastRequest!.messages[0].content;
+  expect(sys).toContain("addPivotTable {source, rows, columns?, values, destination}");
+  expect(sys).not.toContain("runScript {description, code}");
+  await expect(tp.page.getByRole("checkbox", { name: "Pivottabel af Salg i Pivot!A1: gennemsnit af Omsætning pr. region" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Rulleliste i B2:B5: Jan, Feb, Mar" })).toBeChecked();
+  await expect(tp.page.getByRole("checkbox", { name: "Kun hele tal 0–1000 i C2:C5" })).toBeChecked();
+
+  await tp.page.getByRole("button", { name: "Udfør 4 handlinger" }).click();
+  await expect(tp.page.getByText("4 af 4 handlinger udført.")).toBeVisible();
+  const after = await sheets(tp.page);
+  expect(after.Pivot.pivots).toEqual([{ source: "Salg", at: "A1", rows: ["Region"], columns: [], values: [{ field: "Omsætning", fn: "Average" }] }]);
+  expect(after.Ark1.validations).toEqual({
+    "B2:B5": { list: { inCellDropDown: true, source: "Jan,Feb,Mar" } },
+    "C2:C5": { wholeNumber: { formula1: 0, formula2: 1000, operator: "Between" } },
+  });
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await sheets(tp.page)).toEqual(before);
+});
+
+test("Excel (#25): et felt, der ikke findes, fravælges i planen; afviser Excel pivottabellen, ryddes den op, og resten udføres", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SALG });
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Pivottabeller.",
+      actions: [
+        { action: "addPivotTable", source: "Salg", rows: ["Land"], values: [{ field: "Omsætning" }], destination: "F1", reason: "" },
+        // Kildens overskrifter kendes ikke for et område midt i arket, så Excel afgør det ved udførelsen.
+        { action: "addPivotTable", source: "A2:C5", rows: ["Region"], values: [{ field: "Omsætning" }], destination: "F10", reason: "" },
+        { action: "setValidation", address: "C2:C5", min: 0, reason: "" },
+        { action: "setValidation", address: "B2:B5", list: ["a,b"], reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Feltet findes ikke blandt kildens overskrifter")).toBeVisible();
+  await expect(tp.page.getByText("Ufuldstændig handling")).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("1 af 2 handlinger udført.")).toBeVisible();
+  await expect(tp.page.getByText(/feltet Region findes ikke i kilden/)).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.pivots).toEqual([]);
+  expect(after.validations).toEqual({ "C2:C5": { decimal: { formula1: 0, operator: "GreaterThanOrEqualTo" } } });
 });
 
 type Deck = {

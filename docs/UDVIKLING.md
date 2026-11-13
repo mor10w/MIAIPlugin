@@ -209,7 +209,9 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Sortér en tabel og et område efter en kolonne (overskrift og bogstav): rækkerne følger med inkl. formater; Fortryd giver den oprindelige rækkefølge
 - [ ] Betinget formatering (farveskala, datalinjer, større end, dubletter, top 10), diagram ved siden af data og frys overskrift; Fortryd fjerner dem og sætter frysningen tilbage
 - [ ] Kodetilstand slået fra: et script fra modellen er fravalgt med "Kodetilstanden er slået fra"
-- [ ] Kodetilstand slået til: "Lav en pivottabel med omsætning pr. region": koden kan ses, scriptet kører, og Fortryd fjerner pivottabellen og gendanner arket
+- [ ] Pivottabel som fast værktøj (kodetilstand slået fra): "Lav en pivottabel med omsætning pr. region på et nyt ark" giver en rigtig pivottabel med de rigtige felter; Fortryd fjerner pivottabellen og arket
+- [ ] Datavalidering: rulleliste og tal mellem to grænser virker i cellerne; Fortryd giver den tidligere regel (eller ingen) tilbage
+- [ ] Kodetilstand slået til: "Opret et navngivet område for C2:C5": koden kan ses, scriptet kører, og Fortryd gendanner arket
 - [ ] Et script, der fejler midtvejs: arket er som før, og "Bed modellen rette scriptet" giver et nyt script med fejlen rettet
 - [ ] Flere ark: "Lav et nyt ark med den samlede omsætning" opretter arket med en formel på tværs af ark; skrivning på et andet ark end det aktive; omdøb et ark; Fortryd sletter det nye ark og sætter navn og celler tilbage (også med mellemrum i arknavnet)
 - [ ] Flere trin: bed om noget, der kræver data fra et andet ark ("tilføj budgettet fra Budget-arket"): "Læser Budget!…" vises, og planen bruger de rigtige tal; intet er ændret, før planen udføres

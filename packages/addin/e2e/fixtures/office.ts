@@ -588,6 +588,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       const charts: { name: string; type: string; source: string; title?: string; at?: string }[] = [];
       const condFormats: { id: string; address: string; type: string; rule?: unknown }[] = [];
       let frozen: number | null = null;
+      const pivots: { name: string; source: string; at: string; rows: string[]; columns: string[]; values: { field: string; fn: string }[] }[] = [];
+      const validations = new Map<string, Record<string, unknown>>();
       let cfSeq = 0;
       /** Sorterer rækkerne r0+1..r0+rows-1 (overskriften står) efter kolonne c0+key; formater følger rækken. */
       const sortRows = (r0: number, c0: number, rows: number, cols: number, key: number, ascending: boolean) => {
@@ -675,6 +677,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         charts: charts.map((c) => ({ ...c })),
         conditionalFormats: condFormats.map(({ id: _, ...c }) => c),
         frozenRows: frozen,
+        pivots: pivots.map(({ name: _, ...p }) => ({ ...p })),
+        validations: Object.fromEntries(validations),
       });
 
       function rng(r0: number, c0: number, rows: number, cols: number): unknown {
@@ -697,6 +701,19 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
           getRow: (i: number) => rng(r0 + i, c0, 1, cols),
           getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+          dataValidation: strict("Excel.DataValidation", {
+            load() {},
+            get rule() {
+              return validations.get(addr(r0, c0, rows, cols).replace(/^.*!/, "")) ?? {};
+            },
+            set rule(v: Record<string, unknown>) {
+              record({ kind: "validation", address: addr(r0, c0, rows, cols), rule: v });
+              validations.set(addr(r0, c0, rows, cols).replace(/^.*!/, ""), v);
+            },
+            clear() {
+              validations.delete(addr(r0, c0, rows, cols).replace(/^.*!/, ""));
+            },
+          }),
           sort: strict("Excel.RangeSort", {
             apply(fields: { key: number; ascending?: boolean }[], _matchCase?: boolean, hasHeaders?: boolean) {
               record({ kind: "sort", address: addr(r0, c0, rows, cols), fields, hasHeaders });
@@ -956,6 +973,60 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
               },
             }),
         }),
+        pivotTables: strict("Excel.PivotTableCollection", {
+          load() {},
+          get items() {
+            return pivots.map((p) => strict("Excel.PivotTable(item)", { name: p.name, delete: () => pivots.splice(pivots.indexOf(p), 1) }));
+          },
+          // Kilden er et område (med address) eller en tabel (med overskriftsrække).
+          add(
+            name: string,
+            source: { address?: string; name?: string; getHeaderRowRange?: () => { values: unknown[][] }; values?: unknown[][] },
+            dest: { address: string },
+          ) {
+            const isTable = "getHeaderRowRange" in source;
+            const headers = (isTable ? source.getHeaderRowRange!().values[0] : (source.values?.[0] ?? [])).map(String);
+            const p = {
+              name,
+              source: isTable ? String(source.name) : String(source.address),
+              at: dest.address.replace(/^.*!/, ""),
+              rows: [],
+              columns: [],
+              values: [],
+            } as (typeof pivots)[number];
+            pivots.push(p);
+            record({ kind: "pivotAdd", source: p.source, at: p.at });
+            const hierarchy = (field: string) => {
+              // Som Excel: et felt, der ikke er en overskrift i kilden, afvises.
+              if (!headers.includes(field)) throw new Error(`ItemNotFound: feltet ${field} findes ikke i kilden`);
+              return { field };
+            };
+            return strict("Excel.PivotTable", {
+              hierarchies: strict("Excel.PivotHierarchyCollection", { getItem: hierarchy }),
+              rowHierarchies: strict("Excel.RowColumnPivotHierarchyCollection", { add: (h: { field: string }) => void p.rows.push(h.field) }),
+              columnHierarchies: strict("Excel.RowColumnPivotHierarchyCollection", { add: (h: { field: string }) => void p.columns.push(h.field) }),
+              dataHierarchies: strict("Excel.DataPivotHierarchyCollection", {
+                add(h: { field: string }) {
+                  const v = { field: h.field, fn: "Sum" };
+                  p.values.push(v);
+                  return {
+                    set summarizeBy(fn: string) {
+                      v.fn = fn;
+                    },
+                  };
+                },
+              }),
+            });
+          },
+          getItem: (name: string) =>
+            strict("Excel.PivotTable(item)", {
+              delete() {
+                const i = pivots.findIndex((x) => x.name === name);
+                if (i < 0) throw new Error(`ItemNotFound: ${name}`);
+                pivots.splice(i, 1);
+              },
+            }),
+        }),
         freezePanes: strict("Excel.WorksheetFreezePanes", {
           freezeRows(n: number) {
             record({ kind: "freezeRows", n });
@@ -1041,6 +1112,11 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           load() {},
           get items() {
             return built.flatMap((b) => b.tableObjs());
+          },
+          getItem(name: string) {
+            const t = built.flatMap((b) => b.tableObjs() as { name: string }[]).find((x) => x.name === name);
+            if (!t) throw new Error(`ItemNotFound: tabellen ${name} findes ikke`);
+            return t;
           },
         });
       },
