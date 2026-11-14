@@ -67,16 +67,9 @@ npm test
 - `addin`: hjælpefunktioner (SVG, billedstørrelser, Excel-oversigt).
 
 **Udgivelse af MIAI App (ADR-0016):**
-1. Ret `version` i `packages/app/package.json` og commit.
-2. Tag og push:
-   ```bash
-   git tag v0.2.0
-   ```
-   ```bash
-   git push origin v0.2.0
-   ```
-3. `release.yml` bygger macOS (dmg og zip, arm64 og x64) og Windows (NSIS, x64), signerer, hvis secrets er sat op, og laver en GitHub Release.
-4. Pages kopierer filerne og opdateringsfeedet (`latest*.yml`) til `<pages-url>/updates/`, hvor appen henter opdateringer.
+Hvert push til `main`, der rører app-koden, udgiver automatisk en ny release (`auto-release.yml`): patch-versionen bumpes (fx 0.1.2 → 0.1.3), committes til `main` og tagges, så klienter med MIAI App henter opdateringen i baggrunden. Vil du udgive en bestemt version (fx 0.2.0), ret `version` i `packages/app/package.json` og commit: push'et udgiver den præcist uden bump. Bagefter sker det som før:
+1. `release.yml` bygger macOS (dmg og zip, arm64 og x64) og Windows (NSIS, x64), signerer, hvis secrets er sat op, og laver en GitHub Release.
+2. Pages kopierer filerne og opdateringsfeedet (`latest*.yml`) til `<pages-url>/updates/`, hvor appen henter opdateringer.
 
 **Udviklerudgave (ADR-0016, tillæg):** hvert push til `main`, der rører appen, bygger en `.dmg` til Apple Silicon i `dev-build.yml` med version `<version>-dev.<kørselsnummer>` og lægger den som forhåndsudgivelsen `dev`. Pages serverer den under `<pages-url>/dev/`, og appens menu viser *Hent udviklerudgave …*, når der er en nyere. Workflowet kan også startes manuelt (Actions → Udviklerudgave); fra andre grene end `main` bygges der kun, og `.dmg`'en ligger som artefakt på kørslen. Tjekliste på en rigtig Mac:
 - Menupunktet dukker op i en ældre udgave og åbner hentningen i browseren.

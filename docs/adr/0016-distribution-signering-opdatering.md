@@ -61,9 +61,9 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
   - Den tjekker ved start og hver 6. time og henter i baggrunden.
   - Opdateringen installeres ved næste genstart, eller med det samme fra menuen ("Genstart og opdater til X").
 - **Udgivelse:**
-  1. Ret `version` i `packages/app/package.json`.
-  2. Tag `vX.Y.Z`.
-  3. Release-workflowet bygger, signerer og laver en GitHub Release.
+  1. Push til `main` (app-kode): patch-versionen bumpes automatisk, og der tages et tag.
+  2. Eller: ret `version` i `packages/app/package.json`, hvis en bestemt version skal udgives.
+  3. Release-workflowet bygger, signerer og laver en GitHub Release (tagget trigget den).
   4. Pages kopierer installationsfiler og feed fra seneste release ud, for repoet er privat, og kunderne kan ikke hente fra en privat release.
 - **Kanaler:** én (`latest`). En betakanal kan tilføjes med electron-updaters `channel` og pre-release-tags, når der er behov.
 - **winget:** skabelon i `packaging/winget/`. Den indsendes, når installeren er signeret, fordi winget-pkgs i praksis kræver en signeret, offentligt tilgængelig installer.
@@ -104,3 +104,12 @@ En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er de
 - Mac-runnere koster ti gange så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
 - Udviklerudgaven fylder ca. 0,1 GB af Pages' 1 GB oven i en release.
 - Udviklerudgaven er til afprøvning. Den er ikke testet ud over CI og skal ikke gives til kunder.
+
+## Tillæg 2: Automatisk release ved push til `main`
+
+Hver gang koden ændres, skal kunderne ikke vente på, at nogen husker at bump version og tage et tag.
+
+- **Hvad:** `.github/workflows/auto-release.yml` udgiver en release ved hvert push til `main`, der rører app-koden (samme stifiltre som udviklerudgaven).
+- **Version:** bumpes patchen automatisk i `packages/app/package.json` (og lockfilen), committes til `main` af github-actions[bot] og tagges. Ændrer push'et versionen selv, udgives den præcist – minor/major styres stadig manuelt. En version, der ikke er ren semver (X.Y.Z), udgives aldrig automatisk.
+- **Uden løkke og uden race:** en commit, der allerede er tagget ved tippet på `main`, udløser intet nyt release; kørsler er sekventielle (concurrency), og udgivelsen sker altid fra seneste tip, så parallelle push'er lander i én release.
+- **Konsekvens:** versionsnumre og GitHub Releases flyver under aktiv udvikling (hver release fylder ca. 0,5 GB i repoet; Pages serverer kun den seneste). Når produktet modner, kan man skifte til manuelt eller kræve et review på releases.
