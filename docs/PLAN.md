@@ -166,11 +166,11 @@ Besluttet:
 - Bridge i Node.js/TypeScript (ADR-0004).
 - Politik/allowedHosts fra start (ADR-0006).
 - Bridgen er valgfri; direkte forbindelse er standard (ADR-0007).
+- Licens: MIT License – koden er åben for fri brug; ophavsret er ManInfo ApS.
 
 Åbne:
-1. Licens: open source (MIT/Apache-2.0) eller kommerciel/dual?
-2. Endeligt produktnavn.
-3. Kodesignering af installer: certifikat og udgiver.
+1. Endeligt produktnavn.
+2. Kodesignering af installer: certifikat og udgiver.
 
 ## 10. Risici
 
