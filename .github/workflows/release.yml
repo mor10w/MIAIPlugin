@@ -57,6 +57,10 @@ jobs:
           npm run icons
           ARGS="--mac --publish never"
           if [ -z "$CSC_LINK" ]; then
+            # Job-niveau-env'et sætter CSC_LINK/CSC_KEY_PASSWORD til tomme strenge når
+            # secret'et ikke er sat; electron-builder fortolker den tomme sti som en fil
+            # og fejler. Fjern dem, så ad hoc-signatur (identity=-) bruges i stedet.
+            unset CSC_LINK CSC_KEY_PASSWORD
             export CSC_IDENTITY_AUTO_DISCOVERY=false
             # Ad hoc-signatur (som udviklerudgaven): Apple Silicon kræver en gyldig signatur
             # for at starte appen, og hardened runtime uden et Team ID afviser Electrons egne biblioteker.
