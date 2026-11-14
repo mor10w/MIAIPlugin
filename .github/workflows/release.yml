@@ -55,6 +55,7 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           npm run icons
+          npm run notices
           ARGS="--mac --publish never"
           if [ -z "$CSC_LINK" ]; then
             # Job-niveau-env'et sætter CSC_LINK/CSC_KEY_PASSWORD til tomme strenge når
@@ -116,6 +117,7 @@ jobs:
           SIGN_PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}
         run: |
           npm run icons
+          npm run notices
           ARGS=(--win --publish never)
           if [ -n "$AZURE_CLIENT_ID" ] && [ -n "$SIGN_ENDPOINT" ]; then
             ARGS+=("-c.win.azureSignOptions.endpoint=$SIGN_ENDPOINT" "-c.win.azureSignOptions.codeSigningAccountName=$SIGN_ACCOUNT" "-c.win.azureSignOptions.certificateProfileName=$SIGN_PROFILE" "-c.win.azureSignOptions.publisherName=$SIGN_PUBLISHER")

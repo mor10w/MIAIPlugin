@@ -2,9 +2,10 @@
 PackageIdentifier: MIAI.MIAI
 PackageVersion: "{{VERSION}}"
 PackageLocale: da-DK
-Publisher: M. Wiingaard
+Publisher: ManInfo ApS
 PackageName: MIAI
-License: Proprietary
+License: MIT
+LicenseUrl: https://github.com/mor10w/MIAIPlugin/blob/main/LICENSE
 ShortDescription: AI-assistent til Word, Excel, PowerPoint og Outlook med modeller, der kører lokalt eller hos din organisation.
 Tags:
   - ai

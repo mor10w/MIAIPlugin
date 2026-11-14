@@ -75,4 +75,4 @@ Du skal ikke selv ændre versionsnummeret. Udgivelser laves automatisk fra `main
 
 ## Licens
 
-Koden er åbnet under [MIT License](LICENSE). Bidrag til koden er dermed også licenseret under MIT License. Ophavsret til hoveddelen af koden er **ManInfo ApS**.
+Koden er udgivet under [MIT-licensen](LICENSE), og ophavsretten til den eksisterende kode tilhører **ManInfo ApS**. Når du sender en pull request, accepterer du, at dit bidrag udgives under samme licens.

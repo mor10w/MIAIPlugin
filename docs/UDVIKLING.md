@@ -77,6 +77,14 @@ Hvert push til `main`, der rører app-koden, udgiver automatisk en ny release (`
 
 Lokalt: `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`, usigneret med mindre et certifikat findes. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
 
+### Licenser i de byggede filer
+MIAI er udgivet under MIT (`LICENSE`), og de pakker, den bygger på, kræver, at deres licenstekst følger med, når koden gives videre. Kildekoden henviser kun til pakkerne; det er de byggede filer, der indeholder dem. Derfor laves licensfilerne ved hvert byg og ligger ikke i repoet:
+
+- **Add-in'et:** `npm run build` lægger `LICENSE.txt` og `THIRD-PARTY-NOTICES.txt` i `packages/addin/dist`. Listen laves af et Vite-plugin ud fra de moduler, der faktisk er pakket med, og følger derfor afhængighederne af sig selv. Filerne serveres sammen med add-in'et, fx `<pages-url>/THIRD-PARTY-NOTICES.txt`.
+- **MIAI App:** `npm run notices -w @miai/app` skriver `packages/app/build/THIRD-PARTY-NOTICES.txt` med alt, appen afhænger af ved kørsel, samt Electron. electron-builder lægger den og `LICENSE.txt` i appens `Resources` ved siden af `addin/`. Chromiums og Electrons egne licenser lægger electron-builder selv ved. `dist:mac`, `dist:win` og workflowene kører trinnet; udviklerbygget kontrollerer, at filerne er med.
+
+Begge dele bruger `scripts/third-party-notices.mjs`. En pakke uden licensfil nævnes med den licens, den selv angiver, og en bemærkning om, at teksten mangler.
+
 **CI:** `ci.yml` bygger og tester på Linux og Windows og kører lint og e2e. Det er de tjek, der skal være grønne. macOS bygges i `ci-macos.yml` som et separat, ikke-blokerende tjek: GitHubs Mac-runnere er ofte optaget, og et job, der aldrig får en maskine, skal ikke gøre CI rødt. Fejler macOS-tjekket på selve koden, skal det rettes som alt andet. Står det i kø eller bliver annulleret, så kør det igen fra Actions.
 
 ### Browsertests (task pane)
