@@ -92,8 +92,16 @@ jobs:
 
       - name: Tag og udgiv
         if: steps.decide.outputs.do != 'skip'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           V=$(node -p "require('./packages/app/package.json').version")
           git tag "v$V"
           git push origin "v$V"
+          # Pushes (også tags) med GITHUB_TOKEN trigget ikke workflows – det er
+          # GitHub-dokumenteret og forhindrer løkker, men betyder også, at tagget
+          # ikke selv starter release-pipeline'et. Vi starter den derfor eksplicit;
+          # --ref giver samme kontekst som en tag-push (github.ref = refs/tags/v$V),
+          # så release.yml's tjek og publish-job kører, som de plejer.
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "v$V"
