@@ -61,6 +61,7 @@ jobs:
           CSC_FOR_PULL_REQUEST: true
         run: |
           npm run icons
+          npm run notices
           # Ad hoc-signatur ("-"): Apple Silicon kræver en gyldig signatur for at starte appen.
           # Hardened runtime slås fra, da den uden et Team ID afviser Electrons egne biblioteker.
           npx electron-builder --mac dmg --arm64 --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false
@@ -70,6 +71,16 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | tee "$RUNNER_TEMP/codesign.txt"
           grep -q "Signature=adhoc" "$RUNNER_TEMP/codesign.txt"
+      - name: Kontrollér, at licenserne følger med
+        run: |
+          res="packages/app/dist/mac-arm64/MIAI.app/Contents/Resources"
+          for f in LICENSE.txt THIRD-PARTY-NOTICES.txt addin/LICENSE.txt addin/THIRD-PARTY-NOTICES.txt; do
+            test -s "$res/$f" || { echo "::error::$f mangler i appen"; exit 1; }
+          done
+          grep -q "ManInfo ApS" "$res/LICENSE.txt"
+          grep -c "^Licens: " "$res/THIRD-PARTY-NOTICES.txt" "$res/addin/THIRD-PARTY-NOTICES.txt"
+          ls "$res/.." | grep -i "licens" || true
+          /usr/libexec/PlistBuddy -c "Print :NSHumanReadableCopyright" "$res/../Info.plist"
       - name: Kontrollér, at appen starter
         run: |
           log="$HOME/Library/Application Support/MIAI/MIAI.log"

@@ -2,6 +2,7 @@
   "name": "@miai/evals",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Eval-sæt og harness for MIAI's opgaver mod en OpenAI-kompatibel endpoint (#2)",
   "scripts": {

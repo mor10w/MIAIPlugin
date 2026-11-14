@@ -1,6 +1,6 @@
 # MIAIPlugin – projektplan
 
-> Status: **Udkast v0.3** · Senest opdateret: 2026-11-02 · Ejer: M. Wiingaard
+> Status: **Udkast v0.3** · Senest opdateret: 2026-11-02 · Ejer: ManInfo ApS
 
 ## 1. Vision
 

@@ -123,3 +123,5 @@ Fejlrapporter og forslag er velkomne som [issues](https://github.com/mor10w/MIAI
 MIAI er udgivet under [MIT-licensen](LICENSE). Ophavsretten tilhører **ManInfo ApS**.
 
 Du må frit bruge, ændre og videregive koden, også i kommercielle produkter og uden aftale med ManInfo ApS. Den eneste betingelse er, at ophavsretsnotitsen og licensteksten følger med i kopier af koden eller væsentlige dele af den. Softwaren leveres, som den er, uden nogen form for garanti.
+
+MIAI bygger på en række open source-pakker. Deres licenser følger med de byggede filer: `THIRD-PARTY-NOTICES.txt` ligger ved siden af add-in'et og i MIAI App. De laves automatisk ved hvert byg; se [Udvikling og afprøvning](docs/UDVIKLING.md#licenser-i-de-byggede-filer).

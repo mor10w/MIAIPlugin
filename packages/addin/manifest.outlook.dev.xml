@@ -10,7 +10,7 @@
            xsi:type="MailApp">
   <Id>a7d3e5f1-8c2b-4b9e-a061-3f5d9c8e2b17</Id>
   <Version>0.1.0.0</Version>
-  <ProviderName>M. Wiingaard</ProviderName>
+  <ProviderName>ManInfo ApS</ProviderName>
   <DefaultLocale>da-DK</DefaultLocale>
   <DisplayName DefaultValue="MIAI – lokal AI-assistent (dev)">
     <Override Locale="en-US" Value="MIAI – local AI assistant (dev)"/>

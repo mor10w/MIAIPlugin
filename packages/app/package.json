@@ -2,15 +2,17 @@
   "name": "@miai/app",
   "version": "0.1.6",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "main": "main.js",
   "description": "MIAI App – menu-bar-app, der kører MIAI Bridge lokalt (ADR-0008, udgave B)",
-  "author": "M. Wiingaard",
+  "author": "ManInfo ApS",
   "scripts": {
     "icons": "node scripts/make-icons.mjs",
+    "notices": "node ../../scripts/third-party-notices.mjs app build/THIRD-PARTY-NOTICES.txt",
     "start": "electron .",
-    "dist:mac": "npm run icons && electron-builder --mac --publish never",
-    "dist:win": "npm run icons && electron-builder --win --publish never",
+    "dist:mac": "npm run icons && npm run notices && electron-builder --mac --publish never",
+    "dist:win": "npm run icons && npm run notices && electron-builder --win --publish never",
     "test": "vitest run"
   },
   "dependencies": {
@@ -80,6 +82,14 @@
       {
         "from": "../addin/manifest.outlook.xml",
         "to": "manifest.outlook.xml"
+      },
+      {
+        "from": "build/THIRD-PARTY-NOTICES.txt",
+        "to": "THIRD-PARTY-NOTICES.txt"
+      },
+      {
+        "from": "../../LICENSE",
+        "to": "LICENSE.txt"
       }
     ],
     "win": {

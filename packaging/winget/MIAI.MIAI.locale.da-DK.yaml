@@ -2,7 +2,7 @@
 PackageIdentifier: MIAI.MIAI
 PackageVersion: "{{VERSION}}"
 PackageLocale: da-DK
-Publisher: M. Wiingaard
+Publisher: ManInfo ApS
 PackageName: MIAI
 License: MIT
 LicenseUrl: https://github.com/mor10w/MIAIPlugin/blob/main/LICENSE

@@ -10,7 +10,7 @@
            xsi:type="TaskPaneApp">
   <Id>3b0f5a2e-7c41-4d8a-9e55-2f6c1d9b8a10</Id>
   <Version>0.1.0.0</Version>
-  <ProviderName>M. Wiingaard</ProviderName>
+  <ProviderName>ManInfo ApS</ProviderName>
   <DefaultLocale>da-DK</DefaultLocale>
   <DisplayName DefaultValue="MIAI – lokal AI-assistent (dev)">
     <Override Locale="en-US" Value="MIAI – local AI assistant (dev)"/>

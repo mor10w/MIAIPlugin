@@ -41,7 +41,7 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
 
 ### 3. Kodesignering (bedste bud)
 
-- **Udgiver:** brug **virksomhedens registrerede navn (CVR)** frem for et personnavn. Navnet vises i Gatekeeper, SmartScreen og M365 Admin Center, og en virksomhed giver adgang til de billigste signeringsløsninger nedenfor. Indtil da står "M. Wiingaard" i manifesterne.
+- **Udgiver:** brug **virksomhedens registrerede navn (CVR)** frem for et personnavn. Navnet vises i Gatekeeper, SmartScreen og M365 Admin Center, og en virksomhed giver adgang til de billigste signeringsløsninger nedenfor. Manifesterne, appen og winget-skabelonen bruger nu **ManInfo ApS**.
 - **macOS:** Apple Developer Program (ca. 99 USD/år).
   - Som organisation kræver det et D-U-N-S-nummer (gratis); som person kan det oprettes i eget navn.
   - Certifikat: **Developer ID Application**.
