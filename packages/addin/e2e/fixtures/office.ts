@@ -17,7 +17,7 @@ export interface FakeOfficeOptions {
   host: HostName;
   /** Højeste understøttede version pr. requirement set, fx { WordApi: "1.4" }. Manglende = ikke understøttet. */
   apiSets?: Record<string, string>;
-  /** Markeret tekst (Word, PowerPoint). */
+  /** Markeret tekst (Word, PowerPoint). Sammen med `paragraphs` markeres de hele afsnit, teksten ligger i. */
   selection?: string;
   /** Word: hele dokumentets tekst (bruges, når intet er markeret). Standard: markeringen. */
   document?: string;
@@ -510,6 +510,30 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       search: (t: string) => search(paras, t),
     });
     const empty = strict("Word.Range(selection)", { text: "", load() {} });
+    // Markering i afsnitsmodellen: de hele afsnit, den markerede tekst ligger i. Afsnittene huskes
+    // som objekter, så markeringen følger med, når teksten i dem rettes.
+    let selParas: P[] = [];
+    const pickSelection = (text: string) => {
+      const lines = text.split("\n").filter(Boolean);
+      selParas = paras.filter((p) => lines.some((l) => p.text.includes(l)));
+    };
+    pickSelection(selection);
+    const selectTextBase = (w.__miai as Record<string, unknown>).selectText as (text: string) => void;
+    (w.__miai as Record<string, unknown>).selectText = (text: string) => {
+      pickSelection(text);
+      selectTextBase(text);
+    };
+    const selected = strict("Word.Range(selection)", {
+      load() {},
+      get text() {
+        return selParas.map((p) => p.text).join("\n");
+      },
+      get paragraphs() {
+        const items = selParas.map((p) => strict("Word.Paragraph", paragraphObj(p)));
+        return { items, load() {}, getFirst: () => items[0], getLast: () => items[items.length - 1] };
+      },
+      search: (t: string) => search(selParas, t),
+    });
     const body = strict("Word.Body", {
       getRange: () => whole,
       get tables() {
@@ -555,7 +579,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       }),
     });
     const document = strict("Word.Document", {
-      getSelection: () => empty,
+      getSelection: () => (selParas.length ? selected : empty),
       body,
       load() {},
       get changeTrackingMode() {
