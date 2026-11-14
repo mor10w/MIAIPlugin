@@ -1,5 +1,7 @@
 # Udvikling og afprøvning
 
+Vil du bare bruge MIAI, så følg [installationen i brugervejledningen](BRUG.md#installation--vælg-den-vej-der-passer-til-dig). Denne side er til dig, der vil bygge, ændre eller udgive.
+
 ## Forudsætninger
 - Node.js 22 LTS
 - Microsoft 365 / Office 2021+ desktop (Windows eller Mac)
@@ -9,16 +11,13 @@
   ```
   Alternativer: LM Studio (start "Local Server"), `llama-server -m model.gguf --port 8080`, vLLM, LocalAI, Jan m.fl.
 
-## Brug uden at bygge noget (hostet add-in, direkte forbindelse)
-Når GitHub Pages er slået til (Settings → Pages → Source: **GitHub Actions**), publiceres add-in'et ved hvert push til `main`.
+## Hostet add-in på GitHub Pages
+Når GitHub Pages er slået til (Settings → Pages → Source: **GitHub Actions**), publicerer `pages.yml` add-in'et ved hvert push til `main` sammen med færdige manifester:
 
-1. Hent `https://<bruger>.github.io/<repo>/manifest.xml`.
-2. Tillad CORS fra `https://<bruger>.github.io` i dit værktøj. For Ollama:
-   - Windows: sæt brugermiljøvariablen `OLLAMA_ORIGINS=https://mor10w.github.io` og genstart Ollama.
-   - Mac: `launchctl setenv OLLAMA_ORIGINS https://mor10w.github.io` og genstart Ollama.
+- `https://<bruger>.github.io/<repo>/manifest.xml` (Word, Excel, PowerPoint)
+- `https://<bruger>.github.io/<repo>/manifest-outlook.xml` (Outlook)
 
-   LM Studio: slå "Enable CORS" til.
-3. Sideload manifestet (se nedenfor) og genstart Office.
+I dette repo er adressen `https://mor10w.github.io/MIAIPlugin/`. Sådan tages manifestet i brug, står i [brugervejledningen, vej B](BRUG.md#b-hostet-add-in-uden-app). I en fork skal inference-værktøjet tillade CORS fra forkens egen adresse.
 
 ## Udvikling – direkte forbindelse (standard)
 ```bash

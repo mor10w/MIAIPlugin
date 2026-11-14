@@ -2,8 +2,8 @@
 #
 # Hvert push til main, der rører app-koden (samme filtre som dev-build.yml), udgiver
 # en ny release, så klienter med MIAI App får opdateringer uden ceremoni:
-#   - Ændrer push'et versionen i packages/app/package.json selv, udgives den præcist
-#     (fx 0.2.0), så man stadig kan styre minor/major manuelt.
+#   - Står der en version i packages/app/package.json, som endnu ikke har et tag (fx 0.2.0,
+#     sat i hånden), udgives den præcist, så man stadig kan styre minor/major manuelt.
 #   - Ellers bumpes patch-versionen automatisk (fx 0.1.2 → 0.1.3).
 # Bump-committen pushes til main og tagges v<version>, som trigget release.yml.
 # Et tip, der allerede har sit tag (fx en bump-commit), udløser intet nyt release.
@@ -61,23 +61,15 @@ jobs:
             exit 0
           fi
 
-          # Kun ved push kan vi se, om selve push'ets commit ændrede versionen – så
-          # udgives den præcist, uden bump. (Ved workflow_dispatch er github.sha = tippen
-          # på main, så diff'en mod forrige commit typisk er tom – vi bumper da.) Vi
-          # sammenligner push'ets commit (github.sha) med forældren, så vi ikke afhænger
-          # af github.event.push.commits (som PAT-API udelader).
-          MANUAL=0
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            if git diff --name-only "${{ github.sha }}^" ${{ github.sha }} | grep -qx "packages/app/package.json"; then
-              MANUAL=1
-            fi
-          fi
-
-          if [ "$MANUAL" = 1 ]; then
-            echo "::notice::Push'et ændrer versionen til $V – udgives uden bump."
-            echo do=tag >> "$GITHUB_OUTPUT"
-          else
+          # Har versionen i package.json endnu intet tag, er den sat i hånden (fx 0.2.0) og
+          # udgives præcist. Ellers er den allerede udgivet fra en ældre commit, og vi bumper.
+          # Tagget afgør det – ikke om package.json er ændret i push'et: en ny afhængighed
+          # eller en ændring i build-opsætningen rører også filen uden at ændre versionen.
+          if git rev-parse -q --verify "refs/tags/v$V" >/dev/null; then
             echo "do=bump" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Version $V har intet tag endnu – udgives uden bump."
+            echo do=tag >> "$GITHUB_OUTPUT"
           fi
 
       - name: Bump patch-versionen og push til main
