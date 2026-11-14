@@ -92,7 +92,7 @@ Office (task pane) ──https://localhost──▶ MIAI Bridge / App ──▶ 
 - **Direkte:** add-in'et er en statisk webside (fx på GitHub Pages), der selv kalder modellen fra Office. Det kræver, at inference-værktøjet tillader CORS fra add-in'ets adresse.
 - **Bridge:** en lokal service serverer add-in'et og kalder modellen. Den giver låst politik for organisationer, audit-log, nøgler i systemets nøglering, udtræk af PDF- og Office-filer og viden fra dine mapper. **MIAI App** er bridgen pakket som en app.
 
-Begge tilstande bruger samme motor og samme **politik** for, hvilke hosts der må kaldes (standard: kun `127.0.0.1` og `localhost`). Tilstanden vælges automatisk. Se [arkitekturen](docs/ARKITEKTUR.md) og [ADR-0007](docs/adr/0007-bridge-valgfri-direkte-forbindelse.md).
+Begge tilstande bruger samme motor og samme **politik** for, hvilke hosts der må kaldes (standard: kun `127.0.0.1` og `localhost`). Tilstanden vælges automatisk. Har I en modelserver i huset, kan den tillades; se [Brug en intern server](docs/BRUG.md#brug-en-intern-server). Se også [arkitekturen](docs/ARKITEKTUR.md) og [ADR-0007](docs/adr/0007-bridge-valgfri-direkte-forbindelse.md).
 
 ## Dokumentation
 

@@ -205,6 +205,49 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 
 Klik **Gem** – uden dette virker ændringerne ikke.
 
+## Brug en intern server
+
+Som standard må MIAI kun kalde modeller på din egen maskine. Har I en server i huset, fx en GPU-maskine med vLLM eller Ollama, kan MIAI bruge den i stedet. Der skal ikke ændres i koden; serveren skal blot tillades.
+
+**Sådan gør du**
+
+1. Åbn fanen **Indstillinger** i MIAI.
+2. Tilføj serveren under **Tilladte hosts**, fx `llm.firma.local`. Der står én host pr. linje, og `*.firma.local` tillader alle maskiner under domænet. Lad `127.0.0.1` og `localhost` blive stående, hvis du også vil bruge en lokal model.
+3. Tilføj et endpoint (skabelonen *Andet*) med serverens adresse, fx `https://llm.firma.local/v1`, og en API-nøgle, hvis serveren kræver det.
+4. Vælg **Gem**. MIAI genindlæser sig selv, så den nye host kan kaldes. Vælg derefter **Test forbindelse**.
+
+**Hvad serveren skal kunne** afhænger af, hvordan MIAI er installeret:
+
+| | MIAI App eller bridge | Hostet add-in |
+|---|---|---|
+| Hvem kalder serveren | Appen på din maskine | Office selv (task pane) |
+| `http` uden kryptering | Virker | Blokeres af browseren; serveren skal køre `https` med et certifikat, maskinen stoler på |
+| CORS på serveren | Ikke nødvendig | Skal tillade add-in'ets adresse, fx `https://mor10w.github.io` |
+| API-nøgle | Gemmes i systemets nøglering | Gemmes i add-in'ets lokale lager i klartekst |
+
+Appen er derfor den nemmeste vej til en intern server. Hostet kræver mere af serveren, men intet installeret hos brugeren.
+
+På serveren:
+
+- **Ollama** lytter som standard kun på sin egen maskine. Sæt `OLLAMA_HOST=0.0.0.0`, så den kan nås fra netværket, og til det hostede add-in også `OLLAMA_ORIGINS=https://mor10w.github.io`.
+- **vLLM:** `--host 0.0.0.0`, og til det hostede add-in `--allowed-origins '["https://mor10w.github.io"]'`.
+- Brug aldrig `*` som tilladt adresse. Så kan enhver webside, en bruger besøger, kalde jeres model.
+
+**Lås det for hele organisationen**
+
+En organisation kan lægge serveren ind centralt og låse listen, så brugerne ikke kan tilføje andre:
+
+- **Hostet add-in:** `miai-config.json` ved siden af add-in'et; se [Central udrulning](#central-udrulning-i-en-organisation-også-office-på-web).
+- **MIAI App og bridge:** en politikfil på maskinen, som brugeren ikke kan ændre i Indstillinger:
+  ```json
+  { "allowedHosts": ["llm.firma.local"], "locked": true }
+  ```
+  Den ligger i `%ProgramData%\MIAI\policy.json` (Windows) eller `/Library/Application Support/MIAI/policy.json` (Mac).
+
+**Hvad det betyder for dine data**
+
+Med en intern server forlader dokumentteksten din maskine, men ikke jeres netværk. MIAI sender kun til de hosts, der står på listen. Websøgning er en indstilling for sig og er slået fra som standard.
+
 ## Funktioner
 
 Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgave i **Handlinger** → evt. vælg parametre → **Kør**. Resultatet vises i task pane, og du vælger selv, hvordan det anvendes – intet sker i dokumentet, før du klikker. **Kopiér** er altid tilgængeligt, og mens der genereres kan du afbryde med **Stop**.
@@ -497,7 +540,7 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
 | Symptom | Løsning |
 |---|---|
 | Gul badge / "CORS"-fejl i fejlbeskeden | Værktøjet tillader ikke kald fra add-in'ets adresse. Ollama: `OLLAMA_ORIGINS` (se Installation, vej B). LM Studio: "Enable CORS". vLLM: `--allowed-origins`. Alternativt brug bridgen, som kører uden CORS. |
-| "Endpoint er ikke tilladt af politikken." | Endpointet ligger uden for *Tilladte hosts*. Tilføj hosten (fx `llm.firma.local`) og **Gem** – medmindre en maskinpolitik låser feltet. |
+| "Endpoint er ikke tilladt af politikken." | Endpointet ligger uden for *Tilladte hosts*. Tilføj hosten (fx `llm.firma.local`) og **Gem** – medmindre en maskinpolitik låser feltet. Se [Brug en intern server](#brug-en-intern-server). |
 | Rød badge "MIAI Bridge svarer ikke" | Bridgen kører ikke. Start MIAI App (ikonet skal ligge i menulinjen eller ved uret). Kører du bridgen fra kildekoden: `npm start`, og brug dit personlige manifest (stien vises ved start). |
 | Ingen modeller i udfyldningsfeltet / "Test forbindelse" fejler | Kører værktøjet på den rigtige port? Prøv `curl http://127.0.0.1:11434/v1/models`. |
 | "Modellen svarede ikke i tide" | Modellen var tavs længere end endpointens **Timeout** (standard 5 min). Det sker typisk med store dokumenter på langsom hardware, før modellen begynder at svare. Hæv den under Indstillinger → endpointens **Avanceret** → **Timeout** (op til 30 min), eller vælg en mindre model. |
