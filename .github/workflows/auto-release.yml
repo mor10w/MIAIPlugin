@@ -63,7 +63,7 @@ jobs:
           # Har nogen af push'ets commits ændret versionen? Så udgives den præcist, uden bump.
           # (Ved workflow_dispatch findes github.event.push ikke – her er listen tom.)
           MANUAL=0
-          for c in ${{ join(github.event.push && github.event.push.commits || [], ' ') }}; do
+          for c in ${{ join((github.event.push && github.event.push.commits.*.sha) || fromJSON('[]'), ' ') }}; do
             if git diff --name-only "$c^" "$c" | grep -qx "packages/app/package.json"; then
               MANUAL=1
               break
