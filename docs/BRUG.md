@@ -1,102 +1,163 @@
 # Brugervejledning
 
-Sådan installerer og bruger du MIAI – AI-assistenten til Word, Excel og PowerPoint med dine egne lokale modeller.
+Sådan installerer og bruger du MIAI – AI-assistenten til Word, Excel, PowerPoint og Outlook med dine egne modeller.
 
-> Status: fase 0 (spike). Skelettet fungerer, men er ikke fuldt afprøvet i Office. Se [testlisten](UDVIKLING.md#fase-0--manuel-testliste) for, hvad der mangler.
+> **Status:** under aktiv udvikling (0.1.x). Funktionerne er testet automatisk mod en simuleret udgave af Office; den manuelle afprøvning i rigtig Office er ikke afsluttet. Se [testlisten](UDVIKLING.md#fase-0--manuel-testliste) for, hvad der mangler.
 
 ## Hvad du skal bruge
 
-- **Microsoft 365 / Office 2019+ desktop** (Windows eller Mac). Nogle funktioner kræver nyere API'er:
+- **Microsoft 365 eller Office 2021+ til skrivebordet** (Windows eller Mac). Nogle funktioner kræver nyere API'er:
   - *Sporede ændringer* og *kommentarer i Word*: WordApi 1.4
   - *Opret slides* og *opsummér hele præsentationen*: PowerPointApi 1.4
 - **Et OpenAI-kompatibelt inference-værktøj** med en model, fx:
   - [Ollama](https://ollama.com): `ollama pull qwen3:4b`
   - LM Studio (start "Local Server")
   - `llama-server -m model.gguf --port 8080`, vLLM, LocalAI, Jan m.fl.
-- **Node.js 22 LTS** – kun hvis du kører udvikler- eller bridge-tilstand (hostet tilstand kræver ingen byg).
+- **Node.js 22 LTS** – kun hvis du bygger fra kildekoden (vej C og D).
 
-Dokumentet forlader aldrig din maskine: standardpolitikken tillader kun endpoints på loopback (`127.0.0.1`, `localhost`).
+Dokumentet forlader ikke din maskine: standardpolitikken tillader kun endpoints på loopback (`127.0.0.1`, `localhost`).
 
-## Installation – vælg én af tre veje
+## Installation – vælg den vej, der passer til dig
 
-### A. Udvikler-tilstand (direkte) – anbefales til første gang
+| Vej | Til hvem | Du skal installere |
+|---|---|---|
+| **A. MIAI App** (anbefales) | Alle, der bare vil i gang | Én app. Den sætter selv MIAI ind i Office. |
+| **B. Hostet add-in** | Dig, der ikke vil installere en app | Kun et manifest. Modellen skal tillade kald fra add-in'ets adresse (CORS). |
+| **C. Udvikler-tilstand** | Udviklere | Node.js og dette repo. |
+| **D. MIAI Bridge fra kildekoden** | Udviklere og servere uden skrivebord | Node.js og dette repo. |
+
+Organisationer, der vil udrulle MIAI til mange brugere, bruger [Central udrulning](#central-udrulning-i-en-organisation-også-office-på-web).
+
+### A. MIAI App (anbefales)
+
+MIAI App er en lille app i menulinjen, der kører MIAI lokalt og selv installerer tilføjelsen i Word, Excel og PowerPoint. Du behøver hverken Node.js eller en webserver.
+
+**1. Hent appen** under [Releases](https://github.com/mor10w/MIAIPlugin/releases/latest):
+
+| Maskine | Fil |
+|---|---|
+| Mac med Apple Silicon (M1 og nyere) | `MIAI-<version>-arm64.dmg` |
+| Mac med Intel | `MIAI-<version>-x64.dmg` |
+| Windows | `MIAI-Setup-<version>-x64.exe` |
+
+Er du i tvivl på Mac: Apple-menuen → *Om denne Mac*. Står der "Chip: Apple M…", er det Apple Silicon.
+
+**2. Installér og start**
+
+- **Mac:** åbn `.dmg`-filen, træk **MIAI** til Programmer og start appen. Appen er endnu ikke signeret med et Apple-certifikat, så macOS afviser den første gang. Åbn Systemindstillinger → Anonymitet & sikkerhed, rul ned og vælg **Åbn alligevel**. (På macOS 14 og ældre kan du i stedet højreklikke på appen og vælge *Åbn*.)
+- **Windows:** kør installeren. Installationen sker pr. bruger og kræver ikke administrator. Installeren er ikke signeret endnu, så SmartScreen advarer: vælg **Flere oplysninger → Kør alligevel**.
+
+**3. Sæt MIAI ind i Office**
+
+1. Ved første start laver appen et TLS-certifikat for `localhost` og tilbyder at betro det og installere MIAI i Office i ét trin: vælg **Gør det nu**. På Windows spørger systemet, om certifikatet må installeres; vælg **Ja**.
+2. Genstart Word, Excel og PowerPoint. Knappen **AI-assistent** ligger på fanen **Hjem** (og under Indsæt → Tilføjelser).
+3. Vælg endpoint og model under fanen **Indstillinger** i MIAI; se [Første gang](#første-gang).
+
+Begge trin findes også i appens menu (**Betro certifikat…**, **Installer i Office…**). Dialogen vises kun igen, hvis noget mangler, fx når certifikatet fornyes (ca. hvert andet år). Outlook installeres for sig; se [Outlook](#outlook).
+
+**Menuen** ligger i menulinjen på Mac og ved uret på Windows:
+
+- **Start automatisk ved login.** På Mac skal du måske godkende det under Systemindstillinger → Generelt → Login-emner, og appen skal ligge i Programmer.
+- **Vis Outlook-manifest…** åbner mappen med den fil, Outlook skal have.
+
+**Opdateringer**
+
+- **Windows:** nye udgaver hentes automatisk i baggrunden og installeres, næste gang appen startes, eller fra menuen *Genstart og opdater til …*.
+- **Mac:** automatisk opdatering kræver en signeret app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)) og virker derfor ikke endnu. Hent den nye `.dmg` under [Releases](https://github.com/mor10w/MIAIPlugin/releases/latest), afslut MIAI, træk den nye udgave til Programmer, og godkend den igen under Anonymitet & sikkerhed. Spørger macOS bagefter om adgang til nøgleringen, så vælg *Tillad altid*.
+- **Udviklerudgave (Mac med Apple Silicon):** ud over udgivelserne bygges en udviklerudgave, hver gang koden ændres. Er der en nyere end din, viser menuen *Hent udviklerudgave …*, som henter `.dmg`-filen i browseren; den installeres på samme måde. Den er til afprøvning og kan indeholde fejl.
+
+**Hvis noget driller**
+
+- *"Adgang nægtet" ved installation i Office (Mac):* MIAI skal have **Fuld diskadgang** under Systemindstillinger → Anonymitet & sikkerhed. Appen tilbyder at åbne stedet.
+- *Loggen* ligger i `~/Library/Application Support/MIAI/MIAI.log` (Mac) og `%APPDATA%\MIAI\MIAI.log` (Windows). Indstillingerne ligger samme sted i `config.json`.
+
+Alt kører lokalt: der er ingen sky-tjeneste og ingen CORS-opsætning, for add-in og bridge har samme adresse.
+
+### B. Hostet add-in (uden app)
+
+Add-in'et ligger på GitHub Pages og kalder selv dit inference-værktøj. Du skal bruge inference-værktøjet og ét manifest.
+
+**1. Hent manifestet:** [`https://mor10w.github.io/MIAIPlugin/manifest.xml`](https://mor10w.github.io/MIAIPlugin/manifest.xml) (højreklik → *Gem link som*). I en fork er adressen `https://<bruger>.github.io/<repo>/manifest.xml`.
+
+**2. Læg det ind i Office**
+
+- **Mac** (Terminal; antager, at filen ligger i Overførsler):
+  ```bash
+  for app in Word Excel Powerpoint; do mkdir -p ~/Library/Containers/com.microsoft.$app/Data/Documents/wef && cp ~/Downloads/manifest.xml ~/Library/Containers/com.microsoft.$app/Data/Documents/wef/miai.xml; done
+  ```
+- **Windows** (PowerShell). Læg først filen et sted, hvor den kan blive liggende, fx i en mappe `MIAI` i din brugermappe; Office læser den derfra ved hver start:
+  ```powershell
+  $m = "$env:USERPROFILE\MIAI\manifest.xml"; $id = ([xml](Get-Content $m)).OfficeApp.Id; New-Item -Path "HKCU:\Software\Microsoft\Office\16.0\WEF\Developer" -Force | Out-Null; Set-ItemProperty -Path "HKCU:\Software\Microsoft\Office\16.0\WEF\Developer" -Name $id -Value $m
+  ```
+- Har du hentet repoet, gør `npm run sideload:mac -- <sti til manifest.xml>` og `npm run sideload:windows -- <sti til manifest.xml>` det samme.
+
+**3. Tillad CORS** fra `https://mor10w.github.io` i dit værktøj. Uden det kan add-in'et ikke nå modellen:
+
+- Ollama, Windows: sæt brugermiljøvariablen `OLLAMA_ORIGINS=https://mor10w.github.io` og genstart Ollama.
+- Ollama, Mac: `launchctl setenv OLLAMA_ORIGINS https://mor10w.github.io` og genstart Ollama.
+- LM Studio: slå "Enable CORS" til under Developer/Server.
+
+**4. Genstart Office.** Knappen **AI-assistent** ligger på fanen **Hjem**.
+
+Brug aldrig `*` som tilladt adresse: det ville lade enhver webside bruge din lokale model. I hostet tilstand ligger indstillinger og eventuelle API-nøgler i add-in'ets lokale lager på maskinen; brug MIAI App, hvis din endpoint kræver en nøgle.
+
+### C. Udvikler-tilstand (fra kildekoden)
 
 ```bash
 npm install
-npm run certs    # udviklingscertifikat for localhost, CA'en skal godkendes første gang
-npm run dev      # Vite på https://localhost:3000 med hot reload
 ```
-
-Sideload derefter add-in'et (én gang):
 
 ```bash
-npm run sideload:mac        # macOS
-npm run sideload:windows    # Windows
+npm run certs
 ```
 
-Genstart Office. Ollama tillader `https://localhost:*` som standard, så der er ingen CORS-opsætning.
+Opretter et udviklingscertifikat for `localhost`; CA'en skal godkendes første gang.
 
-### B. Med MIAI Bridge (valgfri)
+```bash
+npm run dev
+```
 
-Bridgen er en lokal Node.js-service, der serverer add-in'et og kalder modellen. Den giver låst organisationspolitik, audit-log og UI uden internet.
+Starter Vite på `https://localhost:3000` med hot reload. Læg derefter udviklingsmanifestet ind i Office (én gang):
+
+```bash
+npm run sideload:mac
+```
+
+```bash
+npm run sideload:windows
+```
+
+Genstart Office. Ollama tillader `https://localhost:*` som standard, så der er ingen CORS-opsætning. Mere i [Udvikling og afprøvning](UDVIKLING.md).
+
+### D. MIAI Bridge fra kildekoden
+
+Bridgen er den lokale service, som MIAI App pakker ind. Den serverer add-in'et og kalder modellen, og den giver låst organisationspolitik, audit-log og brug uden internet. Kør den fra kildekoden, hvis du udvikler på den eller vil køre den på en maskine uden skrivebord.
 
 ```bash
 npm run build
-npm start                # bridgen kører på https://localhost:44321 (eller næste ledige port)
 ```
 
-Bridgen skriver dit **personlige manifest** med din port og din adgangsnøgle. Stien vises ved start, fx `~/Library/Application Support/MIAI/manifest.xml`. Sideload den fil:
+```bash
+npm start
+```
+
+Bridgen kører på `https://localhost:44321` (eller næste ledige port) og skriver dit **personlige manifest** med din port og din adgangsnøgle. Stien vises ved start, fx `~/Library/Application Support/MIAI/manifest.xml`. Læg den fil ind i Office:
 
 ```bash
 npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
 ```
+
 På Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`.
 
-Adgangsnøglen betyder, at kun du kan bruge din bridge, også på en delt maskine (Remote Desktop/Citrix), hvor andre brugere kan nå `127.0.0.1`. MIAI App installerer og opdaterer det personlige manifest automatisk.
+Adgangsnøglen betyder, at kun du kan bruge din bridge, også på en delt maskine (Remote Desktop/Citrix), hvor andre brugere kan nå `127.0.0.1`. MIAI App gør alt dette automatisk.
 
 Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
-### C. Hostet (uden at bygge noget)
-
-Add-in'et hostes på GitHub Pages, og add-in'et kalder selv dit inference-værktøj. Du skal kun bruge inference-værktøjet og ét manifest:
-
-1. Hent [`https://mor10w.github.io/MIAIPlugin/manifest.xml`](https://mor10w.github.io/MIAIPlugin/manifest.xml) og sideload det (i en fork: `https://<bruger>.github.io/<repo>/manifest.xml`).
-2. Tillad CORS fra `https://mor10w.github.io` i dit værktøj:
-   - Ollama, Windows: sæt brugermiljøvariablen `OLLAMA_ORIGINS=https://mor10w.github.io` og genstart Ollama.
-   - Ollama, Mac: `launchctl setenv OLLAMA_ORIGINS https://mor10w.github.io` og genstart Ollama.
-   - LM Studio: slå "Enable CORS" til under Developer/Server.
-3. Genstart Office.
-
-Tilstanden (direkte vs. bridge) vælges automatisk ved start; task pane viser den i overskriften.
-
-### D. MIAI App (Mac .dmg / Windows .exe) – uden Node.js, til salgs
-
-MIAI App er en menu-bar-app, der kører bridgen lokalt – brugeren behøver hverken Node.js eller at drive en web-side ([ADR-0008](adr/0008-distribution-af-solgte-loesninger.md)):
-
-1. Træk **MIAI** fra .dmg'en til Applications og start appen (første gang: højreklik → Åbn, mens den ikke er signerede).
-2. Ved første start genererer appen et TLS-certifikat for `localhost` og tilbyder at betro det og installere MIAI i Office i ét trin (**Gør det nu**). Dialogen vises kun igen, hvis noget mangler, fx når certifikatet fornyes (ca. hvert andet år).
-3. Genstart Word/Excel/PowerPoint. Begge trin findes også i menuen (**Betro certifikat…**, **Installer i Office…**).
-4. Vælg endpoint (model-URL) og model i add-in'ets fanen **Indstillinger**.
-5. Valgfrit: **Start automatisk ved login** i menuen. Appen bliver så et login-emne i macOS. Første gang skal du måske godkende det under Systemindstillinger → Generelt → Login-emner, og appen skal ligge i Programmer.
-
-**Windows:** hent `MIAI-Setup-X.Y.Z-x64.exe` fra `https://<bruger>.github.io/<repo>/updates/`. Installationen sker pr. bruger og kræver ikke administrator. Ved første start tilbyder appen at betro certifikatet og installere MIAI i Word, Excel og PowerPoint. Windows spørger, om certifikatet må installeres; vælg Ja. MIAI ligger i proceslinjen ved uret. Er installeren ikke signeret endnu, viser SmartScreen en advarsel: vælg *Flere oplysninger → Kør alligevel*.
-
-**Opdateringer** hentes automatisk i baggrunden og installeres næste gang appen startes, eller fra menuen *Genstart og opdater til …*. På Mac kræver det en signeret app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)).
-
-**Udviklerudgave (Mac med Apple Silicon):** mens MIAI er under udvikling, bygges en ny udgave, hver gang koden ændres. Er der en nyere end din, viser menuen *Hent udviklerudgave …*:
-1. Vælg menupunktet. Browseren henter `.dmg`-filen.
-2. Afslut MIAI, åbn `.dmg`'en og træk **MIAI** til Applications (erstat den gamle).
-3. Start MIAI. macOS afviser den første gang: åbn Systemindstillinger → Anonymitet & sikkerhed og vælg *Åbn alligevel*.
-
-Spørger macOS bagefter om adgang til nøgleringen, så vælg *Tillad altid*. Udviklerudgaven er til afprøvning og kan indeholde fejl.
-
-Blokerer macOS installationen i Office ("Adgang nægtet"), skal MIAI have **Fuld diskadgang** under Systemindstillinger → Anonymitet og sikkerhed. Appen tilbyder at åbne stedet.
-
-Alt kører lokalt: ingen vendor-cloud, ingen CORS (add-in og bridge er samme origin), indstillinger ligger i `~/Library/Application Support/MIAI/config.json`.
+Tilstanden (direkte eller bridge) vælges automatisk ved start; task pane viser den i overskriften.
 
 ## Første gang
 
-1. Åbn Word, Excel eller PowerPoint → **Indsæt → Tilføjelser** (add-in'et hedder *MIAI*).
+1. Åbn Word, Excel eller PowerPoint, og klik **AI-assistent** på fanen **Hjem** (eller Indsæt → Tilføjelser; add-in'et hedder *MIAI*).
 2. Task pane åbner til højre med fanerne **Handlinger**, **Chat** og **Indstillinger**.
 3. Tjek statusbadget øverst til højre:
 
@@ -104,7 +165,7 @@ Alt kører lokalt: ingen vendor-cloud, ingen CORS (add-in og bridge er samme ori
 |---|---|
 | 🟢 *Forbundet* | Modellen svarer. Hover viser den aktive endpoint. |
 | 🟡 *Ingen forbindelse til modellen* | Endpointet svarer ikke – typisk CORS. Hover viser fejl + vejledning. |
-| 🔴 *MIAI Bridge svarer ikke* | Bridgen kører ikke. Start den med `npm start`. |
+| 🔴 *MIAI Bridge svarer ikke* | Bridgen kører ikke. Start MIAI App, eller `npm start`, hvis du kører bridgen fra kildekoden. |
 
 Ved første start er endpointet **Ollama** (`http://127.0.0.1:11434/v1`) og standardmodellen er den første fra `/v1/models`.
 
@@ -203,8 +264,8 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 MIAI virker i Outlook (Windows, Mac, nyt Outlook og Outlook på web) med et eget manifest.
 
 **Installation:** Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug en af disse filer:
-- **Hostet:** `https://<bruger>.github.io/<repo>/manifest-outlook.xml`.
-- **MIAI App:** menuen → **Vis Outlook-manifest i Finder…**.
+- **Hostet:** [`https://mor10w.github.io/MIAIPlugin/manifest-outlook.xml`](https://mor10w.github.io/MIAIPlugin/manifest-outlook.xml) (i en fork: `https://<bruger>.github.io/<repo>/manifest-outlook.xml`).
+- **MIAI App:** menuen → **Vis Outlook-manifest i Finder…** (Windows: *Stifinder*).
 - **Bridgen:** `manifest-outlook.xml` i konfigurationsmappen; stien vises, når bridgen starter.
 
 Knappen **AI-assistent** findes derefter i mailen og i udkastet.
@@ -397,7 +458,7 @@ To salgsveje på samme kodebase – se [ADR-0008](adr/0008-distribution-af-solgt
 | Udgave | Installation hos kunden | Krav |
 |---|---|---|
 | **Hostet** (M365) | IT-adminen uploader manifestet i M365-admin center (Integrated apps portal); endbruger ser add-in'et uden opsætning. Web-indhold hostes af leverandøren på eget domæne | M365-admin + `OLLAMA_ORIGINS` for leverandørens domæne |
-| **Lokal app** (.dmg/.msi) | Kunden installerer MIAI App (Installation D ovenfor); bridgen kører lokalt, manifest sideloades automatisk | Ingen – alt lokalt, ingen internet |
+| **Lokal app** (.dmg/.exe) | Kunden installerer MIAI App (vej A ovenfor); bridgen kører lokalt, manifest sideloades automatisk | Ingen – alt lokalt, ingen internet |
 
 Model-URL og valg af model sker i add-in'ets fanen **Indstillinger** i begge udgaver.
 
@@ -435,9 +496,9 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
 
 | Symptom | Løsning |
 |---|---|
-| Gul badge / "CORS"-fejl i fejlbeskeden | Værktøjet tillader ikke kald fra add-in'ets adresse. Ollama: `OLLAMA_ORIGINS` (se Installation C). LM Studio: "Enable CORS". vLLM: `--allowed-origins`. Alternativt brug bridgen, som kører uden CORS. |
+| Gul badge / "CORS"-fejl i fejlbeskeden | Værktøjet tillader ikke kald fra add-in'ets adresse. Ollama: `OLLAMA_ORIGINS` (se Installation, vej B). LM Studio: "Enable CORS". vLLM: `--allowed-origins`. Alternativt brug bridgen, som kører uden CORS. |
 | "Endpoint er ikke tilladt af politikken." | Endpointet ligger uden for *Tilladte hosts*. Tilføj hosten (fx `llm.firma.local`) og **Gem** – medmindre en maskinpolitik låser feltet. |
-| Rød badge "MIAI Bridge svarer ikke" | Bridgen kører ikke: `npm start` i bridge-tilstand, og brug bridge-manifestet (`packages/addin/manifest.xml`). |
+| Rød badge "MIAI Bridge svarer ikke" | Bridgen kører ikke. Start MIAI App (ikonet skal ligge i menulinjen eller ved uret). Kører du bridgen fra kildekoden: `npm start`, og brug dit personlige manifest (stien vises ved start). |
 | Ingen modeller i udfyldningsfeltet / "Test forbindelse" fejler | Kører værktøjet på den rigtige port? Prøv `curl http://127.0.0.1:11434/v1/models`. |
 | "Modellen svarede ikke i tide" | Modellen var tavs længere end endpointens **Timeout** (standard 5 min). Det sker typisk med store dokumenter på langsom hardware, før modellen begynder at svare. Hæv den under Indstillinger → endpointens **Avanceret** → **Timeout** (op til 30 min), eller vælg en mindre model. |
 | Formel giver `#NAME?` efter indsættelse | Modellen brugte et funktionsnavn, din Excel ikke kender. Ret formelen manuelt eller klik **Fortryd**. |
