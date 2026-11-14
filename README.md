@@ -120,4 +120,8 @@ Fejlrapporter og forslag er velkomne som [issues](https://github.com/mor10w/MIAI
 
 ## Licens
 
-Der er endnu ikke valgt en licens. Indtil det sker, gælder almindelig ophavsret: du må læse koden, men ikke uden aftale bruge, ændre eller videregive den.
+MIAI er åbnet for fri brug under [MIT License](LICENSE).
+
+**ManInfo ApS** er ophavsmand for koden. Alle andre kan frit bruge, ændre og videregive det – også i kommercielle produkter – forudsat at ophavsret bevares.
+
+Det er altså tilladt at bruge MIAI eller bygge videre på det uden forudgående aftale med ManInfo ApS. I øvrigt skal ophavsret og licensens tilladelser overholdes i alle kopier af koden.

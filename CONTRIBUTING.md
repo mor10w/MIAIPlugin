@@ -72,3 +72,7 @@ De automatiske tests kører mod en simuleret udgave af Office. Det fanger meget,
 ## Udgivelser
 
 Du skal ikke selv ændre versionsnummeret. Udgivelser laves automatisk fra `main`; se afsnittet om udgivelse i [docs/UDVIKLING.md](docs/UDVIKLING.md).
+
+## Licens
+
+Koden er åbnet under [MIT License](LICENSE). Bidrag til koden er dermed også licenseret under MIT License. Ophavsret til hoveddelen af koden er **ManInfo ApS**.
