@@ -106,7 +106,7 @@ Lokalt bruges den Chromium, Playwright har installeret (`npx -w @miai/addin play
 Browsertestene erstatter ikke den manuelle test i rigtig Office (testlisten nedenfor). De fanger regressioner i UI og adaptere, før den manuelle runde.
 
 ### Demovideo
-`packages/addin/e2e/demo/` optager en kort demovideo af task pane ved siden af et simuleret dokument: korrektur som sporede ændringer, agenten med plan og godkendelse, og chat. Den bruger den simulerede Word fra browsertestene og indspillede modelsvar, så optagelsen er ens fra gang til gang og kan laves om, når brugerfladen ændrer sig. Den viser altså brugerfladen, ikke en models kvalitet eller hastighed, og scenen siger det selv i øverste hjørne.
+`packages/addin/e2e/demo/` optager en kort demovideo af task pane ved siden af et simuleret dokument: korrektur som sporede ændringer, agenten med plan og godkendelse, og chat i Word, og derefter agenten i Excel (tomme rækker, tabelformat, datalinjer og diagram). Den bruger den simulerede Word og Excel fra browsertestene og indspillede modelsvar, så optagelsen er ens fra gang til gang og kan laves om, når brugerfladen ændrer sig. Den viser altså brugerfladen, ikke en models kvalitet eller hastighed, og scenen siger det selv i øverste hjørne.
 
 ```bash
 npm run build
@@ -114,11 +114,11 @@ npm run build
 ```bash
 npx playwright test -c packages/addin/e2e/demo/playwright.config.ts
 ```
-Optagelsen (1920×1080, ca. et minut) ender i `packages/addin/demo-results/`. Til MP4:
+Optagelsen (1920×1080, ca. halvandet minut) ender i `packages/addin/demo-results/`. Til MP4:
 ```bash
 ffmpeg -i packages/addin/demo-results/demo.video.ts-demovideo/video.webm -c:v libx264 -crf 20 -pix_fmt yuv420p -movflags +faststart -an miai-demo.mp4
 ```
-Dokumentet, modelsvarene og rækkefølgen står øverst i `demo.video.ts`; scenen (dokument, billedtekster, markør) er `stage.html`. `MIAI_DEMO_PROBE=1` kører det hele igennem på få sekunder og gemmer et stillbillede pr. scene.
+Dokumentet, regnearket, modelsvarene og rækkefølgen står øverst i `demo.video.ts`; scenen (dokument, regneark, billedtekster, markør) er `stage.html`. `MIAI_DEMO_PROBE=1` kører det hele igennem på få sekunder og gemmer et stillbillede pr. scene.
 
 ## Manifester
 ```bash

@@ -5,8 +5,8 @@ import { fakeOfficeScript, type FakeOfficeOptions } from "../fixtures/office";
 import { startStaticHost } from "../fixtures/servers";
 
 /**
- * Demovideo af MIAI: task pane ved siden af et simuleret dokument, styret trin for trin.
- * Dokumentet er den simulerede Word fra browsertestene, og modelsvarene er indspillede
+ * Demovideo af MIAI: task pane ved siden af et simuleret dokument og regneark, styret trin for trin.
+ * Dokumenterne er den simulerede Word og Excel fra browsertestene, og modelsvarene er indspillede
  * (SCRIPT nedenfor), så optagelsen er ens fra gang til gang. Det er altså en illustration af
  * brugerfladen, ikke en måling af en models kvalitet eller hastighed.
  *
@@ -29,9 +29,24 @@ const DOC: NonNullable<FakeOfficeOptions["paragraphs"]> = [
   { text: "Parterne behandler alle oplysninger fortroligt, også efter aftalens ophør. Aftalen kan opsiges med 6 måneders varsel." },
 ];
 
+/** Regnearket til Excel-scenen: rå tal med tomme rækker og uden formatering. */
+const SHEET: NonNullable<FakeOfficeOptions["excel"]> = {
+  sheet: "Salg",
+  values: [
+    ["Region", "Omsætning", "Mål"],
+    ["Jylland", 412500, 400000],
+    ["", "", ""],
+    ["Sjælland", 538000, 500000],
+    ["Fyn", 187250, 220000],
+    ["", "", ""],
+    ["Nordjylland", 264900, 250000],
+    ["Bornholm", 73400, 90000],
+  ],
+};
+
 // --- Indspillede modelsvar --------------------------------------------------------------------
 type Reply = { json: string } | { stream: string };
-const SCRIPT: Record<"grammar" | "agent" | "chat", Reply> = {
+const SCRIPT: Record<"grammar" | "agent" | "chat" | "excel", Reply> = {
   grammar: {
     json: JSON.stringify({
       edits: [
@@ -66,6 +81,19 @@ const SCRIPT: Record<"grammar" | "agent" | "chat", Reply> = {
   chat: {
     stream:
       "Kunden har to forpligtelser med frist:\n\n- **Godkende leverancen** senest 30 dage efter modtagelsen.\n- **Betale** månedsvis bagud inden for 14 dage; ellers tilskrives rente.\n\nDerudover gælder fortroligheden også efter aftalens ophør.",
+  },
+  // Adresserne gælder arket, før noget ændres; rækkerne slettes til sidst (se agentens vejledning).
+  excel: {
+    json: JSON.stringify({
+      summary: "Fjerner de tomme rækker, giver tabellen et ensartet udseende og viser omsætningen pr. region i et diagram.",
+      actions: [
+        { action: "formatTable", target: "A1:C8", style: "TableStyleMedium2", reason: "Tabel med overskrift og stribede rækker" },
+        { action: "setNumberFormat", address: "B2:C8", format: "#,##0 kr.", reason: "Beløb med tusindtalsseparator" },
+        { action: "conditionalFormat", address: "B2:B8", rule: "dataBar", reason: "Datalinjer, så de største regioner ses med det samme" },
+        { action: "addChart", source: "A1:B8", type: "column", title: "Omsætning pr. region", reason: "Diagram over omsætningen" },
+        { action: "deleteEmptyRows", target: "A1:C8", reason: "Tomme rækker i tabellen" },
+      ],
+    }),
   },
 };
 
@@ -140,7 +168,7 @@ test("demovideo", async ({ page }) => {
   let next: Reply = SCRIPT.grammar;
   const model = await startModel(() => next);
   const host = await startStaticHost();
-  const office: FakeOfficeOptions = {
+  let office: FakeOfficeOptions = {
     host: "Word",
     apiSets: { WordApi: "1.6" },
     paragraphs: DOC,
@@ -237,6 +265,37 @@ test("demovideo", async ({ page }) => {
   await expect(tp.getByText("fortroligheden også efter aftalens ophør")).toBeVisible();
   await pause(page, 3800);
   await snap("3-chat");
+
+  // --- 4. Samme agent i Excel ----------------------------------------------------------------
+  await stage(page, "card", "Og i Excel", "Samme agent, samme arbejdsgang: beskriv opgaven, godkend planen.", ["Ryd op i data", "Formatér", "Diagrammer"]);
+  await pause(page, 900);
+  office = { host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SHEET, documentUrl: "https://example.invalid/Salg.xlsx" };
+  next = SCRIPT.excel;
+  await stage(page, "open", `${host.origin}/taskpane.html?excel`, "Salg 3. kvartal.xlsx");
+  await expect(tp.getByText("Direkte forbindelse")).toBeVisible();
+  await expect(page.locator("#sheet td", { hasText: "Bornholm" })).toBeVisible();
+  await stage(page, "caption", "4 · Excel", "Ryd op, formatér og vis tallene", "Planen kan fortrydes i ét klik, også formatering og slettede rækker.");
+  await pause(page, 2300);
+  await stage(page, "card");
+  await pause(page, 2000);
+  await click(page, tp.getByRole("button", { name: "Agent: redigér dokumentet", exact: true }));
+  await type(page, tp.getByRole("textbox", { name: "Hvad skal ændres?" }), "Fjern de tomme rækker, gør tabellen pæn, og vis omsætningen i et diagram");
+  await click(page, tp.getByRole("button", { name: "Kør" }));
+  const runExcel = tp.getByRole("button", { name: /^Udfør \d+ handling/ });
+  await expect(runExcel).toBeVisible();
+  await pause(page, 2200);
+  await tp.getByRole("checkbox").nth(2).scrollIntoViewIfNeeded();
+  await pause(page, 2200);
+  await runExcel.scrollIntoViewIfNeeded();
+  await pause(page, 1600);
+  await snap("4-plan");
+  await click(page, runExcel);
+  const doneExcel = tp.getByText(/handlinger udført/);
+  await expect(doneExcel).toBeVisible();
+  await doneExcel.scrollIntoViewIfNeeded();
+  await stage(page, "cursor", 820, 760);
+  await pause(page, 4800);
+  await snap("4-udfoert");
 
   // --- Afslutning ------------------------------------------------------------------------------
   await stage(

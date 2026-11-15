@@ -156,6 +156,75 @@
         background: #cfe3fb;
         box-shadow: 0 0 0 3px #cfe3fb;
       }
+      /* Regnearket (Excel-scenen): et gitter tegnet ud fra den simulerede Excels tilstand. */
+      #sheet {
+        display: none;
+        position: relative;
+        align-self: flex-start;
+        background: #fff;
+        box-shadow:
+          0 1px 3px rgba(16, 24, 40, 0.12),
+          0 8px 24px rgba(16, 24, 40, 0.08);
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+        font-size: 13px;
+      }
+      #desk.sheet {
+        padding-top: 16px;
+      }
+      #desk.sheet #page {
+        display: none;
+      }
+      #desk.sheet #sheet {
+        display: block;
+      }
+      #sheet table {
+        border-collapse: collapse;
+        table-layout: fixed;
+      }
+      #sheet th {
+        background: #f3f5f8;
+        color: var(--muted);
+        font-weight: 400;
+        font-size: 11.5px;
+        border: 1px solid #d5dae1;
+        height: 22px;
+      }
+      #sheet td {
+        border: 1px solid #e3e7ec;
+        height: 26px;
+        padding: 0 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        transition:
+          background-color 0.5s ease,
+          color 0.5s ease;
+      }
+      #sheet td.num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      #sheet td.head {
+        background: #1f5fa8;
+        color: #fff;
+        font-weight: 600;
+        border-color: #1f5fa8;
+      }
+      #sheet td.band {
+        background: #eaf2fb;
+      }
+      #chart {
+        position: absolute;
+        background: #fff;
+        border: 1px solid #cfd5dd;
+        box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
+        animation: appear 0.7s ease-out;
+      }
+      @keyframes appear {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+      }
       #pane {
         border-left: 1px solid var(--line);
         background: #fff;
@@ -301,7 +370,10 @@
         <span class="sim">Simuleret dokument · indspillede modelsvar</span>
       </div>
       <div id="work">
-        <div id="desk"><div id="page"></div></div>
+        <div id="desk">
+          <div id="page"></div>
+          <div id="sheet"></div>
+        </div>
         <div id="pane"><iframe id="tp" title="MIAI"></iframe></div>
       </div>
       <div id="caption"><span class="n"></span><span class="t"></span><span class="s"></span></div>
@@ -319,7 +391,7 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true };
+      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true, chartShown: false };
 
       // Ordvis forskel (længste fælles delsekvens) til visning af sporede ændringer.
       function diff(a, b) {
@@ -375,9 +447,130 @@
         for (const p of paras) state.seen.add(p.text);
       }
 
+      // --- Regneark -----------------------------------------------------------------------------
+      const COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"];
+      const WIDTH = { A: 150, B: 124, C: 124 };
+      const ROWS = 20;
+      const HEAD = 36,
+        COLW = 72,
+        HEADH = 23,
+        ROWH = 27;
+      const colIndex = (l) => COLS.indexOf(l);
+      /** "Ark!B2:C8" eller "B2" → { c0, r0, c1, r1 } (0 = første). */
+      function parseRange(a) {
+        const m = /^(?:.*!)?([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(a.replace(/\$/g, ""));
+        if (!m) return null;
+        return { c0: colIndex(m[1]), r0: +m[2] - 1, c1: colIndex(m[3] || m[1]), r1: +(m[4] || m[2]) - 1 };
+      }
+      const inside = (g, r, c) => g && r >= g.r0 && r <= g.r1 && c >= g.c0 && c <= g.c1;
+      const num = (v) => new Intl.NumberFormat("da-DK").format(v);
+      /** Viser et tal efter Excels formatkode – kun de former, demoen bruger. */
+      function show(v, f) {
+        if (typeof v !== "number") return esc(String(v));
+        if (!f || f === "General") return String(v);
+        if (f.includes("%")) return num(Math.round(v * 100)) + " %";
+        // Det, der står efter sidste cifferplads, er en endelse som " kr.".
+        const tail = f.slice(Math.max(f.lastIndexOf("0"), f.lastIndexOf("#")) + 1).replace(/"/g, "");
+        return (f.includes(",") ? num(v) : String(v)) + esc(tail);
+      }
+
+      /** Søjlediagram af første (kategori) og anden (værdi) kolonne i kildeområdet. */
+      function chartSvg(sheet, chart) {
+        const g = parseRange(chart.source);
+        if (!g) return "";
+        const rows = [];
+        for (let r = g.r0 + 1; r <= g.r1; r++) {
+          const v = sheet.values[r] && sheet.values[r][g.c0 + 1];
+          if (typeof v === "number") rows.push([String(sheet.values[r][g.c0]), v]);
+        }
+        const W = 372,
+          H = 286,
+          L = 54,
+          R = 12,
+          T = 44,
+          B = 30;
+        const pw = W - L - R,
+          ph = H - T - B;
+        const step = [50000, 100000, 200000, 250000, 500000].find((x) => Math.max(...rows.map((d) => d[1])) / x <= 4) || 1000000;
+        const top = Math.ceil(Math.max(...rows.map((d) => d[1])) / step) * step;
+        const y = (v) => T + ph - (v / top) * ph;
+        const slot = pw / rows.length,
+          bw = Math.min(24, slot * 0.5);
+        const max = Math.max(...rows.map((d) => d[1]));
+        let out = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Segoe UI, Helvetica Neue, Arial, sans-serif">`;
+        out += `<text x="14" y="24" font-size="13.5" font-weight="600" fill="#1b2430">${esc(chart.title || "Diagram")}</text>`;
+        for (let v = 0; v <= top; v += step) {
+          out += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${v ? "#e8ebf0" : "#aab3bf"}" />`;
+          out += `<text x="${L - 7}" y="${y(v) + 3.5}" font-size="10" text-anchor="end" fill="#5b6776">${num(v)}</text>`;
+        }
+        rows.forEach(([name, v], i) => {
+          const x = L + slot * i + (slot - bw) / 2,
+            yy = y(v),
+            h = T + ph - yy,
+            rad = Math.min(4, h);
+          // Afrundet top, lige bund ved grundlinjen.
+          out += `<path d="M${x},${yy + h}V${yy + rad}a${rad},${rad} 0 0 1 ${rad},-${rad}h${bw - 2 * rad}a${rad},${rad} 0 0 1 ${rad},${rad}V${yy + h}z" fill="#2a78d6" />`;
+          if (v === max) out += `<text x="${x + bw / 2}" y="${yy - 6}" font-size="10.5" font-weight="600" text-anchor="middle" fill="#1b2430">${num(v)}</text>`;
+          out += `<text x="${x + bw / 2}" y="${H - 11}" font-size="10" text-anchor="middle" fill="#5b6776">${esc(name)}</text>`;
+        });
+        return out + "</svg>";
+      }
+
+      function renderSheet(sheet) {
+        const tables = sheet.tables.map((t) => ({ ...t, g: parseRange(t.range) }));
+        const bars = sheet.conditionalFormats.filter((c) => /DataBar/i.test(c.type)).map((c) => parseRange(c.address));
+        const barMax = bars.map((g) => {
+          let m = 0;
+          for (let r = g.r0; r <= g.r1; r++)
+            for (let c = g.c0; c <= g.c1; c++) if (typeof (sheet.values[r] || [])[c] === "number") m = Math.max(m, sheet.values[r][c]);
+          return m;
+        });
+        let html = `<table><colgroup><col style="width:${HEAD}px">${COLS.map((l) => `<col style="width:${WIDTH[l] || COLW}px">`).join("")}</colgroup>`;
+        html += `<tr><th></th>${COLS.map((l) => `<th>${l}</th>`).join("")}</tr>`;
+        for (let r = 0; r < ROWS; r++) {
+          html += `<tr><th>${r + 1}</th>`;
+          COLS.forEach((l, c) => {
+            const v = (sheet.values[r] || [])[c];
+            const f = sheet.formats[l + (r + 1)] || {};
+            const t = tables.find((x) => x.style && inside(x.g, r, c));
+            const cls = [typeof v === "number" ? "num" : "", t ? (r === t.g.r0 ? "head" : (r - t.g.r0) % 2 ? "band" : "") : ""].filter(Boolean).join(" ");
+            let style = f.bold && !t ? "font-weight:600;" : "";
+            const b = bars.findIndex((g) => inside(g, r, c));
+            if (b >= 0 && typeof v === "number" && barMax[b]) {
+              const pct = Math.max(4, Math.round((v / barMax[b]) * 100));
+              style += `background-image:linear-gradient(to right, rgba(42,120,214,.30) ${pct}%, transparent ${pct}%);`;
+            }
+            html += `<td class="${cls}" style="${style}">${v === undefined || v === "" ? "" : show(v, f.numberFormat)}</td>`;
+          });
+          html += "</tr>";
+        }
+        html += "</table>";
+        for (const ch of sheet.charts) {
+          const at = parseRange(ch.at || "E1") || { c0: 4, r0: 0 };
+          const left = HEAD + COLS.slice(0, at.c0).reduce((n, l) => n + (WIDTH[l] || COLW), 0) + 14;
+          html += `<div id="chart" style="left:${left}px;top:${HEADH + (at.r0 + 1) * ROWH}px">${chartSvg(sheet, ch)}</div>`;
+        }
+        $("sheet").innerHTML = html;
+        // Diagrammet toner kun ind første gang; senere gentegninger (fx når rækker slettes) er rolige.
+        const chart = $("chart");
+        if (chart && state.chartShown) chart.style.animation = "none";
+        state.chartShown = !!chart;
+      }
+
       setInterval(() => {
         const api = $("tp").contentWindow && $("tp").contentWindow.__miai;
-        if (!api || !api.doc) return;
+        if (!api) return;
+        // Excel-scenen: den simulerede Excel har et ark, den simulerede Word har afsnit.
+        if (api.sheet) {
+          const sheet = api.sheet();
+          const key = JSON.stringify(sheet);
+          if (key === state.last) return;
+          state.last = key;
+          $("desk").classList.add("sheet");
+          return renderSheet(sheet);
+        }
+        if (!api.doc) return;
+        $("desk").classList.remove("sheet");
         const paras = api.doc();
         const key = JSON.stringify([paras, state.sel, !!state.tracked]);
         if (key === state.last) return;
