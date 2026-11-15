@@ -4,7 +4,7 @@
 // VIGTIGT: bridgen kan IKKE køre i main-processen – Chromiums netværksspecifik forstyrrer
 // Node's TLS-server, så håndskaber hænger. I en utility-process (uden Chromium) fungerer
 // TLS som i almindelig Node – verificeret med ELECTRON_RUN_AS_NODE + curl.
-import { app, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, Menu, Tray, nativeImage, shell, utilityProcess } from "electron";
 import { appendFileSync, existsSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -123,30 +123,64 @@ function isCertTrusted() {
   return platform.isCertTrusted(CERT_FILE);
 }
 
+// --- Dialoger -----------------------------------------------------------------------
+// En menulinje-app er ikke i forgrunden, så en dialog uden vindue kan gemme sig bag andre
+// vinduer. Og mens en sådan (app-modal) dialog er åben, er hovedtråden optaget: startes MIAI
+// igen, venter den nye i 20 s på svar (Dock-ikonet hopper) og dræber så den kørende
+// (Chromiums enkelt-instans-lås). Set på macOS i praksis. Derfor vises dialogerne som et ark på
+// et lille, synligt vindue: dialogen kommer frem, og appen svarer imens.
+const DIALOG_PAGE = `data:text/html;charset=utf-8,${encodeURIComponent(
+  '<!doctype html><meta charset="utf-8"><title>MIAI</title><body style="margin:0;background:#f6f7f9"></body>',
+)}`;
+
+/** Som dialog.showMessageBox, men synlig og uden at låse appen. */
+async function ask(options) {
+  const win = new BrowserWindow({
+    width: 520,
+    height: 300,
+    show: false,
+    title: options.title ?? "MIAI",
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: "#f6f7f9",
+    webPreferences: { sandbox: true, contextIsolation: true, javascript: false },
+  });
+  try {
+    await win.loadURL(DIALOG_PAGE);
+    win.center();
+    win.show();
+    app.focus({ steal: true });
+    win.focus();
+    return await dialog.showMessageBox(win, options);
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+}
+
 /** Viser install-fejl. EPERM = macOS blokerede adgangen (TCC) – der gives en vej til Full Disk Access. */
 function showInstallError(err) {
   if (err?.code === "EPERM" && process.platform === "darwin") {
     // I dev er det Electron-programmet selv, der skal have adgangen.
     const target = app.isPackaged ? "MIAI" : `Electron (${process.execPath})`;
-    void dialog
-      .showMessageBox({
-        type: "warning",
-        title: "Adgang nægtet af macOS",
-        message: "macOS blokerede MIAI fra at skrive i Office-appernes mapper.",
-        detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Anonymitet og sikkerhed → Fuld diskadgang, og prøv igen.`,
-        buttons: ["Åbn Indstillinger", "Luk"],
-        defaultId: 0,
-      })
-      .then((r) => {
-        if (r.response === 0) void shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
-      });
+    void ask({
+      type: "warning",
+      title: "Adgang nægtet af macOS",
+      message: "macOS blokerede MIAI fra at skrive i Office-appernes mapper.",
+      detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Anonymitet og sikkerhed → Fuld diskadgang, og prøv igen.`,
+      buttons: ["Åbn Indstillinger", "Luk"],
+      defaultId: 0,
+    }).then((r) => {
+      if (r.response === 0) void shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
+    });
     return;
   }
-  dialog.showErrorBox("MIAI", `Kunne ikke installere i Office: ${err?.message ?? String(err)}`);
+  void ask({ type: "error", title: "MIAI", message: "Kunne ikke installere i Office", detail: err?.message ?? String(err), buttons: ["OK"] });
 }
 
 function showCertResult(r) {
-  dialog.showMessageBox({
+  return ask({
     type: r.ok ? "info" : "warning",
     title: "Certifikat",
     message: r.ok ? "MIAI-certifikatet er nu betroet." : `Certifikatet blev ikke betroet: ${r.message || "ukendt fejl"}`,
@@ -167,7 +201,7 @@ function buildMenu() {
       click: () => {
         try {
           installInOffice();
-          dialog.showMessageBox({
+          ask({
             type: "info",
             title: "MIAI er installeret i Office",
             message: "Manifestet er kopieret til Word, Excel og PowerPoint.",
@@ -256,7 +290,7 @@ async function setStartAtLogin(enabled) {
   // Fra en DMG eller Overførsler kører appen fra en midlertidig sti (App Translocation),
   // som et login-element ikke kan pege på – flyt først appen til Programmer.
   if (enabled && process.platform === "darwin" && !app.isInApplicationsFolder()) {
-    const r = await dialog.showMessageBox({
+    const r = await ask({
       type: "question",
       message: "Flyt MIAI til mappen Programmer?",
       detail: "MIAI kan kun starte automatisk ved login, når appen ligger i Programmer. Appen genstarter derfra – slå så indstillingen til igen.",
@@ -276,7 +310,7 @@ async function setStartAtLogin(enabled) {
   app.setLoginItemSettings({ openAtLogin: enabled });
   const status = app.getLoginItemSettings().status;
   if (enabled && process.platform === "darwin" && status === "requires-approval") {
-    const r = await dialog.showMessageBox({
+    const r = await ask({
       type: "info",
       message: "Godkend MIAI under Login-emner",
       detail: "macOS skal godkende, at MIAI starter ved login: Systemindstillinger → Generelt → Login-emner.",
@@ -297,9 +331,7 @@ async function onSecondInstance(other) {
   log(`anden instans startet (${other?.version ?? "ukendt udgave"}): ${d.kind}`);
   secondInstanceOpen = true;
   try {
-    // En menulinje-app er ikke i forgrunden; uden focus kan dialogen gemme sig bag andre vinduer.
-    app.focus({ steal: true });
-    const r = await dialog.showMessageBox({ type: "info", title: "MIAI", message: d.message, detail: d.detail, buttons: d.buttons, defaultId: 0 });
+    const r = await ask({ type: "info", title: "MIAI", message: d.message, detail: d.detail, buttons: d.buttons, defaultId: 0 });
     if (d.kind === "switch" && r.response === 0) {
       log(`skifter til ${other.version}: ${d.execPath}`);
       app.relaunch({ execPath: d.execPath, args: [] });
@@ -318,6 +350,8 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, _argv, _cwd, other) => void onSecondInstance(other));
+  // Appen lever i menulinjen; at et dialogvindue lukkes, må ikke afslutte den (Electrons standard).
+  app.on("window-all-closed", () => {});
 
   process.on("unhandledRejection", (r) => log(`unhandledRejection: ${r}`));
   process.on("uncaughtException", (e) => log(`uncaughtException: ${e.stack ?? e}`));
@@ -357,7 +391,7 @@ if (!gotLock) {
         try {
           installInOffice();
           log("manifest opdateret i Office (ny port/token)");
-          dialog.showMessageBox({
+          ask({
             type: "info",
             title: "MIAI",
             message: "MIAI er opdateret i Office.",
@@ -374,7 +408,7 @@ if (!gotLock) {
           needTrust && "betro MIAI-certifikatet (bruges til den lokale HTTPS-forbindelse)",
           needInstall && "installere MIAI i Word, Excel og PowerPoint",
         ].filter(Boolean);
-        const r = await dialog.showMessageBox({
+        const r = await ask({
           type: "info",
           title: "Velkommen til MIAI",
           message: `MIAI Bridge kører nu på https://localhost:${PORT}`,
@@ -386,11 +420,12 @@ if (!gotLock) {
           defaultId: 0,
         });
         if (r.response === 0) {
-          if (needTrust) showCertResult(trustCert());
+          // Én dialog ad gangen.
+          if (needTrust) await showCertResult(trustCert());
           if (needInstall) {
             try {
               installInOffice();
-              dialog.showMessageBox({
+              ask({
                 type: "info",
                 title: "MIAI",
                 message: "MIAI er installeret i Office.",
