@@ -41,6 +41,10 @@ export interface ChatParams {
   responseFormat?: Record<string, unknown>;
   /** OpenAI-værktøjsdefinitioner (fx web_search). Se ADR-0010. */
   tools?: ToolSpec[];
+  /** Tænkning til/fra. Udeladt = sendes ikke (serverens standard). */
+  thinking?: "on" | "off";
+  /** Hvor meget modellen tænker. Udeladt = sendes ikke. */
+  reasoningEffort?: "low" | "medium" | "high";
   signal?: AbortSignal;
 }
 
@@ -74,6 +78,8 @@ export type ApiMessage =
   | { role: "tool"; tool_call_id: string; content: string };
 
 export interface StreamChunk {
+  /** Serveren afviste indstillingen for tænkning, så forespørgslen blev sendt uden den. */
+  thinkingIgnored?: true;
   text?: string;
   usage?: { promptTokens?: number; completionTokens?: number };
   toolCalls?: ToolCallDelta[];
@@ -199,6 +205,42 @@ export async function listModels(ep: Endpoint, signal?: AbortSignal, opts: Clien
 /** Endpoints, der har afvist stream_options (så det ikke sendes igen i denne session). */
 const noStreamOptions = new Set<string>();
 
+/**
+ * Tænkning og indsats som felter i forespørgslen (ADR-0003, tillæg). Der findes ingen fælles
+ * standard, så felterne sendes i flere dialekter på én gang:
+ *  - standard: OpenAI's `reasoning_effort` – forstås af OpenAI, Ollama og LM Studio. "none" slår
+ *    tænkningen fra hos Ollama (og nyere OpenAI-modeller).
+ *  - extensions: Ollamas `think` og `chat_template_kwargs.enable_thinking`, som vLLM og llama.cpp
+ *    giver videre til modellens chat-skabelon (Qwen3 m.fl.).
+ * Servere ignorerer typisk felter, de ikke kender; de strenge afviser dem, og så falder
+ * streamChat tilbage – først uden udvidelserne, så helt uden.
+ */
+export function thinkingFields(
+  thinking: ChatParams["thinking"],
+  effort: ChatParams["reasoningEffort"],
+): { standard: Record<string, unknown>; extensions: Record<string, unknown> } {
+  if (thinking === "off") return { standard: { reasoning_effort: "none" }, extensions: { think: false, chat_template_kwargs: { enable_thinking: false } } };
+  const standard = effort ? { reasoning_effort: effort } : {};
+  // Med en indsats bærer reasoning_effort valget; `think: true` kunne hos Ollama overskrive niveauet.
+  if (thinking === "on") return { standard, extensions: { ...(effort ? {} : { think: true }), chat_template_kwargs: { enable_thinking: true } } };
+  return { standard, extensions: {} };
+}
+
+/** Fejltekster fra servere, der afviser et af felterne for tænkning (eller en model uden tænkning). */
+const THINKING_ERROR = /think|reasoning|chat_template/i;
+
+/**
+ * Hvor meget af tænke-felterne en server+model har afvist i denne session:
+ * 1 = udvidelserne (think, chat_template_kwargs), 2 = det hele.
+ */
+const thinkingDropped = new Map<string, 1 | 2>();
+
+/** Til tests: glem, hvad servere har afvist. */
+export function resetRejectedFields(): void {
+  noStreamOptions.clear();
+  thinkingDropped.clear();
+}
+
 /** Streamer en chat completion og giver tekst-deltaer. `reasoning_content` ignoreres bevidst. */
 export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptions = {}): AsyncGenerator<StreamChunk> {
   const body: Record<string, unknown> = {
@@ -215,19 +257,53 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   // Bed om usage i strømmen: bruges til at opdage, at modellen har afkortet prompten (#3).
   if (!noStreamOptions.has(ep.baseUrl)) body.stream_options = { include_usage: true };
 
+  // Tænkning og indsats: de felter, serveren ikke allerede har afvist i denne session.
+  const thinking = thinkingFields(p.thinking, p.reasoningEffort);
+  const requested = Object.keys(thinking.standard).length + Object.keys(thinking.extensions).length > 0;
+  const thinkingKey = `${ep.baseUrl}|${p.model}`;
+  let dropped: 0 | 1 | 2 = thinkingDropped.get(thinkingKey) ?? 0;
+  const base = { ...body };
+  const withThinking = () => {
+    const out: Record<string, unknown> = { ...base };
+    if (noStreamOptions.has(ep.baseUrl)) delete out.stream_options;
+    if (dropped < 2) Object.assign(out, thinking.standard);
+    if (dropped < 1) {
+      const { chat_template_kwargs: kwargs, ...rest } = thinking.extensions;
+      Object.assign(out, rest);
+      // Brugerens egne skabelon-argumenter (extraBody) bevares; enable_thinking lægges ovenpå.
+      if (kwargs) out.chat_template_kwargs = { ...(base.chat_template_kwargs as object | undefined), ...(kwargs as object) };
+    }
+    return out;
+  };
+  const hasExtensions = Object.keys(thinking.extensions).length > 0;
+  const hasStandard = Object.keys(thinking.standard).length > 0;
+
   let res: Response;
-  let deadline = new IdleDeadline(ep.timeoutMs);
-  try {
-    res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts, deadline);
-  } catch (err) {
-    // Ældre/strenge servere afviser ukendte felter. Prøv igen uden stream_options, og husk det.
-    if (err instanceof UpstreamError && err.status === 400 && body.stream_options && /stream_options/i.test(err.message)) {
-      noStreamOptions.add(ep.baseUrl);
-      delete body.stream_options;
-      deadline = new IdleDeadline(ep.timeoutMs);
-      res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(body) }, p.signal, opts, deadline);
-    } else throw err;
+  let deadline: IdleDeadline;
+  for (;;) {
+    const sent = withThinking();
+    deadline = new IdleDeadline(ep.timeoutMs);
+    try {
+      res = await doFetch(ep, "/chat/completions", { method: "POST", body: JSON.stringify(sent) }, p.signal, opts, deadline);
+      break;
+    } catch (err) {
+      if (!(err instanceof UpstreamError && err.status === 400)) throw err;
+      // Ældre/strenge servere afviser ukendte felter. Prøv igen uden, og husk det for sessionen.
+      if (sent.stream_options && /stream_options/i.test(err.message)) {
+        noStreamOptions.add(ep.baseUrl);
+        continue;
+      }
+      if (requested && dropped < 2 && THINKING_ERROR.test(err.message)) {
+        // Uden et standardfelt er "uden udvidelserne" det samme som "uden noget".
+        dropped = dropped === 0 && hasExtensions && hasStandard ? 1 : 2;
+        thinkingDropped.set(thinkingKey, dropped);
+        continue;
+      }
+      throw err;
+    }
   }
+  // Sagt én gang pr. svar: valget blev ikke sendt, så modellen bruger sin standard.
+  if (requested && dropped === 2) yield { thinkingIgnored: true };
   const ctype = res.headers.get("content-type") ?? "";
 
   // Nogle servere ignorerer stream=true og svarer med ét JSON-objekt.

@@ -187,7 +187,11 @@ export type TaskEvent =
 // Indstillinger og politik
 // ---------------------------------------------------------------------------
 
-export type TaskWarning = "input-truncated" | "output-truncated";
+/**
+ * thinking-ignored: serveren eller modellen afviste indstillingen for tænkning/indsats, så
+ * forespørgslen blev sendt uden den (svaret er lavet med modellens standard).
+ */
+export type TaskWarning = "input-truncated" | "output-truncated" | "thinking-ignored";
 
 /**
  * Søgetjeneste til web-søgning (#12). duckduckgo = offentlig, uden opsætning (søgeord sendes til
@@ -200,6 +204,11 @@ export const SearchConfig = z.object({
   url: z.string().url().optional(),
 });
 export type SearchConfig = z.infer<typeof SearchConfig>;
+
+export const ThinkingMode = z.enum(["default", "on", "off"]);
+export type ThinkingMode = z.infer<typeof ThinkingMode>;
+export const ReasoningEffort = z.enum(["default", "low", "medium", "high"]);
+export type ReasoningEffort = z.infer<typeof ReasoningEffort>;
 
 export const StructuredOutputMode = z.enum(["json_schema", "json_object", "none"]);
 export type StructuredOutputMode = z.infer<typeof StructuredOutputMode>;
@@ -243,6 +252,14 @@ export const Settings = z.object({
   taskModels: z.record(z.string(), z.string()).default({}),
   temperature: z.number().min(0).max(2).default(0.3),
   maxTokens: z.number().int().min(16).max(65_536).default(8_192),
+  /**
+   * Tænkning (reasoning) for modeller, der kan tænke, før de svarer (Qwen3, DeepSeek-R1, gpt-oss
+   * m.fl.). default = send intet, så serveren og modellen bestemmer; off = hurtigere svar uden
+   * tænkning; on = slå den til, hvor modellen kan begge dele. Se ADR-0003, tillæg.
+   */
+  thinking: ThinkingMode.default("default"),
+  /** Hvor meget modellen tænker (OpenAI reasoning_effort). default = send intet. */
+  reasoningEffort: ReasoningEffort.default("default"),
   uiLanguage: z.enum(["da", "en"]).default("da"),
   auditLog: z.boolean().default(false),
   /**

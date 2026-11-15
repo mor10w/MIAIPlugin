@@ -225,11 +225,23 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     for await (const chunk of withVisionError(
       streamChat(
         ep,
-        { model, messages: msgs, temperature, maxTokens, presencePenalty, responseFormat, signal, tools: useTools ? tools?.specs : undefined },
+        {
+          model,
+          messages: msgs,
+          temperature,
+          maxTokens,
+          presencePenalty,
+          responseFormat,
+          signal,
+          tools: useTools ? tools?.specs : undefined,
+          thinking: settings.thinking === "default" ? undefined : settings.thinking,
+          reasoningEffort: settings.reasoningEffort === "default" ? undefined : settings.reasoningEffort,
+        },
         client,
       ),
       hasImages(req.attachments) ? `${ep.name} (${model})` : undefined,
     )) {
+      if (chunk.thinkingIgnored) warnings.add("thinking-ignored");
       if (chunk.text) push(chunk.text);
       addUsage(chunk.usage);
       if (chunk.usage) reqUsage = chunk.usage;
