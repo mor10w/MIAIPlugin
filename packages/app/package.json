@@ -11,7 +11,7 @@
     "icons": "node scripts/make-icons.mjs",
     "notices": "node ../../scripts/third-party-notices.mjs app build/THIRD-PARTY-NOTICES.txt",
     "start": "electron .",
-    "dist:mac": "npm run icons && npm run notices && electron-builder --mac --publish never",
+    "dist:mac": "npm run icons && npm run notices && electron-builder --mac --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false",
     "dist:win": "npm run icons && npm run notices && electron-builder --win --publish never",
     "test": "vitest run"
   },
@@ -42,6 +42,7 @@
       "platform.js",
       "updates.js",
       "devBuild.js",
+      "instance.js",
       "bridge-process.mjs",
       "assets/**/*"
     ],

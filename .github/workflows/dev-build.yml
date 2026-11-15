@@ -91,11 +91,21 @@ jobs:
             if ! kill -0 "$pid" 2>/dev/null; then break; fi
             sleep 2
           done
-          cat "$log" 2>/dev/null || echo "(ingen log)"
           ok=0
           grep -q "bridge-process: lytter" "$log" 2>/dev/null && ok=1
+          # En anden instans skal opdages af den kørende i stedet for at lukke uden et ord.
+          second=0
+          if [ "$ok" = 1 ]; then
+            MIAI_NO_UPDATES=1 "packages/app/dist/mac-arm64/MIAI.app/Contents/MacOS/MIAI" || true
+            for _ in $(seq 1 10); do
+              if grep -q "anden instans startet" "$log" 2>/dev/null; then second=1; break; fi
+              sleep 1
+            done
+          fi
+          cat "$log" 2>/dev/null || echo "(ingen log)"
           kill "$pid" 2>/dev/null || true
           if [ "$ok" != 1 ]; then echo "::error::Appen startede ikke bridgen inden for et minut"; exit 1; fi
+          if [ "$second" != 1 ]; then echo "::error::Den kørende app opdagede ikke, at en anden instans blev startet"; exit 1; fi
       - name: Saml filer
         env:
           VERSION: ${{ steps.version.outputs.version }}

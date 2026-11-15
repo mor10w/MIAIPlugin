@@ -75,7 +75,7 @@ Hvert push til `main`, der rører app-koden, udgiver automatisk en ny release (`
 - Appen kan godkendes i Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel* og starter bagefter.
 - Den nye udgave viser *Udviklerudgave X er installeret*, og nøgler i nøgleringen og Office-installationen virker stadig.
 
-Lokalt: `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`, usigneret med mindre et certifikat findes. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
+Lokalt: kør først `npm run build` (appen pakker add-in'et og bridgen med), og derefter `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`. Filerne ender i `packages/app/dist/`. Mac-bygget er ad hoc-signeret som udgivelserne; en helt usigneret app starter ofte ikke på Apple Silicon. Windows-bygget er usigneret. Et lokalt byg er ikke hentet fra nettet, så Gatekeeper blander sig ikke; det gør det nyttigt, når en hentet udgave ikke vil starte. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
 
 ### Licenser i de byggede filer
 MIAI er udgivet under MIT (`LICENSE`), og de pakker, den bygger på, kræver, at deres licenstekst følger med, når koden gives videre. Kildekoden henviser kun til pakkerne; det er de byggede filer, der indeholder dem. Derfor laves licensfilerne ved hvert byg og ligger ikke i repoet:

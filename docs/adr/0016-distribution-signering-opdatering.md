@@ -100,7 +100,7 @@ En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er de
 **Konsekvenser:**
 
 - Gatekeeper kender ikke en ad hoc-signatur. Efter hver hentning skal appen godkendes under Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel*.
-- En ad hoc-signatur er ny for hvert byg. macOS kan derfor spørge igen om adgang til nøgleringen og om tilladelser, der er givet til den forrige udgave. Det forsvinder med et Developer ID-certifikat (afsnit 3).
+- En ad hoc-signatur er ny for hvert byg. macOS kan derfor spørge igen om adgang til nøgleringen og om tilladelser, der er givet til den forrige udgave; Fuld diskadgang skal gives igen, og den gamle linje fjernes (set i praksis ved 0.1.8). Det forsvinder med et Developer ID-certifikat (afsnit 3).
 - Mac-runnere koster ti gange så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
 - Udviklerudgaven fylder ca. 0,1 GB af Pages' 1 GB oven i en release.
 - Udviklerudgaven er til afprøvning. Den er ikke testet ud over CI og skal ikke gives til kunder.

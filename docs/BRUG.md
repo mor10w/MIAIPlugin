@@ -68,7 +68,10 @@ Begge trin findes også i appens menu (**Betro certifikat…**, **Installer i Of
 
 **Hvis noget driller**
 
+- *Der sker ingenting, når du starter MIAI:* MIAI har intet vindue; den ligger i menulinjen (Mac) eller ved uret (Windows). Kører den allerede, siger den det nu, og er det en anden udgave, kan du skifte til den. Udgaver før 0.1.9 lukker den nye uden et ord: afslut den gamle fra menuen (eller `pkill -x MIAI` i Terminal på Mac), og start igen.
+- *Ikonet i Dock bliver ved med at hoppe (Mac):* luk en kørende MIAI som ovenfor. Hjælper det ikke, så se under Systemindstillinger → Anonymitet & sikkerhed, om MIAI er blokeret, og vælg **Åbn alligevel**.
 - *"Adgang nægtet" ved installation i Office (Mac):* MIAI skal have **Fuld diskadgang** under Systemindstillinger → Anonymitet & sikkerhed. Appen tilbyder at åbne stedet.
+- *Efter en opdatering på Mac* skal Fuld diskadgang gives igen: fjern den gamle MIAI fra listen med **−**, og tilføj den nye fra Programmer med **+**. Nøgleringen kan også spørge igen; vælg *Tillad altid*. Det skyldes, at appen endnu ikke er signeret med et Apple-certifikat, så macOS ser hver udgave som en ny app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)).
 - *Loggen* ligger i `~/Library/Application Support/MIAI/MIAI.log` (Mac) og `%APPDATA%\MIAI\MIAI.log` (Windows). Indstillingerne ligger samme sted i `config.json`.
 
 Alt kører lokalt: der er ingen sky-tjeneste og ingen CORS-opsætning, for add-in og bridge har samme adresse.

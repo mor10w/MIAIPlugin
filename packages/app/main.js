@@ -13,6 +13,7 @@ import { VERSION as BRIDGE_VERSION } from "@miai/bridge/dist/server.js";
 import { configDir } from "@miai/bridge/dist/config.js";
 import { currentPlatform } from "./platform.js";
 import { devMenuItem, setupDevBuilds, setupUpdates, updateMenuItem } from "./updates.js";
+import { launchInfo, secondInstanceDialog } from "./instance.js";
 
 /** Den faktiske port meldes af bridge-processen (pr. bruger, #11). */
 let PORT = Number(process.env.MIAI_PORT ?? 44321);
@@ -287,12 +288,36 @@ async function setStartAtLogin(enabled) {
   refreshMenu();
 }
 
+// --- En anden instans blev startet --------------------------------------------------
+let secondInstanceOpen = false;
+
+async function onSecondInstance(other) {
+  if (secondInstanceOpen) return; // flere klik giver ikke flere dialoger
+  const d = secondInstanceDialog(app.getVersion(), other, process.platform);
+  log(`anden instans startet (${other?.version ?? "ukendt udgave"}): ${d.kind}`);
+  secondInstanceOpen = true;
+  try {
+    // En menulinje-app er ikke i forgrunden; uden focus kan dialogen gemme sig bag andre vinduer.
+    app.focus({ steal: true });
+    const r = await dialog.showMessageBox({ type: "info", title: "MIAI", message: d.message, detail: d.detail, buttons: d.buttons, defaultId: 0 });
+    if (d.kind === "switch" && r.response === 0) {
+      log(`skifter til ${other.version}: ${d.execPath}`);
+      app.relaunch({ execPath: d.execPath, args: [] });
+      app.quit();
+    }
+  } finally {
+    secondInstanceOpen = false;
+  }
+}
+
 // --- Livscyklus -----------------------------------------------------------------
-const gotLock = app.requestSingleInstanceLock();
+// Den nye instans fortæller den kørende, hvilken udgave den er, så den kørende kan sige det til
+// brugeren i stedet for at lade den nye lukke uden et ord.
+const gotLock = app.requestSingleInstanceLock(launchInfo(app.getVersion(), process.execPath));
 if (!gotLock) {
   app.quit();
 } else {
-  app.on("second-instance", () => {});
+  app.on("second-instance", (_event, _argv, _cwd, other) => void onSecondInstance(other));
 
   process.on("unhandledRejection", (r) => log(`unhandledRejection: ${r}`));
   process.on("uncaughtException", (e) => log(`uncaughtException: ${e.stack ?? e}`));
