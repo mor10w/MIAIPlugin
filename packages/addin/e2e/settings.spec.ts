@@ -51,3 +51,56 @@ test("timeout kan indstilles pr. endpoint (10–1800 s) og gemmes", async ({ ope
   const saved = await tp.page.evaluate(() => JSON.parse(localStorage.getItem("miai.settings.v1") ?? "{}"));
   expect(saved.endpoints[0].timeoutMs).toBe(900_000);
 });
+
+test("tænkning og indsats: valget sendes til modellen, og afviser serveren det, vises en besked", async ({ open }) => {
+  const tp = await open({ host: "Word", selection: "Lang og indviklet tekst." });
+  const FIELDS = ["reasoning_effort", "think", "chat_template_kwargs"];
+  const choose = async (label: string, option: string) => {
+    await tp.page.getByRole("combobox", { name: label }).click();
+    await tp.page.getByRole("option", { name: option, exact: true }).click();
+  };
+  const save = async () => {
+    await tp.page.getByRole("button", { name: "Gem" }).click();
+    await expect(tp.page.getByText("Gemt.")).toBeVisible();
+  };
+
+  // Serverens standard: intet af det sendes.
+  tp.model.reply = () => ({ stream: chunks("Første svar.") });
+  await tp.run("Forenkl");
+  await expect(tp.page.getByText("Første svar.")).toBeVisible();
+  for (const f of FIELDS) expect(tp.model.lastRequest).not.toHaveProperty(f);
+
+  // Fra: sendes i alle tre dialekter, og indsatsen kan ikke vælges.
+  await tp.tab("Indstillinger");
+  await tp.section("Svar");
+  await choose("Tænkning", "Fra");
+  await expect(tp.page.getByRole("combobox", { name: "Indsats" })).toBeDisabled();
+  await save();
+  tp.model.reply = () => ({ stream: chunks("Andet svar.") });
+  await tp.tab("Handlinger");
+  await tp.run("Forenkl");
+  await expect(tp.page.getByText("Andet svar.")).toBeVisible();
+  expect(tp.model.lastRequest).toMatchObject({ reasoning_effort: "none", think: false, chat_template_kwargs: { enable_thinking: false } });
+
+  // Til med høj indsats.
+  await tp.tab("Indstillinger");
+  await tp.section("Svar");
+  await choose("Tænkning", "Til");
+  await choose("Indsats", "Høj");
+  await save();
+  tp.model.reply = () => ({ stream: chunks("Tredje svar.") });
+  await tp.tab("Handlinger");
+  await tp.run("Forenkl");
+  await expect(tp.page.getByText("Tredje svar.")).toBeVisible();
+  expect(tp.model.lastRequest).toMatchObject({ reasoning_effort: "high", chat_template_kwargs: { enable_thinking: true } });
+  expect(tp.model.lastRequest).not.toHaveProperty("think");
+  await expect(tp.page.getByText(/understøtter ikke dit valg af tænkning/)).toHaveCount(0);
+
+  // En streng server, der afviser felterne: svaret laves uden dem, og brugeren får besked.
+  tp.model.reply = (body) =>
+    FIELDS.some((f) => f in body) ? { status: 400, error: "Unrecognized request argument supplied: reasoning_effort" } : { stream: chunks("Fjerde svar.") };
+  await tp.run("Parafrasér");
+  await expect(tp.page.getByText("Fjerde svar.")).toBeVisible();
+  for (const f of FIELDS) expect(tp.model.lastRequest).not.toHaveProperty(f);
+  await expect(tp.page.getByText(/understøtter ikke dit valg af tænkning/)).toBeVisible();
+});

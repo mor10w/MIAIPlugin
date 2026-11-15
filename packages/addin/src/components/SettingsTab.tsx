@@ -32,8 +32,10 @@ import {
   type KnownTool,
   type Policy,
   type ProbeResult,
+  type ReasoningEffort,
   type Settings,
   type StructuredOutputMode,
+  type ThinkingMode,
 } from "@miai/shared";
 import {
   Add20Regular,
@@ -59,6 +61,9 @@ import { KnowledgeSection } from "./KnowledgeSection";
 const PRESETS: KnownTool[] = [...KNOWN_TOOLS, { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" }];
 
 /** presence_penalty-forudindstillinger. "" = sendes ikke (serverens standard). */
+const THINKING_MODES: ThinkingMode[] = ["default", "on", "off"];
+const EFFORTS: ReasoningEffort[] = ["default", "low", "medium", "high"];
+
 const PENALTY_PRESETS = [
   { value: "", label: "penaltyOff" },
   { value: "0.5", label: "penaltyLight" },
@@ -180,6 +185,8 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
     );
 
   /** Viser også en værdi, der er sat manuelt i config.json og ikke er en af forudindstillingerne. */
+  const thinkingLabel = (m: ThinkingMode) => t(m === "on" ? "thinkingOn" : m === "off" ? "thinkingOff" : "thinkingDefault");
+  const effortLabel = (e: ReasoningEffort) => t(e === "low" ? "effortLow" : e === "medium" ? "effortMedium" : e === "high" ? "effortHigh" : "thinkingDefault");
   const penaltyLabel = (v: number | undefined) => {
     const preset = PENALTY_PRESETS.find((p) => (p.value ? Number(p.value) : undefined) === v);
     return preset ? t(preset.label) : String(v);
@@ -486,6 +493,35 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
                 />
               </Field>
             </div>
+            {/* Tænkning og indsats (ADR-0003, tillæg): sendes i flere dialekter; serverens standard sender intet.
+                Under hinanden: to rullemenuer er for brede til to kolonner i task pane. */}
+            <Field label={t("thinking")} hint={t("thinkingHint")}>
+              <Dropdown
+                value={thinkingLabel(settings.thinking)}
+                selectedOptions={[settings.thinking]}
+                onOptionSelect={(_, d) => setSettings({ ...settings, thinking: (d.optionValue as ThinkingMode) ?? "default" })}
+              >
+                {THINKING_MODES.map((m) => (
+                  <Option key={m} value={m}>
+                    {thinkingLabel(m)}
+                  </Option>
+                ))}
+              </Dropdown>
+            </Field>
+            <Field label={t("reasoningEffort")} hint={t("reasoningEffortHint")}>
+              <Dropdown
+                disabled={settings.thinking === "off"}
+                value={effortLabel(settings.reasoningEffort)}
+                selectedOptions={[settings.reasoningEffort]}
+                onOptionSelect={(_, d) => setSettings({ ...settings, reasoningEffort: (d.optionValue as ReasoningEffort) ?? "default" })}
+              >
+                {EFFORTS.map((e) => (
+                  <Option key={e} value={e}>
+                    {effortLabel(e)}
+                  </Option>
+                ))}
+              </Dropdown>
+            </Field>
           </AccordionPanel>
         </AccordionItem>
 

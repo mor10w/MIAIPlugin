@@ -81,6 +81,11 @@ export function TaskNotices({ state, ctx, inputError }: { state: TaskState; ctx?
           <MessageBarBody>{t("warnOutputTruncated")}</MessageBarBody>
         </MessageBar>
       )}
+      {done && state.warnings?.includes("thinking-ignored") && (
+        <MessageBar intent="warning">
+          <MessageBarBody>{t("warnThinkingIgnored")}</MessageBarBody>
+        </MessageBar>
+      )}
       {done && state.stopReason === "repetition" && (
         <MessageBar intent="warning">
           <MessageBarBody>{t("stoppedRepetition")}</MessageBarBody>
