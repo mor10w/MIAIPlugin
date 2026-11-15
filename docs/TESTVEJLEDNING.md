@@ -19,6 +19,8 @@ Indhold:
 
 ---
 
+> **Kort udgave:** vil du blot vide, om MIAI kan det, demovideoen viser, så brug [tjeklisten i `docs/demo/`](demo/TJEKLISTE.md). Den gentager videoens fire forløb i rigtig Word og Excel med færdige testfiler.
+
 ## Forberedelse
 
 ### På begge maskiner
