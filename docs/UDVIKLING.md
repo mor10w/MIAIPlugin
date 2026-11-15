@@ -120,6 +120,8 @@ ffmpeg -i packages/addin/demo-results/demo.video.ts-demovideo/video.webm -c:v li
 ```
 Dokumentet, regnearket, modelsvarene og rækkefølgen står øverst i `demo.video.ts`; scenen (dokument, regneark, billedtekster, markør) er `stage.html`. `MIAI_DEMO_PROBE=1` kører det hele igennem på få sekunder og gemmer et stillbillede pr. scene.
 
+Videoen beviser ikke, at det samme virker i rigtig Office med en rigtig model. [`docs/demo/TJEKLISTE.md`](demo/TJEKLISTE.md) gentager videoens forløb i rigtig Word og Excel med testfilerne i samme mappe; kør den, før videoen bruges udadtil.
+
 ## Manifester
 ```bash
 npm run manifests
