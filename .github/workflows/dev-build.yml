@@ -84,7 +84,8 @@ jobs:
       - name: Kontrollér, at appen starter
         run: |
           log="$HOME/Library/Application Support/MIAI/MIAI.log"
-          MIAI_NO_UPDATES=1 "packages/app/dist/mac-arm64/MIAI.app/Contents/MacOS/MIAI" &
+          bin="packages/app/dist/mac-arm64/MIAI.app/Contents/MacOS/MIAI"
+          MIAI_NO_UPDATES=1 "$bin" > "$RUNNER_TEMP/first.txt" 2>&1 &
           pid=$!
           for _ in $(seq 1 30); do
             if grep -q "bridge-process: lytter" "$log" 2>/dev/null; then break; fi
@@ -93,18 +94,28 @@ jobs:
           done
           ok=0
           grep -q "bridge-process: lytter" "$log" 2>/dev/null && ok=1
-          # En anden instans skal opdages af den kørende i stedet for at lukke uden et ord.
+          # En anden instans skal lukke hurtigt, og den kørende skal opdage den
+          # (i stedet for at den nye lukker – eller hænger – uden et ord).
           second=0
+          closed=1
           if [ "$ok" = 1 ]; then
-            MIAI_NO_UPDATES=1 "packages/app/dist/mac-arm64/MIAI.app/Contents/MacOS/MIAI" || true
-            for _ in $(seq 1 10); do
-              if grep -q "anden instans startet" "$log" 2>/dev/null; then second=1; break; fi
+            MIAI_NO_UPDATES=1 "$bin" > "$RUNNER_TEMP/second.txt" 2>&1 &
+            pid2=$!
+            for _ in $(seq 1 20); do
+              if ! kill -0 "$pid2" 2>/dev/null; then break; fi
               sleep 1
             done
+            if kill -0 "$pid2" 2>/dev/null; then closed=0; kill "$pid2" 2>/dev/null || true; fi
+            sleep 2
+            grep -q "anden instans startet" "$log" 2>/dev/null && second=1
           fi
-          cat "$log" 2>/dev/null || echo "(ingen log)"
+          echo "--- processer"; ps -axo pid,ppid,etime,command | grep -i "MIAI" | grep -v grep || true
+          echo "--- MIAI.log"; cat "$log" 2>/dev/null || echo "(ingen log)"
+          echo "--- første instans"; cat "$RUNNER_TEMP/first.txt" 2>/dev/null || true
+          echo "--- anden instans"; cat "$RUNNER_TEMP/second.txt" 2>/dev/null || true
           kill "$pid" 2>/dev/null || true
           if [ "$ok" != 1 ]; then echo "::error::Appen startede ikke bridgen inden for et minut"; exit 1; fi
+          if [ "$closed" != 1 ]; then echo "::error::Den anden instans lukkede ikke inden for 20 sekunder"; exit 1; fi
           if [ "$second" != 1 ]; then echo "::error::Den kørende app opdagede ikke, at en anden instans blev startet"; exit 1; fi
       - name: Saml filer
         env:
