@@ -47,7 +47,7 @@ npm run build
 ```bash
 npm start
 ```
-Bridgen kører på `https://localhost:44321` og serverer også task pane. Er porten optaget (fx af en anden brugers bridge), vælges og huskes den næste ledige. `MIAI_PORT` låser porten.
+Bridgen kører på `https://localhost:44321` og serverer også task pane. Er porten optaget, venter bridgen op til 5 sekunder på den (typisk er det den forrige udgave, der er ved at lukke). Er den stadig optaget (fx af en anden brugers bridge), vælges og huskes den næste ledige, og MIAI App opdaterer manifestet i Office. `MIAI_PORT` låser porten.
 
 API'et kræver et adgangstoken pr. bruger (#11). Bridgen skriver dit personlige manifest med port og token i konfigurationsmappen og viser stien ved start. Sideload det:
 ```bash
