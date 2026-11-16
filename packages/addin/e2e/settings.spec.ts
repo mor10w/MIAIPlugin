@@ -8,7 +8,7 @@ test("model pr. opgave (#13): valgt model bruges kun til den opgave", async ({ o
 
   await tp.tab("Indstillinger");
   await tp.section("Modeller");
-  await tp.page.getByRole("button", { name: /Model pr\. opgave/ }).click();
+  await tp.page.getByRole("button", { name: /Undtagelser for enkelte opgaver/ }).click();
   await tp.page.getByRole("combobox", { name: "Forenkl" }).click();
   await tp.page.getByRole("option", { name: "qwen3:32b" }).click();
   await tp.page.getByRole("button", { name: "Gem" }).click();
@@ -23,6 +23,40 @@ test("model pr. opgave (#13): valgt model bruges kun til den opgave", async ({ o
   await tp.run("Parafrasér");
   await expect(tp.page.getByText("qwen3:4b")).toBeVisible();
   expect(tp.model.lastRequest?.model).toBe("qwen3:4b"); // standard: første model fra endpointen
+});
+
+test("model pr. opgavetype: én model til Ret og omskriv gælder alle dens opgaver; en undtagelse har forrang", async ({ open }) => {
+  const tp = await open({ host: "Word", selection: "Lang og indviklet tekst.", models: ["qwen3:4b", "qwen3:32b", "gemma3:12b"] });
+  tp.model.reply = () => ({ stream: chunks("Kort tekst.") });
+
+  await tp.tab("Indstillinger");
+  await tp.section("Modeller");
+  // Typerne vises med det samme – uden at folde noget ud.
+  for (const name of ["Ret og omskriv", "Skriv nyt", "Struktur, formler og data", "Agent", "Chat"])
+    await expect(tp.page.getByRole("combobox", { name })).toBeVisible();
+  await tp.page.getByRole("combobox", { name: "Ret og omskriv" }).click();
+  await tp.page.getByRole("option", { name: "qwen3:32b" }).click();
+  // Undtagelse: Oversæt skal bruge en tredje model.
+  await tp.page.getByRole("button", { name: /Undtagelser for enkelte opgaver/ }).click();
+  await tp.page.getByRole("combobox", { name: "Oversæt" }).click();
+  await tp.page.getByRole("option", { name: "gemma3:12b" }).click();
+  await tp.page.getByRole("button", { name: "Gem" }).click();
+  await expect(tp.page.getByText("Gemt.")).toBeVisible();
+
+  await tp.tab("Handlinger");
+  await tp.run("Forenkl");
+  await expect(tp.page.getByText("Kort tekst.")).toBeVisible();
+  expect(tp.model.lastRequest?.model).toBe("qwen3:32b"); // typens model
+  await tp.run("Oversæt");
+  await expect(tp.page.getByText("gemma3:12b")).toBeVisible();
+  expect(tp.model.lastRequest?.model).toBe("gemma3:12b"); // undtagelsen
+
+  tp.model.reply = () => ({ stream: chunks("Svar i chatten.") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad står der?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Svar i chatten.")).toBeVisible();
+  expect(tp.model.lastRequest?.model).toBe("qwen3:4b"); // Chat har intet valg: standard (første model)
 });
 
 test("model pr. opgave: advarsel, når modellen ikke findes på endpointen", async ({ open }) => {

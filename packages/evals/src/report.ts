@@ -1,27 +1,13 @@
+import { MODEL_GROUPS, modelGroupOf } from "@miai/shared";
 import type { CaseResult } from "./types.js";
 
 /** Samler resultater pr. model × konfiguration og pr. kategori og skriver en Markdown-rapport (#2). */
 
-/** Kategorier til anbefalinger pr. opgavetype (PLAN.md §5 og #13). */
-export const CATEGORY: Record<string, string> = {
-  grammar: "Struktureret",
-  "text-to-slides": "Struktureret",
-  diagram: "Struktureret",
-  "generate-formula": "Formler",
-  "explain-formula": "Formler",
-  rewrite: "Skrivning",
-  paraphrase: "Skrivning",
-  simplify: "Skrivning",
-  "expand-article": "Skrivning",
-  "sales-copy": "Skrivning",
-  outline: "Skrivning",
-  translate: "Oversættelse",
-  summarize: "Resumé og analyse",
-  "analyze-data": "Resumé og analyse",
-  chat: "Chat",
-  agent: "Agent",
-};
-export const categoryOf = (task: string) => CATEGORY[task] ?? "Andet";
+/**
+ * Kategorierne er de opgavetyper, brugeren vælger model til i Indstillinger (MODEL_GROUPS), så
+ * "bedste model pr. kategori" kan sættes direkte ind.
+ */
+export const categoryOf = (task: string) => MODEL_GROUPS.find((g) => g.id === modelGroupOf(task))!.label.da;
 
 export interface Aggregate {
   n: number;

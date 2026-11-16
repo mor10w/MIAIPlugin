@@ -17,6 +17,7 @@ import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
+import { chosenModel } from "./modelGroups.js";
 import {
   agentExportAllowed,
   agentScriptsAllowed,
@@ -152,7 +153,8 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     throw new UpstreamError(`Endpoint ${ep.baseUrl} er ikke tilladt af politikken.`, "POLICY");
   }
 
-  const model = req.model || settings.taskModels[task.id] || settings.defaultModel || (await cachedModels(ep, signal, client))[0];
+  // Opgavens eget valg, så dens type, så standardmodellen, så den første fra endpointen.
+  const model = req.model || chosenModel(settings, task.id) || (await cachedModels(ep, signal, client))[0];
   if (!model) throw new UpstreamError(`${ep.name} har ingen modeller. Hent eller indlæs en model i dit inference-værktøj.`, "NO_MODEL");
   emit({ type: "meta", model, endpoint: ep.name });
 

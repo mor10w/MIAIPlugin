@@ -220,7 +220,7 @@ describe("rapport", () => {
   it("aggregerer og vælger bedste model pr. kategori", () => {
     expect(aggregate(rs.filter((r) => r.model === "stor"))).toMatchObject({ n: 2, passRate: 1, firstTry: 0, afterRetry: 1 });
     const best = Object.fromEntries(bestPerCategory(rs).map((b) => [b.category, b.model]));
-    expect(best).toEqual({ "Resumé og analyse": "stor", Formler: "lille" });
+    expect(best).toEqual({ "Ret og omskriv": "stor", "Struktur, formler og data": "lille" });
   });
   it("skriver en Markdown-rapport med fejlede cases", () => {
     const md = markdownReport(rs, { endpoint: "http://x/v1", date: "2026-11-03" });
