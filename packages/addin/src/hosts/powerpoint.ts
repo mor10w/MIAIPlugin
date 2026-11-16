@@ -55,6 +55,53 @@ function setSelectedText(text: string): Promise<void> {
 const W = 960;
 const H = 540;
 
+/**
+ * Figurtyper, der kan have tekst. For de andre (billede, tabel, diagram, gruppe …) afviser
+ * PowerPoint `textFrame` med InvalidArgument – ved næste sync, så én sådan figur får hele den
+ * samlede læsning til at fejle.
+ */
+const TEXT_SHAPES = new Set(["GeometricShape", "TextBox", "Placeholder", "Callout", "Freeform"]);
+
+/** Teksten i en figur; `range` kan skrives i. Pladsholdere får altid en tekst ("" når tom). */
+interface ShapeText {
+  text?: string;
+  range?: PowerPoint.TextRange;
+}
+
+/**
+ * Læser teksten i figurerne (`type` skal være indlæst). Kun figurer, der kan have tekst, spørges;
+ * afviser PowerPoint alligevel én (fx en pladsholder, der rummer et billede), læses de én ad
+ * gangen, og den, der fejler, springes over.
+ */
+async function readShapeTexts(ctx: PowerPoint.RequestContext, shapes: PowerPoint.Shape[]): Promise<ShapeText[]> {
+  const out: ShapeText[] = shapes.map(() => ({}));
+  const candidates = shapes.flatMap((sh, i) => (TEXT_SHAPES.has(String(sh.type)) ? [i] : []));
+  const read = async (idx: number[]) => {
+    const frames = idx.map((i) => {
+      const tf = shapes[i].textFrame;
+      tf.load("hasText");
+      return tf;
+    });
+    await ctx.sync();
+    const ranges = frames.map((tf, k) => (tf.hasText || shapes[idx[k]].type === PowerPoint.ShapeType.placeholder ? tf.textRange : undefined));
+    ranges.forEach((r) => r?.load("text"));
+    await ctx.sync();
+    idx.forEach((i, k) => (out[i] = ranges[k] ? { text: ranges[k]!.text, range: ranges[k] } : {}));
+  };
+  try {
+    await read(candidates);
+  } catch {
+    for (const i of candidates) {
+      try {
+        await read([i]);
+      } catch {
+        out[i] = {};
+      }
+    }
+  }
+  return out;
+}
+
 export class PowerPointAdapter implements HostAdapter {
   readonly host = "powerpoint" as const;
 
@@ -102,20 +149,13 @@ export class PowerPointAdapter implements HostAdapter {
       slides.load("items");
       await ctx.sync();
       const shapeCols = slides.items.map((s) => {
-        s.shapes.load("items/textFrame/hasText");
+        s.shapes.load("items/type");
         return s.shapes;
       });
       await ctx.sync();
-      const ranges = shapeCols.map((col) =>
-        col.items
-          .filter((sh) => sh.textFrame.hasText)
-          .map((sh) => {
-            sh.textFrame.textRange.load("text");
-            return sh.textFrame.textRange;
-          }),
-      );
-      await ctx.sync();
-      return ranges.map((rs, i) => `--- Slide ${i + 1} ---\n${rs.map((r) => r.text).join("\n")}`).join("\n\n");
+      const texts: string[][] = [];
+      for (const col of shapeCols) texts.push((await readShapeTexts(ctx, col.items)).flatMap((t) => (t.text ? [t.text] : [])));
+      return texts.map((ts, i) => `--- Slide ${i + 1} ---\n${ts.join("\n")}`).join("\n\n");
     }).catch(() => "");
   }
 
@@ -272,13 +312,17 @@ export class PowerPointAdapter implements HostAdapter {
   // --- Agent-tilstand (#6) -----------------------------------------------------------------
 
   /** Pladsholderens rolle: titel, brødtekst/indhold, egen tekstboks eller figur uden tekst. */
-  private kind(sh: PowerPoint.Shape, phType?: string): "title" | "body" | "text" | "other" {
-    if (!sh.textFrame.hasText && sh.type !== PowerPoint.ShapeType.placeholder) return "other";
-    if (sh.type === PowerPoint.ShapeType.placeholder) {
-      const t = (phType ?? sh.name).toLowerCase();
-      return /title|titel/.test(t) && !/subtitle|undertitel/.test(t) ? "title" : "body";
-    }
-    return sh.textFrame.hasText ? "text" : "other";
+  private kind(sh: PowerPoint.Shape, t: ShapeText, phType?: string): "title" | "body" | "text" | "other" {
+    // En pladsholder uden tekstfelt (fx med et billede) er ikke noget, agenten kan skrive i.
+    if (!t.range) return "other";
+    if (sh.type === PowerPoint.ShapeType.placeholder) return this.role(sh, phType);
+    return t.text ? "text" : "other";
+  }
+
+  /** En pladsholders rolle ud fra dens type (PowerPointApi 1.8) eller navn. */
+  private role(sh: PowerPoint.Shape, phType?: string): "title" | "body" {
+    const name = (phType ?? sh.name).toLowerCase();
+    return /title|titel/.test(name) && !/subtitle|undertitel/.test(name) ? "title" : "body";
   }
 
   /** Slides med layout og figurer, plus præsentationens layouts (fra første slidemaster). */
@@ -290,27 +334,27 @@ export class PowerPointAdapter implements HostAdapter {
       masters.load("items/layouts/items/name");
       await ctx.sync();
       const shapeCols = slides.items.map((sl) => {
-        sl.shapes.load("items/name,items/type,items/textFrame/hasText");
+        sl.shapes.load("items/name,items/type");
         return sl.shapes;
       });
       await ctx.sync();
-      const texts = shapeCols.map((col) =>
+      const phs = shapeCols.map((col) =>
         col.items.map((sh) => {
-          const tr = sh.textFrame.hasText || sh.type === PowerPoint.ShapeType.placeholder ? sh.textFrame.textRange : undefined;
-          tr?.load("text");
           const ph = has("1.8") && sh.type === PowerPoint.ShapeType.placeholder ? sh.placeholderFormat : undefined;
           ph?.load("type");
-          return { tr, ph };
+          return ph;
         }),
       );
       await ctx.sync();
+      const texts: ShapeText[][] = [];
+      for (const col of shapeCols) texts.push(await readShapeTexts(ctx, col.items));
       let chars = 0;
       const out = slides.items.map((sl, i) => ({
         layout: sl.layout.name,
         shapes: shapeCols[i].items.map((sh, j) => {
-          const text = texts[i][j].tr?.text ?? "";
+          const text = texts[i][j].text ?? "";
           chars += text.length;
-          return { name: sh.name, kind: this.kind(sh, texts[i][j].ph?.type), text: chars > maxChars ? "" : text };
+          return { name: sh.name, kind: this.kind(sh, texts[i][j], phs[i][j]?.type), text: chars > maxChars ? "" : text };
         }),
       }));
       const layouts = [...new Set(masters.items.flatMap((m) => m.layouts.items.map((l) => l.name)))];
@@ -346,18 +390,12 @@ export class PowerPointAdapter implements HostAdapter {
       const slides = [...slideCol.items];
       const ids = slides.map((s) => s.id);
       const shapeCols = slides.map((sl) => {
-        sl.shapes.load("items/name,items/type,items/textFrame/hasText");
+        sl.shapes.load("items/name,items/type");
         return sl.shapes;
       });
       await ctx.sync();
-      const textOf = shapeCols.map((col) =>
-        col.items.map((sh) => {
-          const tr = sh.textFrame.hasText || sh.type === PowerPoint.ShapeType.placeholder ? sh.textFrame.textRange : undefined;
-          tr?.load("text");
-          return tr;
-        }),
-      );
-      await ctx.sync();
+      const textOf: (PowerPoint.TextRange | undefined)[][] = [];
+      for (const col of shapeCols) textOf.push((await readShapeTexts(ctx, col.items)).map((t) => t.range));
       /** Figurernes tekst, som den er nu – opdateres lokalt, når agenten ændrer den. */
       const current = textOf.map((trs) => trs.map((tr) => tr?.text ?? ""));
       // Er præsentationen ændret siden planen? (tjekkes én gang, før første handling)
@@ -449,7 +487,7 @@ export class PowerPointAdapter implements HostAdapter {
               slide.shapes.load("items/name,items/type");
               await ctx.sync();
               const phs = slide.shapes.items.filter((sh) => sh.type === PowerPoint.ShapeType.placeholder);
-              const title = phs.find((sh) => this.kind(sh) === "title") ?? phs[0];
+              const title = phs.find((sh) => this.role(sh) === "title") ?? phs[0];
               const body = phs.find((sh) => sh !== title);
               if (title) title.textFrame.textRange.text = a.title;
               if (body && a.body) await this.writeText(ctx, body.textFrame.textRange, a.body);
