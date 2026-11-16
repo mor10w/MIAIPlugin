@@ -1,11 +1,12 @@
 # Kan MIAI det, demovideoen viser?
 
-Demovideoen er optaget mod en simuleret Office med indspillede modelsvar. Denne tjekliste gentager de samme fire forløb i **rigtig Word og Excel med din egen model**, så vi ved, om videoen holder. Regn med en halv time.
+Demovideoen er optaget mod en simuleret Office med indspillede modelsvar. Denne tjekliste gentager de samme fem forløb i **rigtig Word og Excel med din egen model**, så vi ved, om videoen holder. Regn med en halv time.
 
 Filerne ligger i denne mappe:
 
 - [`Samarbejdsaftale.docx`](Samarbejdsaftale.docx): samme tekst som i videoen, med de tre fejl.
 - [`Salg.xlsx`](Salg.xlsx): samme tal som i videoen, med to tomme rækker og uden formatering.
+- [`Kvartalsrapport.pptx`](Kvartalsrapport.pptx): samme tre slides som i videoen, uden design.
 
 ## Før du går i gang
 
@@ -101,6 +102,30 @@ Arbejd på kopier af filerne. Gør hvert forløb **tre gange** (luk uden at gemm
 | 1 | | | | | | | |
 | 2 | | | | | | | |
 | 3 | | | | | | | |
+
+## 5. Design i PowerPoint
+
+1. Åbn `Kvartalsrapport.pptx` i PowerPoint (Microsoft 365; *Erstat de nuværende slides* og *Fortryd* kræver det).
+2. Handlinger → **Design: master og layout**.
+3. Skriv i feltet *Ønsker til designet*: `Rolig og professionel til bestyrelsen` → **Kør**.
+4. Se forhåndsvisningen, slå **Erstat de nuværende 3 slides** til, og vælg **Opret … slides med designet**.
+5. Vælg til sidst **Fortryd**.
+
+**Forventet**
+
+- MIAI viser et navn, en kort begrundelse, en farvepalet og en miniature pr. slide, før noget ændres.
+- Efter oprettelsen:
+  - Præsentationen har nye slides med samme design hele vejen igennem, og de gamle tre er væk.
+  - Under **Nyt slide** ligger layouts med designets navn (fx "Nordisk klar – Punkter").
+  - Indholdet fra de gamle slides (titel, tal og punkter) er med; ordlyden må gerne være strammet op.
+  - Slides ligner miniaturerne. Skrifttyperne kan afvige, hvis designets skrift ikke findes på maskinen.
+- Efter **Fortryd** er de tre oprindelige slides tilbage med deres formatering.
+
+| Kørsel | Plan i første forsøg? | Ligner slides miniaturerne? | Layouts under Nyt slide? | Fortryd virkede? | Bemærkninger |
+|---|---|---|---|---|---|
+| 1 | | | | | |
+| 2 | | | | | |
+| 3 | | | | | |
 
 ## Hvad resultatet betyder
 

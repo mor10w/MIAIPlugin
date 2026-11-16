@@ -225,6 +225,73 @@
           transform: translateY(8px);
         }
       }
+      /* Præsentationen (PowerPoint-scenen): slides i et gitter, tegnet ud fra den simulerede PowerPoint. */
+      #deck {
+        display: none;
+        align-self: flex-start;
+        width: 840px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+      }
+      #desk.deck #page,
+      #desk.deck #sheet {
+        display: none;
+      }
+      #desk.deck #deck {
+        display: grid;
+      }
+      #deck .slide {
+        position: relative;
+        aspect-ratio: 16 / 9;
+        background: #fff;
+        box-shadow:
+          0 1px 3px rgba(16, 24, 40, 0.14),
+          0 6px 18px rgba(16, 24, 40, 0.08);
+        border-radius: 4px;
+        overflow: hidden;
+        font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      }
+      #deck .slide.new {
+        animation: appear 0.7s ease-out both;
+      }
+      #deck .slide svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #deck .plain {
+        padding: 9% 8%;
+        height: 100%;
+        box-sizing: border-box;
+        color: #222;
+      }
+      #deck .plain h3 {
+        margin: 0 0 6%;
+        font-size: 15px;
+        font-weight: 600;
+      }
+      #deck .plain.title {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+      }
+      #deck .plain.title h3 {
+        font-size: 18px;
+      }
+      #deck .plain p {
+        margin: 0 0 3px;
+        font-size: 10.5px;
+        color: #444;
+      }
+      #deck .no {
+        position: absolute;
+        left: 6px;
+        bottom: 4px;
+        font-size: 9px;
+        color: #8a94a3;
+      }
       #pane {
         border-left: 1px solid var(--line);
         background: #fff;
@@ -373,6 +440,7 @@
         <div id="desk">
           <div id="page"></div>
           <div id="sheet"></div>
+          <div id="deck"></div>
         </div>
         <div id="pane"><iframe id="tp" title="MIAI"></iframe></div>
       </div>
@@ -391,7 +459,7 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true, chartShown: false };
+      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true, chartShown: false, thumbs: [], seenSlides: null };
 
       // Ordvis forskel (længste fælles delsekvens) til visning af sporede ændringer.
       function diff(a, b) {
@@ -557,9 +625,55 @@
         state.chartShown = !!chart;
       }
 
+      // --- Præsentation ---------------------------------------------------------------------------
+      // Slides med tekst tegnes enkelt. Slides fra designet har ingen figurer i simuleringen (den kan
+      // ikke tegne en .pptx); de vises med MIAI's egen forhåndsvisning af designet, som bygger på de
+      // samme skabeloner som den master, MIAI sætter ind.
+      function grabThumbs() {
+        const doc = $("tp").contentDocument;
+        const found = doc ? [...doc.querySelectorAll('svg[role="img"]')].filter((el) => /^\d+\. /.test(el.getAttribute("aria-label") || "")) : [];
+        if (found.length) state.thumbs = found.map((el) => el.outerHTML);
+      }
+
+      function renderDeck(deck) {
+        let k = 0;
+        const html = deck
+          .map((sl, i) => {
+            // Nye slides toner ind (de første, der vises, gør ikke).
+            const fresh = state.seenSlides && !state.seenSlides.has(sl.id) ? " new" : "";
+            if (sl.layout === "(fra designet)") {
+              const svg = state.thumbs[k++] || "";
+              return `<div class="slide${fresh}" style="animation-delay:${(k - 1) * 0.15}s">${svg}<span class="no">${i + 1}</span></div>`;
+            }
+            const title = sl.shapes.find((x) => x.ph === "Title" || x.ph === "CenterTitle");
+            const rest = sl.shapes.filter((x) => x !== title);
+            const isTitle = /Title Slide/.test(sl.layout);
+            const body = rest
+              .flatMap((x) => x.text.split("\n"))
+              .map((t) => `<p>${isTitle ? "" : "• "}${esc(t)}</p>`)
+              .join("");
+            return `<div class="slide${fresh}"><div class="plain${isTitle ? " title" : ""}"><h3>${esc(title ? title.text : "")}</h3>${body}</div><span class="no">${i + 1}</span></div>`;
+          })
+          .join("");
+        $("deck").innerHTML = html;
+        state.seenSlides = new Set([...(state.seenSlides || []), ...deck.map((sl) => sl.id)]);
+      }
+
       setInterval(() => {
         const api = $("tp").contentWindow && $("tp").contentWindow.__miai;
         if (!api) return;
+        // PowerPoint-scenen: den simulerede PowerPoint har en præsentation.
+        if (api.deck) {
+          grabThumbs();
+          const deck = api.deck();
+          const key = JSON.stringify([deck, state.thumbs.length]);
+          if (key === state.last) return;
+          state.last = key;
+          $("desk").classList.remove("sheet");
+          $("desk").classList.add("deck");
+          return renderDeck(deck);
+        }
+        $("desk").classList.remove("deck");
         // Excel-scenen: den simulerede Excel har et ark, den simulerede Word har afsnit.
         if (api.sheet) {
           const sheet = api.sheet();
