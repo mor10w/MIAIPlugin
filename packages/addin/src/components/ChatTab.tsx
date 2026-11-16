@@ -168,12 +168,24 @@ export function historyContent(m: Message): string {
   return `${m.content}${actions}${outcome}`.slice(0, 6_000);
 }
 
-export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAgent?: (req: AgentRequest) => void }) {
+/**
+ * Chatten bliver liggende (skjult), når brugeren skifter til en anden fane, så en samtale, der er i
+ * gang, ikke går tabt. `active` er, om fanen vises; hver gang den vises igen, genlæses de
+ * indstillinger, chatten bruger, så ændringer fra Indstillinger slår igennem.
+ */
+export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostAdapter; onUseAgent?: (req: AgentRequest) => void; active?: boolean }) {
   const { t, lang } = useI18n();
   const s = useStyles();
   const kit = useKitStyles();
   const api = useBackend();
   const [messages, setMessages] = useState<Message[]>([]);
+  // Tæller op, hver gang fanen vises igen: genlæser indstillingerne nedenfor.
+  const [shown, setShown] = useState(0);
+  const wasActive = useRef(active);
+  useEffect(() => {
+    if (active && !wasActive.current) setShown((n) => n + 1);
+    wasActive.current = active;
+  }, [active]);
   // Samtalen huskes pr. dokument (#26), når det er slået til, og dokumentet har en adresse.
   const docKey = useMemo(() => documentKey(documentUrl()), []);
   const [remember, setRemember] = useState(false);
@@ -191,7 +203,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
       },
       () => (loaded.current = true),
     );
-  }, [api, docKey]);
+  }, [api, docKey, shown]);
   useEffect(() => {
     if (!remember || !loaded.current) return;
     // Planer gemmes som tekst (opsummering og udfald) – ikke med dokumentets indhold.
@@ -228,7 +240,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   // Chatten kan selv ændre dokumentet (#19): et ændringsønske bliver til en plan i samtalen.
   const canAct = adapter.supports("agent");
   const [act, setAct] = useState(true);
-  const agentOpts = useAgentOptions(messages.length);
+  const agentOpts = useAgentOptions(`${messages.length}:${shown}`);
   /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
   const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
   // Henvisninger til celler og slides i svarene kan klikkes (#22).
@@ -241,7 +253,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
       (st) => setKnowledgeOn(st.state !== "disabled"),
       () => setKnowledgeOn(false),
     );
-  }, [api]);
+  }, [api, shown]);
   const [draft, setDraft] = useState("");
   const [useContext, setUseContext] = useState(true);
   const ctxRef = useRef<DocContext>({ host: adapter.host, text: "", isWholeDocument: false });
@@ -256,9 +268,18 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
   const [lastUserPrompt, setLastUserPrompt] = useState("");
   /** Førstegangs-hint om apply-knapperne: vises, indtil brugeren har trykket en. */
 
+  // En skjult fane mister sin rulleposition: den huskes og stilles tilbage, når chatten vises igen.
+  // Kom der nyt indhold imens (fx svaret, der blev skrevet færdigt), rulles der til bunden.
+  const scrollTop = useRef(0);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   useEffect(() => {
+    if (!activeRef.current) scrollTop.current = Number.MAX_SAFE_INTEGER;
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [messages, state.text]);
+  useEffect(() => {
+    if (active && logRef.current) logRef.current.scrollTop = scrollTop.current;
+  }, [active]);
 
   /**
    * Sender en besked. `plan` tvinger en plan fra agenten (knappen under et svar, når ordgenkendelsen
@@ -351,7 +372,7 @@ export function ChatTab({ adapter, onUseAgent }: { adapter: HostAdapter; onUseAg
 
   return (
     <div className={s.root}>
-      <div className={s.log} ref={logRef} role="log" aria-live="polite">
+      <div className={s.log} ref={logRef} onScroll={(e) => active && (scrollTop.current = e.currentTarget.scrollTop)} role="log" aria-live="polite">
         {messages.length === 0 && !running && (
           <EmptyState
             icon={ChatSparkle20Regular}

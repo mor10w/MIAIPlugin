@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures/test";
+import { chunks, expect, test } from "./fixtures/test";
 
 /** Agent-tilstand (#6): plan → bekræft → udfør, med fortryd af hele sessionen. */
 
@@ -463,4 +463,42 @@ test("kodetilstand i Word (#23): scriptet kører i sandkassen, kan fortrydes, og
   await expect(tp.page.getByText(/Bum i Word – ændringerne er rullet tilbage/)).toBeVisible();
   expect(await doc(tp)).toEqual(ORIGINAL);
   await expect(tp.page.getByRole("button", { name: "Bed modellen rette scriptet" })).toBeVisible();
+});
+
+test("chatten bevares ved faneskift: svaret skrives færdigt, planen kan stadig udføres, og kladden er der (#26)", async ({ open }) => {
+  // Uden dokumentadresse huskes intet i lageret: alt, der er der bagefter, kommer fra den kørende chat.
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  const field = tp.page.getByPlaceholder("Spørg om dit dokument…");
+  await tp.tab("Chat");
+
+  // Et langt svar, der skrives, mens brugeren kigger i Indstillinger.
+  // Teksten må ikke gentage sig selv: så afbryder vagten mod gentagelsessløjfer svaret.
+  const long = `Første del af svaret. ${Array.from({ length: 40 }, (_, i) => `Punkt ${i + 1} gælder ${i * 7 + 3} sider.`).join(" ")} Sidste sætning i svaret.`;
+  tp.model.reply = () => ({ stream: chunks(long, 3) });
+  await field.fill("Hvad handler dokumentet om?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText(/Første del af svaret/)).toBeVisible();
+  await tp.tab("Indstillinger");
+  await expect(tp.page.getByRole("button", { name: "Gem" })).toBeVisible();
+  await tp.tab("Chat");
+  await expect(tp.page.getByText(/Sidste sætning i svaret\./)).toBeVisible();
+  await expect(tp.page.getByText("Hvad handler dokumentet om?")).toBeVisible();
+
+  // En plan i samtalen kan stadig udføres efter et skift til Handlinger og tilbage.
+  const first = PARAS[1].text.split(" ").slice(0, 2).join(" ");
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Retter ordlyden i første afsnit.",
+      actions: [{ action: "replace", find: first, replace: "Ny begyndelse", reason: "Ønsket" }],
+    }),
+  });
+  await field.fill("Ændr begyndelsen af første afsnit");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByRole("button", { name: "Udfør 1 handling" })).toBeVisible();
+  await field.fill("Kladde til næste spørgsmål");
+  await tp.tab("Handlinger");
+  await tp.tab("Chat");
+  await expect(field).toHaveValue("Kladde til næste spørgsmål");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
 });

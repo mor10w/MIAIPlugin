@@ -50,6 +50,7 @@ const useStyles = makeStyles({
   tabTextOther: { [ui.mqNarrow]: { display: "none" } },
   tabTextSelected: { [ui.mqTiny]: { display: "none" } },
   body: { flex: 1, overflowY: "auto", overflowX: "hidden", padding: tokens.spacingHorizontalM, minWidth: 0 },
+  pane: { height: "100%" },
   banner: { marginBottom: tokens.spacingVerticalM },
 });
 
@@ -85,6 +86,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [lang, setLang] = useState<Lang>(Office.context.displayLanguage?.toLowerCase().startsWith("da") ? "da" : "en");
   // Efter en genindlæsning, fordi politikkens hosts blev ændret (#28), åbnes Indstillinger igen.
   const [tab, setTab] = useState<TabId>(() => (policyReloadPending() ? "settings" : "actions"));
+  const [chatOpened, setChatOpened] = useState(false);
+  if (tab === "chat" && !chatOpened) setChatOpened(true);
   /** Prompt fra chatten → udfyldes i agent-opgaven, når brugeren vælger "Gør det med agenten". */
   const [agentRequest, setAgentRequest] = useState<AgentRequest | null>(null);
   const [status, setStatus] = useState<Status>({ kind: "warn" });
@@ -185,14 +188,19 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             )}
             {tab === "actions" && <ActionsTab adapter={adapter} agentRequest={agentRequest} onAgentRequestConsumed={() => setAgentRequest(null)} />}
             {tab === "tasks" && <TasksTab />}
-            {tab === "chat" && (
-              <ChatTab
-                adapter={adapter}
-                onUseAgent={(p) => {
-                  setAgentRequest(p);
-                  setTab("actions");
-                }}
-              />
+            {/* Chatten bygges første gang, den åbnes, og bliver derefter liggende skjult, så en samtale
+                i gang (et svar, der skrives, en plan, kladden) ikke går tabt ved et kort faneskift. */}
+            {chatOpened && (
+              <div className={s.pane} hidden={tab !== "chat"}>
+                <ChatTab
+                  adapter={adapter}
+                  active={tab === "chat"}
+                  onUseAgent={(p) => {
+                    setAgentRequest(p);
+                    setTab("actions");
+                  }}
+                />
+              </div>
             )}
             {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
           </main>
