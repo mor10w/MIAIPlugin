@@ -66,6 +66,8 @@ export interface FakeOfficeOptions {
       text: string;
       style?: Record<string, unknown>;
       marks?: { start: number; end: number; bold?: boolean; italic?: boolean }[];
+      /** Figuren har intet tekstfelt, selv om typen kan have det (fx en pladsholder med et billede). */
+      noText?: boolean;
     }[];
   }[];
   /** Præsentationens layouts og deres pladsholdere (til nye slides). */
@@ -1303,6 +1305,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       name: string;
       type: string;
       ph?: string;
+      noText?: boolean;
       text: string;
       /** Figurens egen formatering (fx farve og størrelse fra skabelonen) – skal bevares. */
       style: Record<string, unknown>;
@@ -1321,6 +1324,21 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       shapes: sl.shapes.map((sh) => ({ type: "Placeholder", style: {}, marks: [], ...sh })),
     }));
     const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x));
+    // Som rigtig PowerPoint: textFrame på en figur uden tekst (billede, tabel, diagram, gruppe …)
+    // afvises med InvalidArgument – først ved næste sync, og så fejler hele den samlede læsning.
+    const TEXT_TYPES = ["GeometricShape", "TextBox", "Placeholder", "Callout", "Freeform"];
+    const noText = (sh: Sh) => !!sh.noText || !TEXT_TYPES.includes(sh.type);
+    let pending: Error | undefined;
+    const invalidArgument = () =>
+      (pending = Object.assign(new Error("The argument is invalid or missing or has an incorrect format."), {
+        code: "InvalidArgument",
+        name: "RichApi.Error",
+      }));
+    const pptSync = async () => {
+      const e = pending;
+      pending = undefined;
+      if (e) throw e;
+    };
     (w.__miai as Record<string, unknown>).deck = () => clone(deck);
     (w.__miai as Record<string, unknown>).pptx = [] as string[];
 
@@ -1367,7 +1385,13 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       strict("PowerPoint.Shape", {
         name: sh.name,
         type: sh.type,
-        textFrame: strict("PowerPoint.TextFrame", { hasText: sh.text.length > 0, textRange: textRange(sh) }),
+        get textFrame() {
+          if (noText(sh)) {
+            invalidArgument();
+            return { load() {}, hasText: false, textRange: { load() {}, text: "" } };
+          }
+          return strict("PowerPoint.TextFrame", { load() {}, hasText: sh.text.length > 0, textRange: textRange(sh) });
+        },
         placeholderFormat: strict("PowerPoint.PlaceholderFormat", { type: sh.ph ?? "Body", load() {} }),
       });
     const slideObj = (sl: Sl) =>
@@ -1378,7 +1402,12 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           return deck.indexOf(sl);
         },
         layout: { name: sl.layout, id: layouts.find((l) => l.name === sl.layout)?.id ?? "L1" },
-        shapes: { load() {}, items: sl.shapes.map(shapeObj) },
+        shapes: {
+          load(spec?: string) {
+            if (spec?.includes("textFrame") && sl.shapes.some(noText)) invalidArgument();
+          },
+          items: sl.shapes.map(shapeObj),
+        },
         delete() {
           record({ kind: "deleteSlide", id: sl.id });
           deck = deck.filter((x) => x !== sl);
@@ -1436,7 +1465,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     w.PowerPoint = strict("PowerPoint", {
       ShapeType: { placeholder: "Placeholder" },
       InsertSlideFormatting: { keepSourceFormatting: "KeepSourceFormatting" },
-      run: async (fn: (c: unknown) => unknown) => fn(strict("PowerPoint.RequestContext", { presentation, sync })),
+      run: async (fn: (c: unknown) => unknown) => fn(strict("PowerPoint.RequestContext", { presentation, sync: pptSync })),
     });
   }
 

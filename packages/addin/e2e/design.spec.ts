@@ -102,3 +102,50 @@ test("design i ældre PowerPoint: de gamle slides bevares (kan ikke fortrydes), 
   await expect(tp.page.getByText(/De gamle slides er bevaret/)).toBeVisible();
   expect((await deck(tp.page)).length).toBe(8);
 });
+
+test("præsentation med billede, tabel og en pladsholder med billede: design og opsummering læser teksten uden InvalidArgument", async ({ open }) => {
+  // Som rigtig PowerPoint afviser simuleringen textFrame på figurer uden tekst (InvalidArgument).
+  const MIXED = [
+    SLIDES[0],
+    {
+      layout: "Title and Content",
+      shapes: [
+        { name: "Title 1", ph: "Title", text: "Resultater" },
+        { name: "Picture 3", type: "Image", text: "" },
+        { name: "Table 4", type: "Table", text: "" },
+        { name: "Content 2", ph: "Body", text: "Omsætning +12 %" },
+      ],
+    },
+    {
+      layout: "Title and Content",
+      shapes: [
+        { name: "Title 1", ph: "Title", text: "Billeder fra butikkerne" },
+        { name: "Content Placeholder 2", ph: "Body", text: "", noText: true },
+      ],
+    },
+  ];
+  const tp = await open({ host: "PowerPoint", apiSets: { PowerPointApi: "1.8" }, slides: MIXED });
+  tp.model.reply = () => ({ json: JSON.stringify(PLAN) });
+  await tp.run("Design: master og layout");
+  await expect(tp.page.getByText("Nordisk klar", { exact: true })).toBeVisible();
+  await expect(tp.page.getByText(/InvalidArgument|argument is invalid/i)).toHaveCount(0);
+  const content = tp.model.lastRequest!.messages[1].content;
+  expect(content).toContain("Omsætning +12 %");
+  expect(content).toContain("Billeder fra butikkerne");
+
+  // Opsummér hele præsentationen (uden markering) læser også kun figurer med tekst.
+  tp.model.reply = () => ({ stream: ["Kort resumé."] });
+  await tp.run("Opsummér");
+  await expect(tp.page.getByText("Kort resumé.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages.map((m) => m.content).join("\n")).toContain("Omsætning +12 %");
+
+  // Agenten kan ændre teksten på et slide med billede og tabel; figurerne uden tekst røres ikke.
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Retter tallet.", actions: [{ action: "replace", find: "+12 %", replace: "+14 %", reason: "Nyt tal" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  const after = await deck(tp.page);
+  expect(after[1].shapes.map((sh) => sh.text)).toEqual(["Resultater", "", "", "Omsætning +14 %"]);
+});
