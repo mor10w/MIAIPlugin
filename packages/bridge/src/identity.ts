@@ -65,18 +65,37 @@ export function portIsFree(port: number): Promise<boolean> {
 }
 
 /**
- * Henter (eller opretter) brugerens token og port. Porten huskes, så manifestet forbliver
- * gyldigt; er den gemte port optaget, vælges den næste ledige fra standardporten og frem.
- * `fixedPort` (MIAI_PORT) bruges uændret.
+ * Hvor længe der ventes på den gemte port, før en anden vælges. Er porten optaget lige ved start,
+ * er det typisk brugerens egen, forrige bridge, der er ved at lukke (fx når appen skifter til en
+ * ny udgave). En ny port ville gøre manifestet i Office forældet, så det er værd at vente lidt.
  */
-export async function loadIdentity(configDir: string, fixedPort?: number): Promise<BridgeIdentity> {
+export const STORED_PORT_WAIT_MS = 5_000;
+
+/** Venter på, at porten bliver ledig; false, hvis den stadig er optaget efter `ms`. */
+async function waitUntilFree(port: number, ms: number): Promise<boolean> {
+  const until = Date.now() + ms;
+  for (;;) {
+    if (await portIsFree(port)) return true;
+    if (Date.now() >= until) return false;
+    await new Promise((ok) => setTimeout(ok, 250));
+  }
+}
+
+/**
+ * Henter (eller opretter) brugerens token og port. Porten huskes, så manifestet forbliver
+ * gyldigt. Er den gemte port optaget, ventes der lidt på den (se STORED_PORT_WAIT_MS); er den
+ * stadig optaget, vælges den næste ledige fra standardporten og frem. `fixedPort` (MIAI_PORT)
+ * bruges uændret.
+ */
+export async function loadIdentity(configDir: string, fixedPort?: number, opts: { waitForStoredMs?: number } = {}): Promise<BridgeIdentity> {
   const file = identityFile(configDir);
   const stored = readStored(file);
   const token = stored.token && stored.token.length >= 32 ? stored.token : randomBytes(32).toString("base64url");
 
   let port = fixedPort;
+  if (!port && stored.port && (await waitUntilFree(stored.port, opts.waitForStoredMs ?? STORED_PORT_WAIT_MS))) port = stored.port;
   if (!port) {
-    const candidates = [stored.port, ...Array.from({ length: PORT_RANGE }, (_, i) => DEFAULT_PORT + i)].filter((p): p is number => !!p);
+    const candidates = Array.from({ length: PORT_RANGE }, (_, i) => DEFAULT_PORT + i).filter((p) => p !== stored.port);
     for (const p of candidates) {
       if (await portIsFree(p)) {
         port = p;

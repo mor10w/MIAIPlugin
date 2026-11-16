@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -22,6 +22,38 @@ describe("identitet pr. bruger (#11)", () => {
 
   it("forskellige brugere (konfigurationsmapper) får forskellige tokens", async () => {
     expect((await loadIdentity(dir(), 45_102)).token).not.toBe((await loadIdentity(dir(), 45_102)).token);
+  });
+
+  const hold = (port: number) =>
+    new Promise<ReturnType<typeof createServer>>((ok, fail) => {
+      const srv = createServer();
+      srv.once("error", fail).listen(port, "127.0.0.1", () => ok(srv));
+    });
+  const remember = (d: string, port: number) => writeFileSync(identityFile(d), JSON.stringify({ token: "t".repeat(43), port }));
+
+  it("venter på den gemte port, når den kun er optaget kortvarigt (forrige udgave lukker)", async () => {
+    const d = dir();
+    remember(d, 45_210);
+    const old = await hold(45_210);
+    setTimeout(() => old.close(), 600);
+    const started = Date.now();
+    const id = await loadIdentity(d, undefined, { waitForStoredMs: 3_000 });
+    expect(id.port).toBe(45_210); // samme port: manifestet i Office er stadig gyldigt
+    expect(Date.now() - started).toBeGreaterThanOrEqual(500);
+    expect(id.token).toBe("t".repeat(43));
+  });
+
+  it("vælger en anden port, når den gemte stadig er optaget efter ventetiden", async () => {
+    const d = dir();
+    remember(d, 45_211);
+    const other = await hold(45_211);
+    try {
+      const id = await loadIdentity(d, undefined, { waitForStoredMs: 300 });
+      expect(id.port).not.toBe(45_211);
+      expect(JSON.parse(readFileSync(identityFile(d), "utf8")).port).toBe(id.port);
+    } finally {
+      other.close();
+    }
   });
 
   it("vælger næste ledige port, når den gemte er optaget – og husker den", async () => {

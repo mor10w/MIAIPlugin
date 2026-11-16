@@ -160,7 +160,8 @@ async function ask(options) {
 }
 
 /** Viser install-fejl. EPERM = macOS blokerede adgangen (TCC) – der gives en vej til Full Disk Access. */
-function showInstallError(err) {
+function showInstallError(err, lead) {
+  const prefix = lead ? `${lead}\n\n` : "";
   if (err?.code === "EPERM" && process.platform === "darwin") {
     // I dev er det Electron-programmet selv, der skal have adgangen.
     const target = app.isPackaged ? "MIAI" : `Electron (${process.execPath})`;
@@ -168,7 +169,7 @@ function showInstallError(err) {
       type: "warning",
       title: "Adgang nægtet af macOS",
       message: "macOS blokerede MIAI fra at skrive i Office-appernes mapper.",
-      detail: `Giv ${target} fuld diskadgang under Systemindstillinger → Anonymitet og sikkerhed → Fuld diskadgang, og prøv igen.`,
+      detail: `${prefix}Giv ${target} fuld diskadgang under Systemindstillinger → Anonymitet og sikkerhed → Fuld diskadgang (fjern en ældre MIAI fra listen), og vælg så Installer i Office… i MIAI-menuen.`,
       buttons: ["Åbn Indstillinger", "Luk"],
       defaultId: 0,
     }).then((r) => {
@@ -176,7 +177,7 @@ function showInstallError(err) {
     });
     return;
   }
-  void ask({ type: "error", title: "MIAI", message: "Kunne ikke installere i Office", detail: err?.message ?? String(err), buttons: ["OK"] });
+  void ask({ type: "error", title: "MIAI", message: "Kunne ikke installere i Office", detail: `${prefix}${err?.message ?? String(err)}`, buttons: ["OK"] });
 }
 
 function showCertResult(r) {
@@ -398,7 +399,9 @@ if (!gotLock) {
             detail: "Genstart Word, Excel og PowerPoint, så de bruger den nye forbindelse.",
           });
         } catch (err) {
+          // Før blev det kun logget, og Office brugte i stilhed den gamle adresse, hvor intet svarer.
           log(`kunne ikke opdatere manifest: ${err.message}`);
+          showInstallError(err, "MIAI har fået en ny adresse, men kunne ikke opdatere sig selv i Office. Indtil det er gjort, kan Office ikke nå MIAI.");
         }
       }
       const needInstall = installState === "missing";
