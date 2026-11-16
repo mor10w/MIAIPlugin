@@ -5,8 +5,9 @@ import { fakeOfficeScript, type FakeOfficeOptions } from "../fixtures/office";
 import { startStaticHost } from "../fixtures/servers";
 
 /**
- * Demovideo af MIAI: task pane ved siden af et simuleret dokument og regneark, styret trin for trin.
- * Dokumenterne er den simulerede Word og Excel fra browsertestene, og modelsvarene er indspillede
+ * Demovideo af MIAI: task pane ved siden af et simuleret dokument, regneark og en præsentation,
+ * styret trin for trin. Dokumenterne er den simulerede Word, Excel og PowerPoint fra browsertestene,
+ * og modelsvarene er indspillede
  * (SCRIPT nedenfor), så optagelsen er ens fra gang til gang. Det er altså en illustration af
  * brugerfladen, ikke en måling af en models kvalitet eller hastighed.
  *
@@ -44,9 +45,34 @@ const SHEET: NonNullable<FakeOfficeOptions["excel"]> = {
   ],
 };
 
+/** Præsentationen til PowerPoint-scenen: tre rå slides uden design. */
+const SLIDES: NonNullable<FakeOfficeOptions["slides"]> = [
+  {
+    layout: "Title Slide",
+    shapes: [
+      { name: "Title 1", ph: "Title", text: "Kvartalsrapport Q3" },
+      { name: "Subtitle 2", ph: "Subtitle", text: "Bestyrelsesmøde, november 2026" },
+    ],
+  },
+  {
+    layout: "Title and Content",
+    shapes: [
+      { name: "Title 1", ph: "Title", text: "Resultater" },
+      { name: "Content 2", ph: "Body", text: "Omsætning steg 12 %\nMarginen er 38 %\nSjælland er største region" },
+    ],
+  },
+  {
+    layout: "Title and Content",
+    shapes: [
+      { name: "Title 1", ph: "Title", text: "Næste skridt" },
+      { name: "Content 2", ph: "Body", text: "Webshop i Sverige\nTo nye butikker i Jylland" },
+    ],
+  },
+];
+
 // --- Indspillede modelsvar --------------------------------------------------------------------
 type Reply = { json: string } | { stream: string };
-const SCRIPT: Record<"grammar" | "agent" | "chat" | "excel", Reply> = {
+const SCRIPT: Record<"grammar" | "agent" | "chat" | "excel" | "design", Reply> = {
   grammar: {
     json: JSON.stringify({
       edits: [
@@ -92,6 +118,29 @@ const SCRIPT: Record<"grammar" | "agent" | "chat" | "excel", Reply> = {
         { action: "conditionalFormat", address: "B2:B8", rule: "dataBar", reason: "Datalinjer, så de største regioner ses med det samme" },
         { action: "addChart", source: "A1:B8", type: "column", title: "Omsætning pr. region", reason: "Diagram over omsætningen" },
         { action: "deleteEmptyRows", target: "A1:C8", reason: "Tomme rækker i tabellen" },
+      ],
+    }),
+  },
+  design: {
+    json: JSON.stringify({
+      name: "Nordisk klar",
+      rationale: "Rolig og troværdig til bestyrelsen: dyb blå signalerer stabilitet, og en varm orange fremhæver tallene.",
+      style: "clean",
+      palette: { background: "#FFFFFF", text: "#1B2A3A", muted: "#5B6B7B", primary: "#0A5C8A", accent: "#E07A1F" },
+      fonts: { heading: "Georgia", body: "Aptos" },
+      slides: [
+        { layout: "title", title: "Kvartalsrapport Q3", subtitle: "Bestyrelsesmøde, november 2026" },
+        {
+          layout: "kpi",
+          title: "Resultater",
+          kpis: [
+            { value: "+12 %", label: "Omsætning" },
+            { value: "38 %", label: "Margin" },
+          ],
+        },
+        { layout: "section", title: "Næste skridt" },
+        { layout: "bullets", title: "Fokus i Q4", bullets: ["Webshop i Sverige", "To nye butikker i Jylland"] },
+        { layout: "closing", title: "Tak", subtitle: "Spørgsmål?" },
       ],
     }),
   },
@@ -165,6 +214,8 @@ async function type(page: Page, field: Locator, text: string) {
 }
 
 test("demovideo", async ({ page }) => {
+  // Fejl i scenen skrives ud ved en prøvekørsel.
+  if (PROBE) page.on("pageerror", (e) => console.log("[scene]", e.message));
   let next: Reply = SCRIPT.grammar;
   const model = await startModel(() => next);
   const host = await startStaticHost();
@@ -296,6 +347,48 @@ test("demovideo", async ({ page }) => {
   await stage(page, "cursor", 820, 760);
   await pause(page, 4800);
   await snap("4-udfoert");
+
+  // --- 5. Design i PowerPoint -----------------------------------------------------------------
+  await stage(page, "card", "Og i PowerPoint", "Fra rå slides til et gennemført design – med en rigtig slidemaster.", [
+    "Master og layouts",
+    "Farver ud fra indholdet",
+    "Kan fortrydes",
+  ]);
+  await pause(page, 900);
+  office = { host: "PowerPoint", apiSets: { PowerPointApi: "1.8" }, slides: SLIDES, documentUrl: "https://example.invalid/Kvartalsrapport.pptx" };
+  next = SCRIPT.design;
+  await stage(page, "open", `${host.origin}/taskpane.html?powerpoint`, "Kvartalsrapport Q3.pptx");
+  await expect(tp.getByText("Direkte forbindelse")).toBeVisible();
+  await expect(page.locator("#deck .slide")).toHaveCount(3);
+  await stage(
+    page,
+    "caption",
+    "5 · PowerPoint",
+    "Giv præsentationen et design",
+    "MIAI laver en slidemaster med layouts ud fra indholdet. Du ser designet, før noget ændres.",
+  );
+  await pause(page, 2300);
+  await stage(page, "card");
+  await pause(page, 2000);
+  await click(page, tp.getByRole("button", { name: "Design: master og layout", exact: true }));
+  await type(page, tp.getByRole("textbox", { name: "Ønsker til designet (valgfrit)" }), "Rolig og professionel til bestyrelsen");
+  await click(page, tp.getByRole("button", { name: "Kør" }));
+  await expect(tp.getByText("Nordisk klar", { exact: true })).toBeVisible();
+  await pause(page, 2400);
+  const thumbs = tp.getByRole("img", { name: "1. Titel" });
+  await thumbs.scrollIntoViewIfNeeded();
+  await pause(page, 2600);
+  const replace = tp.getByRole("switch", { name: /Erstat de nuværende/ });
+  await replace.scrollIntoViewIfNeeded();
+  await click(page, replace);
+  const create = tp.getByRole("button", { name: /^Opret \d+ slides med designet/ });
+  await snap("5-design");
+  await click(page, create);
+  await expect(tp.getByText(/slides oprettet med designet/)).toBeVisible();
+  await expect(page.locator("#deck .slide svg")).toHaveCount(5);
+  await stage(page, "cursor", 700, 760);
+  await pause(page, 5200);
+  await snap("5-udfoert");
 
   // --- Afslutning ------------------------------------------------------------------------------
   await stage(
