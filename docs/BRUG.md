@@ -334,6 +334,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
   - Vedhæftninger går også med, når chatten laver en plan for dokumentet, fx *"indsæt tabellen fra billedet i arket"*.
   - I opfølgende beskeder husker modellen tekstfilernes indhold, men billedet sendes ikke igen.
 - **Markeringen vises**: under skrivefeltet står, hvad chatten bruger som kontekst lige nu, fx "Markering: Ark1!B2:B9", "Markering: 42 ord" eller "Intet markeret – hele dokumentet bruges". Den følger med, når du markerer noget andet.
+- **Samtalen bliver stående, når du skifter fane**, fx til Indstillinger og tilbage: et svar, der er ved at blive skrevet, skrives færdigt imens, og en plan, din kladde og dine vedhæftninger er der stadig.
 - **Samtalen huskes pr. dokument**: åbner du MIAI igen på samme dokument, er samtalen der stadig, og den går med som historik til modellen.
   - Den gemmes kun på denne maskine (i task panes lager), højst 40 beskeder pr. dokument og 20 dokumenter.
   - Dokumenter, der ikke er gemt endnu, huskes ikke.

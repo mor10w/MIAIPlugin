@@ -73,6 +73,9 @@ export const VIEWS: Record<string, (tp: Taskpane) => Promise<void>> = {
   },
   "chat-tom": async (tp) => {
     await tp.tab("Chat");
+    // Chatten bevares ved faneskift: kører visningerne efter hinanden, ryddes en tidligere samtale.
+    const reset = tp.page.getByRole("button", { name: "Ny samtale" });
+    if (await tp.page.getByText("Spørg om dit dokument", { exact: true }).isHidden()) await reset.click();
     await expect(tp.page.getByText("Spørg om dit dokument", { exact: true })).toBeVisible();
   },
   indstillinger: async (tp) => {
