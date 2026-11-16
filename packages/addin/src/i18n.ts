@@ -133,10 +133,12 @@ const da = {
   modelsFound: "{n} modeller fundet",
   defaultModel: "Standardmodel",
   firstAvailable: "(første tilgængelige)",
-  taskModels: "Model pr. opgave",
-  taskModelsHint:
-    "Vælg fx en lille, hurtig model til grammatik og oversættelse og en større til formler, diagrammer og dataanalyse. Opgaver uden valg bruger standardmodellen.",
+  groupModelsHint:
+    "Model pr. opgavetype: vælg fx en lille, hurtig model til at rette og omskrive og en større til agenten. Typer uden valg bruger standardmodellen.",
+  taskModels: "Undtagelser for enkelte opgaver",
+  taskModelsHint: "Kun hvis én opgave skal bruge en anden model end sin type. Opgaver uden valg følger typen.",
   useDefaultModel: "(standardmodel)",
+  useGroupModel: "(følg typen)",
   taskModelMissing: "Modellen findes ikke på den aktive endpoint – opgaven vil fejle, indtil du vælger en anden.",
   taskModelsNoModels: "Ingen modeller fundet. Test forbindelsen først.",
   temperature: "Temperatur",
@@ -593,10 +595,12 @@ const en: Dict = {
   modelsFound: "{n} models found",
   defaultModel: "Default model",
   firstAvailable: "(first available)",
-  taskModels: "Model per task",
-  taskModelsHint:
-    "E.g. pick a small, fast model for grammar and translation and a larger one for formulas, diagrams and data analysis. Tasks without a choice use the default model.",
+  groupModelsHint:
+    "Model per task type: choose e.g. a small, fast model for editing and rewriting and a larger one for the agent. Types without a choice use the default model.",
+  taskModels: "Exceptions for single tasks",
+  taskModelsHint: "Only if one task should use a different model than its type. Tasks without a choice follow their type.",
   useDefaultModel: "(default model)",
+  useGroupModel: "(follow the type)",
   taskModelMissing: "This model is not available on the active endpoint – the task will fail until you pick another.",
   taskModelsNoModels: "No models found. Test the connection first.",
   temperature: "Temperature",

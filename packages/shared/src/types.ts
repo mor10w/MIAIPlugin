@@ -248,7 +248,12 @@ export const Settings = z.object({
   activeEndpoint: z.string(),
   /** Standardmodel. Tom = første model, endpointen rapporterer. */
   defaultModel: z.string().default(""),
-  /** Model pr. opgave-id, fx { "explain-formula": "qwen3:14b" }. */
+  /**
+   * Model pr. opgavetype (modelGroups.ts), fx { "edit": "qwen3:4b", "agent": "qwen3:32b" }.
+   * Typer uden valg bruger standardmodellen.
+   */
+  groupModels: z.record(z.string(), z.string()).default({}),
+  /** Undtagelser for enkelte opgaver, fx { "explain-formula": "qwen3:14b" }. Har forrang for typen. */
   taskModels: z.record(z.string(), z.string()).default({}),
   temperature: z.number().min(0).max(2).default(0.3),
   maxTokens: z.number().int().min(16).max(65_536).default(8_192),

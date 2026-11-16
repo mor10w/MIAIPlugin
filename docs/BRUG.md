@@ -199,7 +199,13 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
    Pr. endpoint kan du sætte navn, basis-URL (inkl. `/v1`), API-nøgle (valgfri), **struktureret output** (`json_schema` / `json_object` / `none`) og *Skjul <think>-tankegang*.
 2. **Test forbindelse** – gemmer indstillingerne og henter modellenavnene; viser fx "3 modeller fundet".
 3. **Standardmodel** – vælg fra de fundne modeller, eller lad den første tilgængelige bruges.
-4. **Model pr. opgave** – hver opgave kan få sin egen model, fx en lille og hurtig til grammatik og oversættelse og en større til formler, diagrammer og dataanalyse. Opgaver uden valg bruger standardmodellen. Findes en valgt model ikke på den aktive endpoint (fx efter skift af værktøj), vises en advarsel.
+4. **Model pr. opgavetype** – vælg én model til hver af fem typer, fx en lille og hurtig til at rette og omskrive og en større til agenten. Typer uden valg bruger standardmodellen.
+   - **Ret og omskriv:** stavning og grammatik, omskriv, parafrasér, forenkl, oversæt, opsummér og dine egne opgaver.
+   - **Skriv nyt:** artikel, salgstekst, disposition og svar på mail.
+   - **Struktur, formler og data:** slides, diagrammer, design, formler og dataanalyse.
+   - **Agent:** planer, der ændrer dokumentet, også når chatten laver dem.
+   - **Chat:** spørgsmål og svar om dokumentet.
+   - **Undtagelser for enkelte opgaver** (foldet sammen): hvis én opgave skal bruge en anden model end sin type. Findes en valgt model ikke på den aktive endpoint (fx efter skift af værktøj), vises en advarsel.
 5. **Temperatur** (0–2) og **Maks. tokens i svar**. Samme sted:
    - **Tænkning** – modeller som Qwen3, DeepSeek-R1 og gpt-oss kan tænke, før de svarer. **Fra** giver markant hurtigere svar, **Til** grundigere. **Serverens standard** sender intet, så modellen gør, som den plejer.
    - **Indsats** – hvor meget modellen tænker (lav, middel, høj). Ikke alle modeller kan styres; de øvrige ignorerer valget. Kan ikke vælges, når tænkningen er slået fra.

@@ -462,7 +462,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
                 ))}
               </Dropdown>
             </Field>
-            <TaskModels value={settings.taskModels} models={models} onChange={(taskModels) => setSettings({ ...settings, taskModels })} />
+            <TaskModels groups={settings.groupModels} tasks={settings.taskModels} models={models} onChange={(next) => setSettings({ ...settings, ...next })} />
           </AccordionPanel>
         </AccordionItem>
 

@@ -60,7 +60,7 @@ Resultatet skrives til `packages/evals/results/<tidspunkt>.md` (rapport) og `.js
 | Dommer | Gennemsnitlig score (1–5), hvis `--judge-model` er sat |
 | Median, tokens/s | Svartid og hastighed (tokens/s kun, hvor serveren oplyser usage) |
 
-Rapporten har også **bedste model pr. kategori** (Skrivning, Oversættelse, Resumé og analyse, Struktureret, Formler, Chat). Det er grundlaget for anbefalinger pr. opgave i UI'et (#13).
+Rapporten har også **bedste model pr. kategori**. Kategorierne er de fem opgavetyper, man vælger model til i Indstillinger → Modeller (Ret og omskriv, Skriv nyt, Struktur, formler og data, Agent, Chat; `MODEL_GROUPS` i `packages/shared/src/modelGroups.ts`), så anbefalingen kan sættes direkte ind (#13).
 
 Web-søgning bruger faste søgeresultater. Der sendes intet på nettet; det er kun modellens beslutning om at søge, der måles.
 
