@@ -23,18 +23,47 @@ export const SAFE_FONTS = [
   "Cambria",
   "Garamond",
 ] as const;
+export type SafeFont = (typeof SAFE_FONTS)[number];
+
+const SERIF = /serif|times|garamond|georgia|cambria|baskerville|palatino|antiqua|playfair|merriweather|lora|minion|caslon|bodoni|didot|charter|constantia/i;
+const unquote = (s: string) => s.trim().replace(/^["']|["']$/g, "");
+
+/**
+ * Den nærmeste tilladte skrifttype for et navn, modellen har foreslået: samme navn uanset store og
+ * små bogstaver, første navn i en CSS-liste ("Inter, sans-serif"), en tilladt skrift i navnet
+ * ("Georgia Pro", "Helvetica"), ellers en seriffri eller seriffont efter navnet. Små modeller
+ * vælger ofte en skrift uden for listen; det må ikke vælte hele designet.
+ */
+export function nearestFont(value: string, role: "heading" | "body"): SafeFont {
+  const first = unquote(unquote(value).split(",")[0] ?? "");
+  const lower = first.toLowerCase();
+  const exact = SAFE_FONTS.find((f) => f.toLowerCase() === lower);
+  if (exact) return exact;
+  const contained = [...SAFE_FONTS].sort((a, b) => b.length - a.length).find((f) => lower.includes(f.toLowerCase()));
+  if (contained) return contained;
+  if (/(^|\s)helvetica/.test(lower)) return "Helvetica Neue";
+  if (!/sans/.test(lower) && SERIF.test(lower)) return role === "heading" ? "Georgia" : "Cambria";
+  return role === "heading" ? "Aptos Display" : "Aptos";
+}
+
+/** JSON Schema viser kun de tilladte skrifttyper; et andet navn oversættes til det nærmeste. */
+const designFont = (role: "heading" | "body") => z.preprocess((v) => (typeof v === "string" ? nearestFont(v, role) : v), z.enum(SAFE_FONTS));
 export const DesignFont = z.enum(SAFE_FONTS);
 
 /** Hex-farve; normaliseres til "#RRGGBB" i fixPalette (en transform kan ikke stå i JSON Schema). */
 const hex = z.string().regex(/^#?[0-9a-fA-F]{6}$/);
 const norm = (h: string) => `#${h.replace("#", "").toUpperCase()}`;
 
-export const DesignStyle = z
-  .enum(["clean", "bold", "editorial"])
+const STYLES = ["clean", "bold", "editorial"] as const;
+/** Et ukendt navn på stilen (fx "modern") giver den rolige standard i stedet for at vælte designet. */
+const knownStyle = (v: unknown) => (typeof v === "string" ? (STYLES.find((x) => x === v.trim().toLowerCase()) ?? "clean") : v);
+const StyleEnum = z
+  .enum(STYLES)
   .describe(
     "clean = light background, accent bar, lots of white space; bold = dark title/section slides with a coloured band; editorial = serif headings, thin rules, calm",
   );
-export type DesignStyle = z.infer<typeof DesignStyle>;
+export const DesignStyle = z.preprocess(knownStyle, StyleEnum);
+export type DesignStyle = z.infer<typeof StyleEnum>;
 
 const bullets = z.array(z.string().max(160)).min(1).max(8);
 
@@ -75,7 +104,7 @@ export const DesignPlan = z.object({
       accent: hex.describe("Highlights: bars, numbers, bullets"),
     })
     .describe("Colours chosen from the content's mood and subject; restrained, max two strong colours"),
-  fonts: z.object({ heading: DesignFont, body: DesignFont }),
+  fonts: z.object({ heading: designFont("heading"), body: designFont("body") }),
   slides: z.array(DesignSlide).min(1).max(40),
 });
 export type DesignPlan = z.infer<typeof DesignPlan>;
