@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { contrastRatio, DesignPlan, fixPalette, onColor } from "./design.js";
+import { contrastRatio, DesignPlan, fixPalette, nearestFont, onColor, SAFE_FONTS } from "./design.js";
 import { TASKS } from "./tasks.js";
 import { TaskRequest } from "./types.js";
 
@@ -24,9 +24,32 @@ describe("design af præsentation (ADR-0014)", () => {
     const p = DesignPlan.parse({ ...plan, palette: { ...plan.palette, primary: "0a5c8a" } });
     expect(fixPalette(p.palette).primary).toBe("#0A5C8A");
   });
-  it("afviser skrifttyper uden for Office og ukendte layouts", () => {
-    expect(DesignPlan.safeParse({ ...plan, fonts: { heading: "Comic Sans MS", body: "Aptos" } }).success).toBe(false);
+  it("en skrifttype uden for listen oversættes til den nærmeste i stedet for at vælte designet", () => {
+    const parsed = DesignPlan.parse({ ...plan, fonts: { heading: "Times New Roman", body: "Open Sans" } });
+    expect(parsed.fonts).toEqual({ heading: "Georgia", body: "Aptos" });
+    expect(DesignPlan.parse({ ...plan, fonts: { heading: "Comic Sans MS", body: "georgia" } }).fonts).toEqual({ heading: "Aptos Display", body: "Georgia" });
+    // Et ukendt navn på stilen giver standarden.
+    expect(DesignPlan.parse({ ...plan, style: "Modern" }).style).toBe("clean");
+    expect(DesignPlan.parse({ ...plan, style: "Bold" }).style).toBe("bold");
+    // Ukendte layouts afvises stadig: dem kan MIAI ikke tegne.
     expect(DesignPlan.safeParse({ ...plan, slides: [{ layout: "collage", title: "x" }] }).success).toBe(false);
+  });
+
+  it("nærmeste skrifttype: navn, CSS-liste, navn med tillæg, seriffer og seriffri", () => {
+    expect(nearestFont("calibri", "body")).toBe("Calibri");
+    expect(nearestFont('"Inter", sans-serif', "body")).toBe("Aptos");
+    expect(nearestFont("Georgia Pro", "heading")).toBe("Georgia");
+    expect(nearestFont("Helvetica", "body")).toBe("Helvetica Neue");
+    expect(nearestFont("Segoe UI Semibold", "heading")).toBe("Segoe UI");
+    expect(nearestFont("Merriweather", "body")).toBe("Cambria");
+    expect(nearestFont("Noto Sans", "heading")).toBe("Aptos Display");
+    expect(nearestFont("", "body")).toBe("Aptos");
+  });
+
+  it("skemaet til modellen viser stadig kun de tilladte skrifttyper og stile", () => {
+    const schema = JSON.stringify(z.toJSONSchema(DesignPlan));
+    expect(schema).toContain(`"enum":${JSON.stringify([...SAFE_FONTS])}`);
+    expect(schema).toContain('"enum":["clean","bold","editorial"]');
   });
   it("fixPalette sikrer læsbar kontrast og bevarer farver, der holder", () => {
     const ok = fixPalette(DesignPlan.parse(plan).palette);
