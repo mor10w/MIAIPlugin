@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test";
 import { chunks, expect, test } from "./fixtures/test";
 
 /** Indstillinger, der påvirker, hvordan modellen kaldes. */
@@ -137,4 +138,39 @@ test("tænkning og indsats: valget sendes til modellen, og afviser serveren det,
   await expect(tp.page.getByText("Fjerde svar.")).toBeVisible();
   for (const f of FIELDS) expect(tp.model.lastRequest).not.toHaveProperty(f);
   await expect(tp.page.getByText(/understøtter ikke dit valg af tænkning/)).toBeVisible();
+});
+
+/** Felter side om side (twoCol): samme højde og inden for kortet, også uden hint og med en Dropdown. */
+async function expectSideBySide(left: Locator, right: Locator) {
+  await expect(right).toBeVisible();
+  // Accordionen glider op: mål igen, til felterne er på plads (med fejlen bliver de det aldrig).
+  await expect(async () => {
+    const [l, r] = [await left.boundingBox(), await right.boundingBox()];
+    const card = await right.locator("xpath=ancestor::*[contains(@class,'fui-AccordionItem')][1]").boundingBox();
+    expect(l && r && card).toBeTruthy();
+    expect(Math.abs(l!.y - r!.y)).toBeLessThan(1);
+    expect(Math.abs(l!.height - r!.height)).toBeLessThan(1);
+    expect(l!.x + l!.width).toBeLessThanOrEqual(r!.x);
+    expect(r!.x + r!.width).toBeLessThanOrEqual(card!.x + card!.width);
+  }).toPass({ timeout: 5_000 });
+}
+
+test("Svar: Temperatur og Maks. tokens flugter og holder sig inden for kortet", async ({ open }) => {
+  const tp = await open({ host: "Word" });
+  await tp.tab("Indstillinger");
+  await tp.page.getByRole("button", { name: "Forbindelse", exact: true }).click();
+  await tp.section("Svar");
+  const field = (name: string) => tp.page.locator(".fui-Input", { has: tp.page.getByRole("spinbutton", { name }) });
+  await expectSideBySide(field("Temperatur"), field("Maks. tokens i svar"));
+});
+
+test("Søgetjeneste og SearXNG-adresse flugter og holder sig inden for kortet", async ({ open }) => {
+  const tp = await open({ host: "Word", mode: "bridge", settings: { webSearch: true, search: { provider: "searxng", url: "http://127.0.0.1:1" } } });
+  await tp.tab("Indstillinger");
+  await tp.page.getByRole("button", { name: "Forbindelse", exact: true }).click();
+  await tp.section("Privatliv og politik");
+  const searxng = tp.page.locator(".fui-Input", { has: tp.page.getByRole("textbox", { name: "SearXNG-adresse" }) });
+  await searxng.scrollIntoViewIfNeeded();
+  const provider = tp.page.locator(".fui-Dropdown", { has: tp.page.getByRole("combobox", { name: "Søgetjeneste" }) });
+  await expectSideBySide(provider, searxng);
 });
