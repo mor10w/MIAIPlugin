@@ -22,6 +22,8 @@ import {
   Text,
   Textarea,
   Tooltip,
+  dropdownClassNames,
+  inputClassNames,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
@@ -84,7 +86,16 @@ const useStyles = makeStyles({
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
   endpointHead: { display: "flex", alignItems: "center", gap: tokens.spacingHorizontalS, minWidth: 0 },
   row: { display: "flex", gap: tokens.spacingHorizontalS, alignItems: "center", flexWrap: "wrap" },
-  twoCol: { display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${ui.colMin}, 1fr))`, gap: tokens.spacingHorizontalM },
+  twoCol: {
+    display: "grid",
+    gridTemplateColumns: `repeat(auto-fit, minmax(${ui.colMin}, 1fr))`,
+    gap: tokens.spacingHorizontalM,
+    // Ellers strækkes et Field uden hint til naboens højde, og Fields egne rækker deler den ekstra plads, så feltet glider ned.
+    alignItems: "start",
+    // Input (size=20, ca. 240 px) og Dropdown (min-width 250 px) er ellers bredere end kolonnen og løber ud over kortet.
+    [`& .${inputClassNames.root}`]: { minWidth: 0 },
+    [`& .${dropdownClassNames.root}`]: { minWidth: 0 },
+  },
   grow: { flex: 1 },
   muted: { color: tokens.colorNeutralForeground3 },
   logCard: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS },
