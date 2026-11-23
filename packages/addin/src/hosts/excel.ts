@@ -1,4 +1,5 @@
 import { fitGrid, numberedRows, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import { EXCEL_ADDRESS } from "../excelAddress";
 import { mdToPlain } from "../markdown";
 import type { DocRef } from "../refs";
 import { runExcelScript } from "../script";
@@ -107,6 +108,7 @@ export function buildOverview(
 /** "'Mit ark'!A1:B2" → { sheet: "Mit ark", range: "A1:B2" } */
 export function splitAddress(address: string): { sheet: string; range: string } {
   const i = address.lastIndexOf("!");
+  if (i < 0) return { sheet: "", range: address };
   const sheet = address
     .slice(0, i)
     .replace(/^'(.*)'$/, "$1")
@@ -337,7 +339,7 @@ export class ExcelAdapter implements HostAdapter {
       if (a.action === "addPivotTable") return a.destination.includes("!") ? splitAddress(a.destination).sheet : sheetName;
       const ref = "address" in a ? a.address : "target" in a ? a.target : "source" in a ? a.source : "table" in a ? a.table : undefined;
       if (!ref) return sheetName;
-      if (ADDRESS.test(ref)) return ref.includes("!") ? splitAddress(ref).sheet : sheetName;
+      if (EXCEL_ADDRESS.test(ref)) return ref.includes("!") ? splitAddress(ref).sheet : sheetName;
       return tableSheet.get(ref) ?? sheetName;
     };
     const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
@@ -508,7 +510,7 @@ export class ExcelAdapter implements HostAdapter {
       const knownTables = (dc.excel?.tables ?? [])
         .filter((t) => (t.address.includes("!") ? splitAddress(t.address).sheet === sheetName : active))
         .map((t) => ({ name: t.name, box: rangeBox(t.address) }));
-      const isTableName = (target: string) => !ADDRESS.test(target);
+      const isTableName = (target: string) => !EXCEL_ADDRESS.test(target);
 
       // 1) Find målområderne. formatTable på et område gemmer også områdets formater (til fortryd).
       const targets = actions.map((a, i): Excel.Range | undefined => {
@@ -988,9 +990,6 @@ export class ExcelAdapter implements HostAdapter {
     });
   }
 }
-
-/** En adresse som "B2" eller "Ark1!B2:D9" (ellers er det et tabelnavn). */
-const ADDRESS = /^(?:(?:'[^']+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$/i;
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
 
