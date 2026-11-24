@@ -180,9 +180,10 @@ jobs:
           exe="MIAI-Setup-$VERSION-x64.exe"
           cp "packages/app/dist/$exe" "packages/app/dist/$exe.blockmap" out/
           # Udviklerkanalen: en installeret Windows-udviklerudgave opdaterer sig selv fra dev.yml
-          # (electron-updater, kanal "dev"). Indholdet er electron-builders latest.yml; kun navnet er
-          # et andet, så det aldrig kan forveksles med de almindelige udgivelsers feed.
-          cp packages/app/dist/latest.yml out/dev.yml
+          # (electron-updater, kanal "dev"). electron-builder skriver selv dev.yml i stedet for
+          # latest.yml, fordi versionen har prerelease-mærket "dev" (0.1.0-dev.42), så det aldrig
+          # kan forveksles med de almindelige udgivelsers feed.
+          cp packages/app/dist/dev.yml out/dev.yml
           cat out/dev.yml
           grep -qx "version: $VERSION" out/dev.yml || { echo "::error::dev.yml har ikke version $VERSION"; exit 1; }
           grep -qx "path: $exe" out/dev.yml || { echo "::error::dev.yml peger ikke på $exe"; exit 1; }
