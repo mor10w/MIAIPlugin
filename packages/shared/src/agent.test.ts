@@ -443,7 +443,20 @@ describe("agent i PowerPoint og Excel", () => {
     expect(() => AgentPlan.parse({ summary: "s", actions: [{ action: "addSheet", name: "A/B", reason: "" }] })).toThrow();
     expect(sheetOfAddress("'Mit ark'!B2")).toBe("Mit ark");
     expect(sheetOfAddress("B2")).toBeUndefined();
+    expect(sheetOfAddress("'Bob''s'!B2")).toBe("Bob's");
     expect(renderExcelStructure(excel)).toContain("Sheets:\n- Ark1 (active): A1:C5, headers: Region | Måned | Omsætning\n- Mit ark: empty");
+  });
+
+  it("checkPlan (Excel, #59): arknavn med apostrof skrives med to apostroffer og godtages", () => {
+    const excel = { tables: [], columnFormats: [], activeSheet: "Ark1", sheets: [{ name: "Bob's", headers: [] }] };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "setValues", address: "'Bob''s'!A1", values: [["x"]], reason: "" },
+        { action: "setValues", address: "'Bob's'!A1", values: [["x"]], reason: "" },
+      ],
+    });
+    expect(checkPlan(plan, { host: "excel", text: "", excel }).map((c) => c.problem)).toEqual([undefined, "bad-address"]);
   });
 
   it("readRange (#20): læsninger udføres af add-in'et før planen, aldrig som handling, og kun gyldige udføres", () => {

@@ -10,4 +10,10 @@ describe("EXCEL_ADDRESS", () => {
     expect(EXCEL_ADDRESS.test("A4-papir")).toBe(false);
     expect(EXCEL_ADDRESS.test("SUM(C2:C5)")).toBe(false);
   });
+
+  it("arknavn med apostrof skrives med to apostroffer (#59)", () => {
+    expect(EXCEL_ADDRESS.test("'Bob''s'!A1")).toBe(true);
+    expect(EXCEL_ADDRESS.test("'Q1 ''26'''!A1:B2")).toBe(true);
+    expect(EXCEL_ADDRESS.test("'Bob's'!A1")).toBe(false);
+  });
 });

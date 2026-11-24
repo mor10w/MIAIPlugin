@@ -24,7 +24,8 @@ export interface RefMatch {
   ref: DocRef;
 }
 
-const SHEET = "(?:'[^'\\n]{1,31}'|[\\p{L}\\p{N}_.]{1,31})!";
+// Citeret arknavn: en apostrof i navnet skrives som to ("'Bob''s'!A1").
+const SHEET = "(?:'(?:[^'\\n]|''){1,31}'|[\\p{L}\\p{N}_.]{1,31})!";
 const CELL = "\\$?[A-Z]{1,3}\\$?[1-9][0-9]{0,6}";
 /** Celle eller område, evt. med arknavn; ikke midt i et ord eller tal og ikke foran en bindestreg og et ord ("A4-papir"). */
 const EXCEL_RE = new RegExp(`(?<![\\p{L}\\p{N}_$!'.])(${SHEET})?(${CELL})(:${CELL})?(?![\\p{L}\\p{N}_(!]|-\\p{L})`, "gu");
