@@ -1,4 +1,5 @@
 import { rangeBox, type AgentAction, type DocContext, type HostKind } from "@miai/shared";
+import { EXCEL_ADDRESS } from "./excelAddress";
 
 /**
  * Henvisninger til steder i dokumentet (#22): celler og områder i Excel, slides i PowerPoint og
@@ -91,8 +92,6 @@ export function linkifyRefs(root: HTMLElement, find: (text: string) => RefMatch[
     node.replaceWith(frag);
   }
 }
-
-const EXCEL_ADDRESS = /^(?:(?:'[^']+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?\d+(?::\$?[A-Z]{1,3}\$?\d+)?$/i;
 
 /** Stedet i dokumentet, en handling i agentens plan gælder – eller undefined, hvis det ikke kan vises. */
 export function targetOf(a: AgentAction, ctx: DocContext): DocRef | undefined {
