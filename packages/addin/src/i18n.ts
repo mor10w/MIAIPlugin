@@ -924,6 +924,9 @@ const en: Dict = {
 };
 
 export type Lang = "da" | "en";
+
+/** Ordbøgerne pr. sprog (til test af, at oversættelserne passer sammen, #58). */
+export const dictionaries: Record<Lang, Dict> = { da, en };
 export type T = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 export function makeT(lang: Lang): T {
