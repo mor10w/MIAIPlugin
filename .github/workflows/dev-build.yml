@@ -1,7 +1,8 @@
 # Udviklerudgave af MIAI App (ADR-0016, tillæg): hvert push til main, der rører appen, bygger en
 # .dmg til Apple Silicon og en installer til Windows (x64, #40) og lægger dem som den rullende
 # forhåndsudgivelse "dev". Pages kopierer den til <pages-url>/dev/, hvor appens menupunkt
-# "Hent udviklerudgave" finder den via dev.json.
+# "Hent udviklerudgave" finder den via dev.json, og hvor en installeret Windows-udviklerudgave
+# opdaterer sig selv fra dev.yml (electron-updater).
 #
 #   Version: <version i packages/app/package.json>-dev.<kørselsnummer>, fx 0.1.0-dev.42 (intet git-tag).
 #   Signering: Mac ad hoc (intet certifikat) – Gatekeeper skal godkende appen ved første start.
@@ -176,7 +177,16 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           mkdir out
-          cp "packages/app/dist/MIAI-Setup-$VERSION-x64.exe" out/
+          exe="MIAI-Setup-$VERSION-x64.exe"
+          cp "packages/app/dist/$exe" "packages/app/dist/$exe.blockmap" out/
+          # Udviklerkanalen: en installeret Windows-udviklerudgave opdaterer sig selv fra dev.yml
+          # (electron-updater, kanal "dev"). electron-builder skriver selv dev.yml i stedet for
+          # latest.yml, fordi versionen har prerelease-mærket "dev" (0.1.0-dev.42), så det aldrig
+          # kan forveksles med de almindelige udgivelsers feed.
+          cp packages/app/dist/dev.yml out/dev.yml
+          cat out/dev.yml
+          grep -qx "version: $VERSION" out/dev.yml || { echo "::error::dev.yml har ikke version $VERSION"; exit 1; }
+          grep -qx "path: $exe" out/dev.yml || { echo "::error::dev.yml peger ikke på $exe"; exit 1; }
           ls -la out
       - uses: actions/upload-artifact@v4
         with:

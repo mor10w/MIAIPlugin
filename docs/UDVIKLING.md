@@ -76,9 +76,10 @@ Hvert push til `main`, der rører app-koden, udgiver automatisk en ny release (`
 - Den nye udgave viser *Udviklerudgave X er installeret*, og nøgler i nøgleringen og Office-installationen virker stadig.
 
 På en rigtig Windows-pc:
-- Menupunktet dukker op i en ældre udgave og henter `MIAI-Setup-…-dev.N-x64.exe` i browseren.
+- Menupunktet dukker op i en almindelig udgave og henter `MIAI-Setup-…-dev.N-x64.exe` i browseren.
 - SmartScreen kan omgås med *Flere oplysninger* → *Kør alligevel* (indtil #67), og installeren installerer oven i den gamle udgave uden admin.
 - Den nye udgave viser *Udviklerudgave X er installeret*, og certifikat, nøgler og Office-installationen virker stadig.
+- Efter næste push til `main`: *Søg efter opdateringer…* henter den nyere udviklerudgave fra `dev.yml`, beskeden *MIAI er klar til at opdatere* vises, og et klik installerer den og starter MIAI igen.
 
 Lokalt: kør først `npm run build` (appen pakker add-in'et og bridgen med), og derefter `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`. Filerne ender i `packages/app/dist/`. Mac-bygget er ad hoc-signeret som udgivelserne; en helt usigneret app starter ofte ikke på Apple Silicon. Windows-bygget er usigneret. Et lokalt byg er ikke hentet fra nettet, så Gatekeeper blander sig ikke; det gør det nyttigt, når en hentet udgave ikke vil starte. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
 
@@ -207,7 +208,8 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Office: `HKCU\Software\Microsoft\Office\16.0\WEF\Developer` har MIAI's Id og stien til det personlige manifest; efter genstart findes AI-assistent på fanen Hjem i Word, Excel og PowerPoint
 - [ ] "Start automatisk ved login" virker efter log ud/ind
 - [ ] Outlook: "Vis Outlook-manifest i Stifinder" åbner mappen; filen kan tilføjes i Outlook
-- [ ] Opdatering: installér en ældre version, udgiv en nyere → menuen viser "Genstart og opdater til …", og den nye version kører bagefter
+- [ ] Opdatering: installér en ældre version, udgiv en nyere → beskeden "MIAI er klar til at opdatere" vises (efter *Søg efter opdateringer…* eller af sig selv), menuen viser "Genstart og opdater til …", og den nye version kører bagefter
+- [ ] *Søg efter opdateringer…* i den nyeste version: beskeden "Du har den nyeste version"
 - [ ] Signeret build (når Azure Trusted Signing er sat op): ingen SmartScreen-advarsel; udgiver vises korrekt
 
 **MIAI App (Mac)**
@@ -215,6 +217,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Slå det fra igen: appen bliver kørende og starter ikke ved næste login
 - [ ] Startet fra DMG'en (ikke i Programmer): appen tilbyder at flytte sig til Programmer
 - [ ] Opgradering fra en udgave med LaunchAgent (`~/Library/LaunchAgents/dk.miai.app.plist`): filen fjernes, login-elementet er slået til, og appen starter kun én gang ved login
+- [ ] Ny udgivelse: beskeden "Ny version af MIAI" vises, menuen viser *Hent MIAI X…*, og klikket henter den rigtige dmg (arm64/x64) fra `<pages-url>/updates/`
 - [ ] Installér i Office uden adgang: dialogen om Fuld diskadgang vises, og "Åbn Indstillinger" åbner det rigtige sted
 
 **Agent i Word – formatering** (simuleringen efterligner Words regler, men kun rigtig Word kan bekræfte dem). Brug et dokument med titel, overskrifter, fed tekst, et link, en punktliste, en nummereret liste og en tabel:
