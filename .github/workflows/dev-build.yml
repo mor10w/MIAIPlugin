@@ -1,10 +1,11 @@
-# Udviklerudgave af MIAI App til macOS (ADR-0016, tillæg): hvert push til main, der rører appen,
-# bygger en .dmg til Apple Silicon og lægger den som den rullende forhåndsudgivelse "dev".
-# Pages kopierer den til <pages-url>/dev/, hvor appens menupunkt "Hent udviklerudgave" finder den.
+# Udviklerudgave af MIAI App (ADR-0016, tillæg): hvert push til main, der rører appen, bygger en
+# .dmg til Apple Silicon og en installer til Windows (x64, #40) og lægger dem som den rullende
+# forhåndsudgivelse "dev". Pages kopierer den til <pages-url>/dev/, hvor appens menupunkt
+# "Hent udviklerudgave" finder den via dev.json.
 #
 #   Version: <version i packages/app/package.json>-dev.<kørselsnummer>, fx 0.1.0-dev.42 (intet git-tag).
-#   Signering: ad hoc (intet certifikat) – Gatekeeper skal godkende appen ved første start.
-#   Windows: bygges ikke her endnu (#40).
+#   Signering: Mac ad hoc (intet certifikat) – Gatekeeper skal godkende appen ved første start.
+#              Windows usigneret – SmartScreen advarer, indtil Azure Trusted Signing er sat op (#67).
 #
 # De rigtige udgivelser (tag v*) laves stadig af release.yml.
 name: Udviklerudgave
@@ -32,11 +33,27 @@ concurrency:
   group: dev-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  mac:
-    runs-on: macos-latest # Apple Silicon
-    timeout-minutes: 45
+  # Én version til begge platforme.
+  version:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: packages/app/package.json
+          sparse-checkout-cone-mode: false
+      - id: version
+        run: |
+          base=$(node -p "require('./packages/app/package.json').version")
+          version="$base-dev.$GITHUB_RUN_NUMBER"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Udviklerversion: $version"
+
+  mac:
+    needs: version
+    runs-on: macos-latest # Apple Silicon
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,14 +63,8 @@ jobs:
       - run: npm ci
       - run: npm run build
       - name: Sæt udviklerversion
-        id: version
         working-directory: packages/app
-        run: |
-          base=$(node -p "require('./package.json').version")
-          version="$base-dev.$GITHUB_RUN_NUMBER"
-          npm pkg set version="$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Udviklerversion: $version"
+        run: npm pkg set version="${{ needs.version.outputs.version }}"
       - name: Byg .dmg (Apple Silicon, ad hoc-signeret)
         working-directory: packages/app
         env:
@@ -118,17 +129,9 @@ jobs:
           if [ "$closed" != 1 ]; then echo "::error::Den anden instans lukkede ikke inden for 20 sekunder"; exit 1; fi
           if [ "$second" != 1 ]; then echo "::error::Den kørende app opdagede ikke, at en anden instans blev startet"; exit 1; fi
       - name: Saml filer
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir out
           cp packages/app/dist/*.dmg out/
-          file=$(basename out/*.dmg)
-          node -e '
-            const [version, file, commit] = process.argv.slice(1);
-            process.stdout.write(JSON.stringify({ version, file, commit, date: new Date().toISOString() }, null, 2) + "\n");
-          ' "$VERSION" "$file" "$GITHUB_SHA" > out/dev.json
-          cat out/dev.json
           ls -la out
       - uses: actions/upload-artifact@v4
         with:
@@ -136,8 +139,55 @@ jobs:
           path: out/
           retention-days: 14
 
+  win:
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Sæt udviklerversion
+        working-directory: packages/app
+        run: npm pkg set version="${{ needs.version.outputs.version }}"
+      - name: Byg installer (Windows x64, usigneret)
+        working-directory: packages/app
+        run: |
+          npm run icons
+          npm run notices
+          npx electron-builder --win nsis --x64 --publish never
+      - name: Kontrollér, at licenserne følger med
+        run: |
+          res="packages/app/dist/win-unpacked/resources"
+          for f in LICENSE.txt THIRD-PARTY-NOTICES.txt addin/LICENSE.txt addin/THIRD-PARTY-NOTICES.txt; do
+            test -s "$res/$f" || { echo "::error::$f mangler i appen"; exit 1; }
+          done
+          grep -q "ManInfo ApS" "$res/LICENSE.txt"
+          grep -c "^Licens: " "$res/THIRD-PARTY-NOTICES.txt" "$res/addin/THIRD-PARTY-NOTICES.txt"
+      - name: Saml filer
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir out
+          cp "packages/app/dist/MIAI-Setup-$VERSION-x64.exe" out/
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: miai-dev-win
+          path: out/
+          retention-days: 14
+
   publish:
-    needs: mac
+    # Begge platforme skal være bygget: den rullende udgivelse erstattes, så en manglende platform
+    # ville forsvinde fra /dev/ indtil næste push.
+    needs: [version, mac, win]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -146,18 +196,34 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: miai-dev-mac
+          pattern: miai-dev-*
+          merge-multiple: true
           path: out
+      - name: dev.json
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          dmg=$(cd out && ls *.dmg)
+          exe=$(cd out && ls *.exe)
+          # files: ét filnavn pr. platform (devBuild.js læser det). file: Mac-dmg'en til udviklerudgaver
+          # fra før #40, som kun kender det felt.
+          node -e '
+            const [version, dmg, exe, commit] = process.argv.slice(1);
+            const info = { version, files: { "darwin-arm64": dmg, "win32-x64": exe }, file: dmg, commit, date: new Date().toISOString() };
+            process.stdout.write(JSON.stringify(info, null, 2) + "\n");
+          ' "$VERSION" "$dmg" "$exe" "$GITHUB_SHA" > out/dev.json
+          cat out/dev.json
+          ls -la out
       - name: Forhåndsudgivelsen "dev"
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.mac.outputs.version }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
           # Én rullende udgivelse: den gamle (og dens tag) erstattes, så der altid kun ligger den nyeste.
           gh release delete dev --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || echo "Ingen tidligere udviklerudgave."
           gh release create dev out/* --repo "$GITHUB_REPOSITORY" --prerelease --latest=false --target "$GITHUB_SHA" \
             --title "MIAI udviklerudgave $VERSION" \
-            --notes "Bygget automatisk fra main (${GITHUB_SHA::7}). Kun macOS på Apple Silicon, ad hoc-signeret. Erstattes ved næste push – brug en rigtig udgivelse (v*) til andet end afprøvning."
+            --notes "Bygget automatisk fra main (${GITHUB_SHA::7}). macOS på Apple Silicon (ad hoc-signeret) og Windows x64 (usigneret). Erstattes ved næste push – brug en rigtig udgivelse (v*) til andet end afprøvning."
       - name: Opdatér Pages (/dev/)
         env:
           GH_TOKEN: ${{ github.token }}

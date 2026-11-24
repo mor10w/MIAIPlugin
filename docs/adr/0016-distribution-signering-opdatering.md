@@ -89,20 +89,22 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
 
 En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er der brug for at kunne afprøve det, der lige er merget, uden den ceremoni.
 
-- **Hvad:** `.github/workflows/dev-build.yml` bygger en `.dmg` til Apple Silicon ved hvert push til `main`, der rører appen (ikke ved rene dokumentations-, eval- eller e2e-ændringer).
+- **Hvad:** `.github/workflows/dev-build.yml` bygger en `.dmg` til Apple Silicon og en NSIS-installer til Windows (x64) ved hvert push til `main`, der rører appen (ikke ved rene dokumentations-, eval- eller e2e-ændringer). Begge skal lykkes, før der udgives; ellers ville den manglende platform forsvinde fra `/dev/` indtil næste push.
 - **Version:** `<version i package.json>-dev.<kørselsnummer>`, fx `0.1.0-dev.42`. Intet git-tag og ingen ændring i repoet; nummeret sættes kun i bygget.
-- **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json` (version, filnavn, commit, dato), fordi repoet er privat.
-- **I appen:** menupunktet *Hent udviklerudgave X…* vises, når `dev.json` peger på et nyere byg end det installerede. Det åbner hentningen i browseren; appen installerer ikke selv. Kun en udviklerversion og et rent `.dmg`-filnavn i feedets egen mappe accepteres, så feedet ikke kan sende brugeren andre steder hen.
+- **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json`, fordi repoet er privat. `dev.json` har version, commit, dato og ét filnavn pr. platform (`files`, fx `"win32-x64"`). Desuden har den `file` med Mac-filen, som udviklerudgaver fra før Windows-bygget læser.
+- **I appen:** menupunktet *Hent udviklerudgave X…* vises, når `dev.json` peger på et nyere byg end det installerede. Det åbner hentningen i browseren; appen installerer ikke selv. På Windows køres installeren, som installerer oven i den nuværende udgave. Kun en udviklerversion og et rent filnavn med platformens filtype (`.dmg` på Mac, `.exe` på Windows) i feedets egen mappe accepteres, så feedet ikke kan sende brugeren andre steder hen.
 - **To spor, der ikke blandes:** en installeret udviklerudgave følger kun udviklersporet (electron-updater er slået fra i den), og "seneste release" på Pages omfatter ikke forhåndsudgivelser. `MIAI_NO_UPDATES=1` slår begge fra.
-- **Signering:** ad hoc (`identity: "-"`) uden hardened runtime. Apple Silicon kræver en gyldig signatur for overhovedet at starte en app, og hardened runtime uden et Team ID afviser Electrons egne biblioteker. Workflowet kontrollerer signaturen og starter appen, før noget udgives.
-- **Kun Mac på Apple Silicon indtil videre.** Intel-Mac og Windows er udeladt for at holde byggetiden nede; Windows er udskudt til #40.
+- **Signering:** Mac ad hoc (`identity: "-"`) uden hardened runtime. Apple Silicon kræver en gyldig signatur for overhovedet at starte en app, og hardened runtime uden et Team ID afviser Electrons egne biblioteker. Workflowet kontrollerer signaturen og starter appen, før noget udgives. Windows-installeren er usigneret, indtil Azure Trusted Signing er sat op (#67).
+- **Mac på Apple Silicon og Windows på x64.** Intel-Mac er udeladt for at holde byggetiden nede; samme mekanisme kan give en `x64`-dmg, hvis der bliver brug for det.
+- **Ingen automatisk opdatering af udviklerudgaven (#40).** electron-updater kunne opdatere den usignerede Windows-udgave via en egen kanal, men den skal holdes helt adskilt fra `latest`, så almindelige brugere aldrig får et udviklerbyg. Indtil videre gør begge platforme det samme: menupunktet åbner hentningen.
 
 **Konsekvenser:**
 
 - Gatekeeper kender ikke en ad hoc-signatur. Efter hver hentning skal appen godkendes under Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel*.
 - En ad hoc-signatur er ny for hvert byg. macOS kan derfor spørge igen om adgang til nøgleringen og om tilladelser, der er givet til den forrige udgave; Fuld diskadgang skal gives igen, og den gamle linje fjernes (set i praksis ved 0.1.8). Det forsvinder med et Developer ID-certifikat (afsnit 3).
-- Mac-runnere koster ti gange så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
-- Udviklerudgaven fylder ca. 0,1 GB af Pages' 1 GB oven i en release.
+- Mac-runnere koster ti gange og Windows-runnere dobbelt så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
+- SmartScreen advarer ved hver ny Windows-udviklerudgave (*Windows beskyttede din pc* → *Flere oplysninger* → *Kør alligevel*), indtil installeren signeres (#67).
+- Udviklerudgaven fylder ca. 0,2 GB af Pages' 1 GB oven i en release.
 - Udviklerudgaven er til afprøvning. Den er ikke testet ud over CI og skal ikke gives til kunder.
 
 ## Tillæg 2: Automatisk release ved push til `main`

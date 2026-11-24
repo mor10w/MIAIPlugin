@@ -70,10 +70,15 @@ Hvert push til `main`, der rører app-koden, udgiver automatisk en ny release (`
 1. `release.yml` bygger macOS (dmg og zip, arm64 og x64) og Windows (NSIS, x64), signerer, hvis secrets er sat op, og laver en GitHub Release.
 2. Pages kopierer filerne og opdateringsfeedet (`latest*.yml`) til `<pages-url>/updates/`, hvor appen henter opdateringer.
 
-**Udviklerudgave (ADR-0016, tillæg):** hvert push til `main`, der rører appen, bygger en `.dmg` til Apple Silicon i `dev-build.yml` med version `<version>-dev.<kørselsnummer>` og lægger den som forhåndsudgivelsen `dev`. Pages serverer den under `<pages-url>/dev/`, og appens menu viser *Hent udviklerudgave …*, når der er en nyere. Workflowet kan også startes manuelt (Actions → Udviklerudgave); fra andre grene end `main` bygges der kun, og `.dmg`'en ligger som artefakt på kørslen. Tjekliste på en rigtig Mac:
+**Udviklerudgave (ADR-0016, tillæg):** hvert push til `main`, der rører appen, bygger en `.dmg` til Apple Silicon og en installer til Windows (x64) i `dev-build.yml` med version `<version>-dev.<kørselsnummer>` og lægger dem som forhåndsudgivelsen `dev`. Der udgives kun, når begge er bygget. Pages serverer dem under `<pages-url>/dev/`, og appens menu viser *Hent udviklerudgave …*, når der er en nyere til din platform. Workflowet kan også startes manuelt (Actions → Udviklerudgave); fra andre grene end `main` bygges der kun, og filerne ligger som artefakter på kørslen. Tjekliste på en rigtig Mac:
 - Menupunktet dukker op i en ældre udgave og åbner hentningen i browseren.
 - Appen kan godkendes i Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel* og starter bagefter.
 - Den nye udgave viser *Udviklerudgave X er installeret*, og nøgler i nøgleringen og Office-installationen virker stadig.
+
+På en rigtig Windows-pc:
+- Menupunktet dukker op i en ældre udgave og henter `MIAI-Setup-…-dev.N-x64.exe` i browseren.
+- SmartScreen kan omgås med *Flere oplysninger* → *Kør alligevel* (indtil #67), og installeren installerer oven i den gamle udgave uden admin.
+- Den nye udgave viser *Udviklerudgave X er installeret*, og certifikat, nøgler og Office-installationen virker stadig.
 
 Lokalt: kør først `npm run build` (appen pakker add-in'et og bridgen med), og derefter `npm run dist:mac -w @miai/app` eller `npm run dist:win -w @miai/app`. Filerne ender i `packages/app/dist/`. Mac-bygget er ad hoc-signeret som udgivelserne; en helt usigneret app starter ofte ikke på Apple Silicon. Windows-bygget er usigneret. Et lokalt byg er ikke hentet fra nettet, så Gatekeeper blander sig ikke; det gør det nyttigt, når en hentet udgave ikke vil starte. Release-workflowet kan også startes manuelt (Actions → Release); så bygges der kun, uden release.
 

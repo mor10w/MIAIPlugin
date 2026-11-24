@@ -3,7 +3,7 @@
 // baggrunden og installerer dem, når appen genstartes. macOS kræver en signeret app;
 // uden signering logges fejlen, og appen virker som før.
 import { app, net, shell } from "electron";
-import { DEV_FEED, devBuildNumber, devBuildSupported, devMenuState, fetchDevInfo } from "./devBuild.js";
+import { DEV_FEED, devBuildNumber, devBuildSupported, devMenuState, fetchDevInfo, platformKey } from "./devBuild.js";
 
 /** Tjek ved start og derefter hver 6. time. */
 const INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -44,9 +44,10 @@ export function updateMenuItem() {
 }
 
 // --- Udviklerudgaven (ADR-0016, tillæg) --------------------------------------------------------
-// Hvert push til main bygger en .dmg til Apple Silicon. Appen installerer den ikke selv (det kræver
-// en signeret app); menupunktet åbner hentningen i browseren, og brugeren trækker appen over som
-// ved første installation.
+// Hvert push til main bygger en .dmg til Apple Silicon og en installer til Windows (x64, #40).
+// Appen installerer den ikke selv (på Mac kræver det en signeret app); menupunktet åbner hentningen
+// i browseren. På Mac trækkes appen over som ved første installation; på Windows køres installeren,
+// som installerer oven i den nuværende udgave.
 
 let devInfo = null; // seneste dev.json fra feedet
 
@@ -56,7 +57,7 @@ export function setupDevBuilds({ log, onChange }) {
   const feed = process.env.MIAI_DEV_FEED || DEV_FEED;
   // net.fetch følger systemets proxyindstillinger, det gør Nodes fetch ikke.
   const check = async () => {
-    const info = await fetchDevInfo(feed, (url, init) => net.fetch(String(url), init));
+    const info = await fetchDevInfo(feed, (url, init) => net.fetch(String(url), init), platformKey(process.platform, process.arch));
     if (info?.version === devInfo?.version) return;
     devInfo = info;
     if (info) log(`udviklerudgave ${info.version} findes på ${feed}`);
