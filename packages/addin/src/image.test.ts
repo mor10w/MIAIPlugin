@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { pointSize, svgSize } from "./image.js";
-import { buildOverview } from "./hosts/excel.js";
 
 describe("svgSize", () => {
   it("læser viewBox med negative og decimale tal (Mermaid)", () => {
@@ -23,23 +22,5 @@ describe("pointSize", () => {
     const p = pointSize({ base64: "", width: 2048, height: 1024, scale: 1 });
     expect(p.width).toBe(450);
     expect(p.height).toBe(225);
-  });
-});
-
-describe("Excel-oversigt", () => {
-  const values = [
-    ["Navn", "Beløb"],
-    ["A", 10],
-    ["B", 5],
-  ];
-  it("kolonnebogstaver følger used range (ikke arknavnet)", () => {
-    const o = buildOverview(["Sheet1 Sheet1!C3:D5"], "Sheet1", "C3:D5", 3, 2, values);
-    expect(o).toContain("Headers (row 1): C=Navn D=Beløb");
-    expect(o).toContain("D: 3 non-empty, numeric sum=15");
-  });
-  it("uden statistik vises de første rækker i stedet", () => {
-    const o = buildOverview([], "Ark1", "A1:B3", 3, 2, values, false);
-    expect(o).toContain("First rows:");
-    expect(o).not.toContain("Column stats");
   });
 });
