@@ -545,7 +545,8 @@ export interface CheckedAction {
 }
 
 const CELL = /^\$?[A-Z]{1,3}\$?[1-9]\d{0,6}$/;
-const RANGE = /^(?:(?:'[^']+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i;
+/** Område, evt. med arknavn; en apostrof i et citeret arknavn skrives som to ("'Bob''s'!A1"). */
+const RANGE = /^(?:(?:'(?:[^']|'')+'|[^!'\s]+)!)?\$?[A-Z]{1,3}\$?[1-9]\d{0,6}(?::\$?[A-Z]{1,3}\$?[1-9]\d{0,6})?$/i;
 
 /** "D2:E5" → antal celler (uden arknavn). */
 export function cellCount(address: string): number {

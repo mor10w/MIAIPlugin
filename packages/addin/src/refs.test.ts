@@ -10,6 +10,10 @@ describe("findRefs (#22)", () => {
     expect(findRefs("Se $C$2:$C$5", "excel")[0].ref).toEqual({ address: "C2:C5" });
   });
 
+  it("Excel: arknavn med apostrof (to apostroffer) linkes som én adresse (#59)", () => {
+    expect(refs("Tallene står i 'Bob''s'!A1:B3.")).toEqual(["'Bob''s'!A1:B3"]);
+  });
+
   it("Excel: en enkelt celle linkes kun inden for arkets brugte område", () => {
     expect(refs("Cellen B7 er tom, men Q1 2026 og A4-papir er ikke celler.", "A1:E30")).toEqual(["B7"]);
     expect(refs("Cellen B7 er tom.")).toEqual([]);
