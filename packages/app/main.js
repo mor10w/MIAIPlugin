@@ -378,7 +378,10 @@ if (!gotLock) {
       tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
       log("tray oprettet");
       if (app.isPackaged && process.platform === "darwin") migrateOldLaunchAgent();
-      // Automatiske opdateringer (kun den installerede app; menuen viser, når en er klar).
+      // Windows viser kun notifikationer (fx "MIAI er klar til at opdatere") for en app med samme
+      // AppUserModelId som genvejen, NSIS-installeren laver (build.appId).
+      if (process.platform === "win32") app.setAppUserModelId("dk.miai.app");
+      // Opdateringer (kun den installerede app): "Søg efter opdateringer…" i menuen og besked, når en ny er klar.
       setupUpdates({ log, onChange: refreshMenu });
       // Udviklerudgaven: menupunkt, når der ligger en nyere på feedet (Mac på Apple Silicon og Windows x64).
       setupDevBuilds({ log, onChange: refreshMenu });

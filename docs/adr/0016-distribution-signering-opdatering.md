@@ -60,12 +60,14 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
 - **electron-updater** henter fra et "generic" feed, `https://mor10w.github.io/MIAIPlugin/updates/` (`latest.yml` og `latest-mac.yml`).
   - Den tjekker ved start og hver 6. time og henter i baggrunden.
   - Opdateringen installeres ved næste genstart, eller med det samme fra menuen ("Genstart og opdater til X").
+  - Menuen har altid *Søg efter opdateringer…*. Når en ny udgave er klar, får brugeren en systemnotifikation; et klik genstarter og opdaterer. Fra menuen siges der også til, når der ingen opdatering er, eller søgningen fejlede. Baggrundstjekket giver kun besked om en ny udgave, én gang pr. version.
+  - **Mac indtil Developer ID (#67):** Squirrel.Mac afviser at installere en ad hoc-signeret app. Appen henter derfor ikke selv, men giver besked om en ny udgave (*Hent MIAI X…*) og åbner dmg'en på feedet i browseren. Når appen er signeret, skal `updateMode` i `packages/app/updateState.js` give `"auto"` på Mac.
 - **Udgivelse:**
   1. Push til `main` (app-kode): patch-versionen bumpes automatisk, og der tages et tag.
   2. Eller: ret `version` i `packages/app/package.json`, hvis en bestemt version skal udgives.
   3. Release-workflowet bygger, signerer og laver en GitHub Release (tagget trigget den).
   4. Pages kopierer installationsfiler og feed fra seneste release ud, for repoet er privat, og kunderne kan ikke hente fra en privat release.
-- **Kanaler:** én (`latest`). En betakanal kan tilføjes med electron-updaters `channel` og pre-release-tags, når der er behov.
+- **Kanaler:** `latest` for udgivelserne under `/updates/`. Udviklerudgaven på Windows har sin egen kanal, `dev.yml` under `/dev/` (se tillægget).
 - **winget:** skabelon i `packaging/winget/`. Den indsendes, når installeren er signeret, fordi winget-pkgs i praksis kræver en signeret, offentligt tilgængelig installer.
 
 ### 5. Gentagen betroelse af certifikatet
@@ -93,10 +95,11 @@ En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er de
 - **Version:** `<version i package.json>-dev.<kørselsnummer>`, fx `0.1.0-dev.42`. Intet git-tag og ingen ændring i repoet; nummeret sættes kun i bygget.
 - **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json`, fordi repoet er privat. `dev.json` har version, commit, dato og ét filnavn pr. platform (`files`, fx `"win32-x64"`). Desuden har den `file` med Mac-filen, som udviklerudgaver fra før Windows-bygget læser.
 - **I appen:** menupunktet *Hent udviklerudgave X…* vises, når `dev.json` peger på et nyere byg end det installerede. Det åbner hentningen i browseren; appen installerer ikke selv. På Windows køres installeren, som installerer oven i den nuværende udgave. Kun en udviklerversion og et rent filnavn med platformens filtype (`.dmg` på Mac, `.exe` på Windows) i feedets egen mappe accepteres, så feedet ikke kan sende brugeren andre steder hen.
-- **To spor, der ikke blandes:** en installeret udviklerudgave følger kun udviklersporet (electron-updater er slået fra i den), og "seneste release" på Pages omfatter ikke forhåndsudgivelser. `MIAI_NO_UPDATES=1` slår begge fra.
+- **To spor, der ikke blandes:** en installeret udviklerudgave følger kun udviklersporet, og "seneste release" på Pages omfatter ikke forhåndsudgivelser. `MIAI_NO_UPDATES=1` slår begge fra.
 - **Signering:** Mac ad hoc (`identity: "-"`) uden hardened runtime. Apple Silicon kræver en gyldig signatur for overhovedet at starte en app, og hardened runtime uden et Team ID afviser Electrons egne biblioteker. Workflowet kontrollerer signaturen og starter appen, før noget udgives. Windows-installeren er usigneret, indtil Azure Trusted Signing er sat op (#67).
 - **Mac på Apple Silicon og Windows på x64.** Intel-Mac er udeladt for at holde byggetiden nede; samme mekanisme kan give en `x64`-dmg, hvis der bliver brug for det.
-- **Ingen automatisk opdatering af udviklerudgaven (#40).** electron-updater kunne opdatere den usignerede Windows-udgave via en egen kanal, men den skal holdes helt adskilt fra `latest`, så almindelige brugere aldrig får et udviklerbyg. Indtil videre gør begge platforme det samme: menupunktet åbner hentningen.
+- **Windows-udviklerudgaven opdaterer sig selv.** electron-updater læser `dev.yml` (electron-builders `latest.yml` under et andet navn) i `/dev/`. Kanalen sættes i feed-indstillingerne (`channel: "dev"`), ikke med `autoUpdater.channel`, som også ville tillade nedgradering. Almindelige udgaver læser kun `latest.yml` i `/updates/`, så de kan aldrig få et udviklerbyg. Installeren tjekkes mod SHA-512 i `dev.yml`, som for udgivelserne; den er usigneret indtil #67.
+- **Mac-udviklerudgaven** får besked om en nyere og åbner hentningen i browseren (Squirrel.Mac kræver signering).
 
 **Konsekvenser:**
 
