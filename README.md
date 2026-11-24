@@ -56,7 +56,7 @@ Vælg derefter den vej, der passer til dig:
 3. Sig ja til **Gør det nu**, når appen tilbyder at betro sit certifikat og installere MIAI i Office.
 4. Genstart Word, Excel og PowerPoint. Knappen **AI-assistent** ligger på fanen **Hjem**.
 
-MIAI ligger derefter i menulinjen (Mac) eller ved uret (Windows). Outlook, opdateringer og fejlfinding er beskrevet i [brugervejledningen](docs/BRUG.md#a-miai-app-anbefales).
+MIAI ligger derefter i menulinjen (Mac) eller ved uret (Windows). Appen søger selv efter nye udgaver og giver besked; du kan også vælge **Søg efter opdateringer…** i menuen. Outlook, opdateringer og fejlfinding er beskrevet i [brugervejledningen](docs/BRUG.md#a-miai-app-anbefales).
 
 ### 2. Hostet add-in
 
@@ -116,7 +116,7 @@ packages/evals    eval-sæt til sammenligning af modeller
 
 ## Bidrag
 
-Fejlrapporter og forslag er velkomne som [issues](https://github.com/mor10w/MIAIPlugin/issues). Vil du ændre i koden, så læs [CONTRIBUTING.md](CONTRIBUTING.md) først. Projektets sprog er dansk.
+Fejlrapporter og forslag er velkomne som [issues](https://github.com/mor10w/MIAIPlugin/issues). Sikkerhedsfejl rapporteres privat efter [SECURITY.md](SECURITY.md), ikke som issues. Vil du ændre i koden, så læs [CONTRIBUTING.md](CONTRIBUTING.md) først. Projektets sprog er dansk.
 
 ## Licens
 

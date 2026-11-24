@@ -66,7 +66,7 @@ Outlook installeres fra fil på begge platforme, for Outlook har ingen sideload-
   1. Push til `main` (app-kode): patch-versionen bumpes automatisk, og der tages et tag.
   2. Eller: ret `version` i `packages/app/package.json`, hvis en bestemt version skal udgives.
   3. Release-workflowet bygger, signerer og laver en GitHub Release (tagget trigget den).
-  4. Pages kopierer installationsfiler og feed fra seneste release ud, for repoet er privat, og kunderne kan ikke hente fra en privat release.
+  4. Pages kopierer installationsfiler og feed fra seneste release ud. Feedets adresse (`build.publish`) er bygget ind i alle installerede udgaver. Oprindeligt var Pages den eneste vej, fordi repoet var privat; repoet er nu offentligt (se tillæg 3), så filerne kan også hentes under Releases, men feedet bliver på Pages.
 - **Kanaler:** `latest` for udgivelserne under `/updates/`. Udviklerudgaven på Windows har sin egen kanal, `dev.yml` under `/dev/` (se tillægget).
 - **winget:** skabelon i `packaging/winget/`. Den indsendes, når installeren er signeret, fordi winget-pkgs i praksis kræver en signeret, offentligt tilgængelig installer.
 
@@ -93,7 +93,7 @@ En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er de
 
 - **Hvad:** `.github/workflows/dev-build.yml` bygger en `.dmg` til Apple Silicon og en NSIS-installer til Windows (x64) ved hvert push til `main`, der rører appen (ikke ved rene dokumentations-, eval- eller e2e-ændringer). Begge skal lykkes, før der udgives; ellers ville den manglende platform forsvinde fra `/dev/` indtil næste push.
 - **Version:** `<version i package.json>-dev.<kørselsnummer>`, fx `0.1.0-dev.42`. Intet git-tag og ingen ændring i repoet; nummeret sættes kun i bygget.
-- **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json`, fordi repoet er privat. `dev.json` har version, commit, dato og ét filnavn pr. platform (`files`, fx `"win32-x64"`). Desuden har den `file` med Mac-filen, som udviklerudgaver fra før Windows-bygget læser.
+- **Hvor:** én rullende forhåndsudgivelse med tagget `dev`, som erstattes hver gang. Pages kopierer den til `<pages-url>/dev/` sammen med `dev.json`, så appen har en fast adresse at læse fra. `dev.json` har version, commit, dato og ét filnavn pr. platform (`files`, fx `"win32-x64"`). Desuden har den `file` med Mac-filen, som udviklerudgaver fra før Windows-bygget læser.
 - **I appen:** menupunktet *Hent udviklerudgave X…* vises, når `dev.json` peger på et nyere byg end det installerede. Det åbner hentningen i browseren; appen installerer ikke selv. På Windows køres installeren, som installerer oven i den nuværende udgave. Kun en udviklerversion og et rent filnavn med platformens filtype (`.dmg` på Mac, `.exe` på Windows) i feedets egen mappe accepteres, så feedet ikke kan sende brugeren andre steder hen.
 - **To spor, der ikke blandes:** en installeret udviklerudgave følger kun udviklersporet, og "seneste release" på Pages omfatter ikke forhåndsudgivelser. `MIAI_NO_UPDATES=1` slår begge fra.
 - **Signering:** Mac ad hoc (`identity: "-"`) uden hardened runtime. Apple Silicon kræver en gyldig signatur for overhovedet at starte en app, og hardened runtime uden et Team ID afviser Electrons egne biblioteker. Workflowet kontrollerer signaturen og starter appen, før noget udgives. Windows-installeren er usigneret, indtil Azure Trusted Signing er sat op (#67).
@@ -105,7 +105,7 @@ En rigtig udgivelse kræver et versionsnummer og et tag. Under udviklingen er de
 
 - Gatekeeper kender ikke en ad hoc-signatur. Efter hver hentning skal appen godkendes under Systemindstillinger → Anonymitet & sikkerhed → *Åbn alligevel*.
 - En ad hoc-signatur er ny for hvert byg. macOS kan derfor spørge igen om adgang til nøgleringen og om tilladelser, der er givet til den forrige udgave; Fuld diskadgang skal gives igen, og den gamle linje fjernes (set i praksis ved 0.1.8). Det forsvinder med et Developer ID-certifikat (afsnit 3).
-- Mac-runnere koster ti gange og Windows-runnere dobbelt så mange Actions-minutter som Linux i et privat repo. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer.
+- Mac- og Windows-bygget tager hver flere minutter. Derfor stifiltrene, og derfor annulleres et ældre byg, når et nyt push kommer. (Mens repoet var privat, kostede Mac-runnere ti gange og Windows-runnere dobbelt så mange Actions-minutter som Linux; se tillæg 3.)
 - SmartScreen advarer ved hver ny Windows-udviklerudgave (*Windows beskyttede din pc* → *Flere oplysninger* → *Kør alligevel*), indtil installeren signeres (#67).
 - Udviklerudgaven fylder ca. 0,2 GB af Pages' 1 GB oven i en release.
 - Udviklerudgaven er til afprøvning. Den er ikke testet ud over CI og skal ikke gives til kunder.
@@ -118,3 +118,12 @@ Hver gang koden ændres, skal kunderne ikke vente på, at nogen husker at bump v
 - **Version:** bumpes patchen automatisk i `packages/app/package.json` (og lockfilen), committes til `main` af github-actions[bot] og tagges. Står der en version uden tag i `package.json` (sat i hånden), udgives den præcist – minor/major styres stadig manuelt. Det er tagget, der afgør det, ikke om filen er ændret: en ny afhængighed rører også `package.json` uden at ændre versionen. En version, der ikke er ren semver (X.Y.Z), udgives aldrig automatisk.
 - **Uden løkke og uden race:** GitHub trigget ikke workflows på push'er (også tags) med `GITHUB_TOKEN` – det er dokumenteret adfærd, der forhindrer løkker, og derfor starter workflowet release-pipeline'et eksplicit (`gh workflow run` med tagget som ref, så konteksten svarer til en almindelig tag-push). En commit, der allerede er tagget ved tippet på `main`, udløser intet nyt release; kørsler er sekventielle (concurrency), og udgivelsen sker altid fra seneste tip, så parallelle push'er lander i én release.
 - **Konsekvens:** versionsnumre og GitHub Releases flyver under aktiv udvikling (hver release fylder ca. 0,5 GB i repoet; Pages serverer kun den seneste). Når produktet modner, kan man skifte til manuelt eller kræve et review på releases.
+
+## Tillæg 3: Repoet er offentligt (november 2026)
+
+Repoet var privat, da ADR'en blev skrevet. Det er nu offentligt. Det ændrer:
+
+- **Releases kan hentes direkte.** README og BRUG.md linker til Releases. Pages bevares som opdateringsfeed (`/updates/` og `/dev/`), fordi adressen er bygget ind i de installerede udgaver, og fordi en fast adresse er nemmere at flytte til et CDN senere (`build.publish`).
+- **Actions-minutter:** GitHubs standard-runnere (Linux, Windows og macOS) er gratis i et offentligt repo. Stifiltrene og annulleringen af ældre byg bevares for at spare byggetid, ikke penge.
+- **Secrets:** signerings-secrets (#67) bruges kun af `release.yml`, som kører på tags og manuelt, aldrig på pull requests. Workflows på pull requests fra forks får ingen secrets; `dev-build.yml` bygger på pull requests uden secrets og udgiver kun fra `main`.
+- **Sikkerhedsfejl** rapporteres privat efter [SECURITY.md](../../SECURITY.md), ikke som offentlige issues.

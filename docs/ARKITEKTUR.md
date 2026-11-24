@@ -27,7 +27,7 @@ Tilstanden vælges ved runtime (`backend/index.ts`). Hvis task pane serveres af 
 ### 1. Fælles motor (`packages/shared`)
 Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i Node.
 
-- **`tasks.ts`**: opgavekatalog. Hver opgave har prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
+- **`tasks/`** (samlet eksport i `tasks.ts`): opgavekatalog. `catalog.ts` har opgaverne, hver med sin prompt-bygger, output-type (tekst eller JSON med Zod-skema), parametre og indsætningsmåder. `definition.ts` har typerne, `prompts.ts` de fælles prompt-byggesten og `results.ts` Zod-skemaerne for strukturerede svar. Dokumentindhold pakkes i `<document>`-tags og behandles som data.
 - **`userTasks.ts`**: brugerdefinerede opgaver (F14, ADR-0011) – `UserTaskFile`-skema (JSON-filer med prompt-skabelon), `renderTemplate`, omsætning til `TaskDefinition` og det serialiserbare `TaskView`.
 - **`agent.ts`**: agent-tilstand (#6, ADR-0012) – `AgentPlan`/`AgentAction` (lukket union af Word- og Excel-handlinger), værktøjsbeskrivelse til prompten og `checkPlan`, der markerer handlinger, som ikke kan udføres. Udførelsen sker i add-in'ets host-adaptere (`applyAgent`) med fortryd for hele sessionen.
 - **`design.ts`**: præsentationsdesign (ADR-0014) – `DesignPlan` (stil, palet, skrifttyper, slides på syv layouttyper), kontrastretning (`fixPalette`) og designregler til modellen. Add-in'et bygger masteren med `deck/templates.ts` og `deck/buildDeck.ts` (pptxgenjs) og sætter den ind med `insertSlidesFromBase64`.
@@ -137,7 +137,7 @@ MIAIPlugin/
 │  ├─ shared/       # fælles motor: typer, opgaver/prompts, OpenAI-klient, politik
 │  ├─ addin/        # Office.js task pane, backends, host-adaptere, manifest-skabelon
 │  ├─ bridge/       # valgfri lokal service
-│  ├─ app/          # MIAI App (Electron, Mac og Windows; platform.js, updates.js – ADR-0016)
+│  ├─ app/          # MIAI App (Electron, Mac og Windows; platform.js, opdatering i updates.js/updateState.js, udviklerudgave i devBuild.js – ADR-0016)
 │  └─ evals/        # eval-sæt og harness mod en OpenAI-endpoint (#2)
 ├─ scripts/         # manifester, ikoner, sideload (Mac/Windows)
 ├─ .github/workflows/  # CI og GitHub Pages

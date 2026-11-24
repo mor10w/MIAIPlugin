@@ -30,7 +30,9 @@ jobs:
       - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest.xml
       - run: node scripts/make-manifest.mjs hosted "${{ steps.pages.outputs.base_url }}/" packages/addin/dist/manifest-outlook.xml outlook
       # MIAI App: installationsfiler og opdateringsfeed (latest*.yml) fra seneste release (#5, ADR-0016).
-      # Repoet er privat, så filerne serveres herfra, hvor appens opdateringstjek kan nå dem.
+      # Opdateringsfeedet har en fast adresse her (build.publish), som er bygget ind i alle installerede
+      # udgaver. Det var oprindeligt nødvendigt, fordi repoet var privat; det er nu offentligt, men
+      # feedet bliver her, så installerede udgaver fortsat finder opdateringer.
       - name: Downloads og opdateringsfeed fra seneste release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -13,6 +13,8 @@ Opret et [issue](https://github.com/mor10w/MIAIPlugin/issues). En god fejlrappor
 
 Slet fortrolig tekst fra eksempler og skærmbilleder, før du deler dem.
 
+Er det en sikkerhedsfejl, så opret ikke et issue, men rapportér den privat som beskrevet i [SECURITY.md](SECURITY.md).
+
 ## Kom i gang med koden
 
 Du skal bruge Node.js 22 LTS.
