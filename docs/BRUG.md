@@ -64,7 +64,7 @@ Begge trin findes også i appens menu (**Betro certifikat…**, **Installer i Of
 
 - **Windows:** nye udgaver hentes automatisk i baggrunden og installeres, næste gang appen startes, eller fra menuen *Genstart og opdater til …*.
 - **Mac:** automatisk opdatering kræver en signeret app ([ADR-0016](adr/0016-distribution-signering-opdatering.md)) og virker derfor ikke endnu. Hent den nye `.dmg` under [Releases](https://github.com/mor10w/MIAIPlugin/releases/latest), afslut MIAI, træk den nye udgave til Programmer, og godkend den igen under Anonymitet & sikkerhed. Spørger macOS bagefter om adgang til nøgleringen, så vælg *Tillad altid*.
-- **Udviklerudgave (Mac med Apple Silicon):** ud over udgivelserne bygges en udviklerudgave, hver gang koden ændres. Er der en nyere end din, viser menuen *Hent udviklerudgave …*, som henter `.dmg`-filen i browseren; den installeres på samme måde. Den er til afprøvning og kan indeholde fejl.
+- **Udviklerudgave (Mac med Apple Silicon og Windows):** ud over udgivelserne bygges en udviklerudgave, hver gang koden ændres. Er der en nyere end din, viser menuen *Hent udviklerudgave …*, som henter filen i browseren. På Mac installeres `.dmg`'en på samme måde som ellers. På Windows kører du installeren, som installerer oven i din nuværende udgave; Windows advarer måske om en ukendt udgiver (*Flere oplysninger* → *Kør alligevel*). En udviklerudgave opdaterer ikke sig selv til de almindelige udgivelser. Den er til afprøvning og kan indeholde fejl.
 
 **Hvis noget driller**
 

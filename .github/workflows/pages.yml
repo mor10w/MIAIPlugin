@@ -47,7 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$RUNNER_TEMP/dev"
-          if gh release download dev --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/dev" --pattern 'dev.json' --pattern '*.dmg'; then
+          if gh release download dev --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/dev" --pattern 'dev.json' --pattern '*.dmg' --pattern '*.exe'; then
             mv "$RUNNER_TEMP/dev" packages/addin/dist/dev
           else
             echo "Ingen udviklerudgave endnu."

@@ -380,7 +380,7 @@ if (!gotLock) {
       if (app.isPackaged && process.platform === "darwin") migrateOldLaunchAgent();
       // Automatiske opdateringer (kun den installerede app; menuen viser, når en er klar).
       setupUpdates({ log, onChange: refreshMenu });
-      // Udviklerudgaven: menupunkt, når der ligger en nyere på feedet (kun Apple Silicon indtil videre).
+      // Udviklerudgaven: menupunkt, når der ligger en nyere på feedet (Mac på Apple Silicon og Windows x64).
       setupDevBuilds({ log, onChange: refreshMenu });
 
       // Opsætning kun når der mangler noget: certifikat (nyt eller fornyet) og/eller Office-installation.
