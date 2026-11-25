@@ -1,5 +1,6 @@
 /**
- * Web-søgning uden API-nøgle (ADR-0010): skraper DuckDuckGo's HTML-endpoint.
+ * Web-søgning uden API-nøgle (ADR-0010): skraper DuckDuckGo's HTML-endpoint, eller bruger en
+ * selvhostet SearXNG eller Exas hostede MCP-server.
  * Kører i bridgen (Node) – browseren har ingen CORS-adgang til endepunktet.
  * Resultaterne sendes til modellen som tekst (utroværdig input – se ADR-0010).
  */
@@ -142,6 +143,67 @@ async function searchSearxng(baseUrl: string, query: string, signal?: AbortSigna
   return { host, ok: true, text: results.length ? formatResults(results) : "Ingen resultater fra søgetjenesten." };
 }
 
+export const EXA_HOST = "mcp.exa.ai";
+/** Så meget af Exas svar får modellen: uddragene er lange, og hver opgave kan søge flere gange. */
+const EXA_MAX_CHARS = 8_000;
+const EXA_RESULTS = 4;
+
+/** Beskeden til modellen, når Exas gratis grænse for søgninger er nået. */
+export const EXA_LIMIT_TEXT =
+  "Web-søgningen blev afvist af søgetjenesten (grænsen for antal søgninger er nået), så der er ingen søgeresultater. Søg ikke igen, og gæt ikke på tal eller fakta: sig, at web-søgningen ikke virkede lige nu.";
+
+/** Svaret på et JSON-RPC-kald: enten ét JSON-objekt eller en strøm af "data:"-linjer (SSE). */
+function parseRpc(body: string): { result?: { content?: { type?: string; text?: string }[]; isError?: boolean }; error?: { message?: string } } | undefined {
+  const candidates = body.trimStart().startsWith("{")
+    ? [body]
+    : body
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trim());
+  // Det sidste objekt med et resultat eller en fejl er svaret; tidligere linjer kan være beskeder undervejs.
+  for (const c of candidates.reverse()) {
+    try {
+      const json = JSON.parse(c) as { result?: unknown; error?: unknown };
+      if (json && (json.result || json.error)) return json as ReturnType<typeof parseRpc>;
+    } catch {
+      // ikke JSON – prøv den forrige linje
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Exa gennem deres hostede MCP-server (https://mcp.exa.ai/mcp), uden konto og nøgle. Værktøjet
+ * web_search_exa kaldes direkte med ét JSON-RPC-kald; serveren kræver ingen session. Svaret er
+ * tekst med titel, URL og uddrag af selve siden, så modellen får mere end en kort snippet.
+ * Uden nøgle gælder Exas gratis grænse; er den nået, svarer serveren 429.
+ */
+async function searchExa(query: string, signal?: AbortSignal): Promise<SearchOutcome> {
+  const host = EXA_HOST;
+  const res = await fetch(`https://${EXA_HOST}/mcp`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "web_search_exa", arguments: { query, numResults: EXA_RESULTS } } }),
+    signal: withTimeout(signal),
+  });
+  if (res.status === 429) return { host, ok: false, text: EXA_LIMIT_TEXT };
+  if (!res.ok) return { host, ok: false, text: `Søgetjenesten svarede ${res.status} (ingen resultater). Prøv igen senere.` };
+  const rpc = parseRpc(await res.text());
+  if (!rpc) return { host, ok: false, text: "Søgetjenesten gav et svar, der ikke kunne læses." };
+  const text = (rpc.result?.content ?? [])
+    .filter((c) => c.type === "text" && c.text)
+    .map((c) => c.text!.trim())
+    .join("\n\n");
+  if (rpc.error || rpc.result?.isError) {
+    const why = (rpc.error?.message ?? text).slice(0, 300);
+    // Grænsen kan også komme som en fejl i selve svaret.
+    if (/rate.?limit|too many requests|\b429\b/i.test(why)) return { host, ok: false, text: EXA_LIMIT_TEXT };
+    return { host, ok: false, text: `Søgetjenesten meldte en fejl (${why || "ukendt"}). Svar uden søgeresultater, og sig det til brugeren.` };
+  }
+  if (!text) return { host, ok: true, text: "Ingen resultater fra søgetjenesten." };
+  return { host, ok: true, text: `Søgeresultater fra webbet (kan være upålidelige – verificer vigtige fakta):\n${text}`.slice(0, EXA_MAX_CHARS) };
+}
+
 /**
  * Søger med den konfigurerede tjeneste og returnerer en tekstblok til modellen.
  * Fejl giver en besked til modellen, ikke en exception (undtagen når brugeren afbryder).
@@ -154,10 +216,11 @@ export async function searchWeb(cfg: SearchConfig, query: string, isAllowed: (ur
       if (!isAllowed(cfg.url)) return { host: new URL(cfg.url).host, ok: false, text: "Søgetjenesten er ikke tilladt af politikken." };
       return await searchSearxng(cfg.url, query, signal);
     }
+    if (cfg.provider === "exa") return await searchExa(query, signal);
     return await searchDuckDuckGo(query, signal);
   } catch (err) {
     if (signal?.aborted ?? false) throw err; // brugeren afbrød – lad motoren håndtere det
-    const host = cfg.provider === "searxng" && cfg.url ? new URL(cfg.url).host : DDG_HOST;
+    const host = cfg.provider === "searxng" && cfg.url ? new URL(cfg.url).host : cfg.provider === "exa" ? EXA_HOST : DDG_HOST;
     return { host, ok: false, text: `Søgetjenesten svarede ikke (${(err as Error).message}). Prøv igen senere.` };
   }
 }

@@ -58,7 +58,7 @@ function makeToolExecutor(
         function: {
           name: "web_search",
           description:
-            "Search the web for current information, news, prices, versions or facts you are not sure about. Returns a few results with title, URL and snippet.",
+            "Search the web for current information, news, prices, versions or facts you are not sure about. Returns a few results with title, URL and an excerpt.",
           parameters: {
             type: "object",
             properties: { query: { type: "string", description: "The search query, in the user's language or English" } },

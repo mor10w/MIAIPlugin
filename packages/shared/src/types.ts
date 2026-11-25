@@ -199,10 +199,11 @@ export type TaskWarning = "input-truncated" | "output-truncated" | "thinking-ign
 /**
  * Søgetjeneste til web-søgning (#12). duckduckgo = offentlig, uden opsætning (søgeord sendes til
  * DuckDuckGo). searxng = selvhostet metasøgemaskine (fx organisationens egen), så søgeord ikke
- * sendes direkte til en tredjepart.
+ * sendes direkte til en tredjepart. exa = Exas hostede MCP-server, uden konto og nøgle (søgeord
+ * sendes til Exa); den giver uddrag af selve siderne og har en gratis grænse for antal søgninger.
  */
 export const SearchConfig = z.object({
-  provider: z.enum(["duckduckgo", "searxng"]).default("duckduckgo"),
+  provider: z.enum(["duckduckgo", "searxng", "exa"]).default("duckduckgo"),
   /** SearXNG: basisadresse, fx https://search.firma.local */
   url: z.string().url().optional(),
 });

@@ -596,18 +596,24 @@ export function SettingsTab({
                 />
               </Field>
             )}
-            {/* Søgetjeneste (#12): DuckDuckGo eller selvhostet SearXNG; kan låses af organisationens politik. */}
+            {/* Søgetjeneste (#12): DuckDuckGo, selvhostet SearXNG eller Exa; kan låses af organisationens politik. */}
             {api.mode === "bridge" && policy.webSearch && settings.webSearch && (
               <div className={s.twoCol}>
-                <Field label={t("searchProvider")} hint={policy.search ? t("searchLocked") : undefined}>
+                <Field
+                  label={t("searchProvider")}
+                  hint={policy.search ? t("searchLocked") : (policy.search ?? settings.search).provider === "exa" ? t("exaHint") : undefined}
+                >
                   <Dropdown
                     disabled={!!policy.search}
-                    value={(policy.search ?? settings.search).provider === "searxng" ? "SearXNG" : "DuckDuckGo"}
+                    value={{ duckduckgo: "DuckDuckGo", searxng: "SearXNG", exa: "Exa" }[(policy.search ?? settings.search).provider]}
                     selectedOptions={[(policy.search ?? settings.search).provider]}
-                    onOptionSelect={(_, d) => setSettings({ ...settings, search: { ...settings.search, provider: d.optionValue as "duckduckgo" | "searxng" } })}
+                    onOptionSelect={(_, d) =>
+                      setSettings({ ...settings, search: { ...settings.search, provider: d.optionValue as "duckduckgo" | "searxng" | "exa" } })
+                    }
                   >
                     <Option value="duckduckgo">DuckDuckGo</Option>
                     <Option value="searxng">SearXNG</Option>
+                    <Option value="exa">Exa</Option>
                   </Dropdown>
                 </Field>
                 {(policy.search ?? settings.search).provider === "searxng" && (
