@@ -217,12 +217,22 @@ function toExcelError(cf: CustomFunctionsApi, err: unknown): unknown {
 let registered: CellRuntime | undefined;
 
 /**
- * Knytter funktionerne til deres id'er i functions.json. Gør intet uden for Excels shared runtime
- * (hvor `CustomFunctions` ikke findes), og kun én gang. Kaldes, før backend'en er klar: Excel kan
- * beregne celler, så snart siden er indlæst, og kaldene venter så på `backend`.
+ * Har manifestet regnearksfunktionerne med? Det kan siden ikke se på `CustomFunctions`: Excels
+ * office.js definerer objektet i enhver task pane, også når manifestet ikke nævner funktionerne.
+ * Manifester med funktionerne åbner derfor task pane med `?functions=1` (scripts/make-manifest.mjs).
  */
-export function registerCellFunctions(backend: Backend | Promise<Backend>): CellRuntime | undefined {
+export function functionsDeclared(search: string = globalThis.location?.search ?? ""): boolean {
+  return new URLSearchParams(search).has("functions");
+}
+
+/**
+ * Knytter funktionerne til deres id'er i functions.json. Gør intet, når manifestet ikke har
+ * funktionerne med (`declared`) eller uden for Excel, og kun én gang. Kaldes, før backend'en er
+ * klar: Excel kan beregne celler, så snart siden er indlæst, og kaldene venter så på `backend`.
+ */
+export function registerCellFunctions(backend: Backend | Promise<Backend>, declared = functionsDeclared()): CellRuntime | undefined {
   if (registered) return registered;
+  if (!declared) return undefined;
   const cf = (globalThis as { CustomFunctions?: CustomFunctionsApi }).CustomFunctions;
   if (!cf?.associate) return undefined;
   const rt = createCellRuntime(backend);

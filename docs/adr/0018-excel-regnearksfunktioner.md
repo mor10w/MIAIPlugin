@@ -55,8 +55,8 @@ Excel kan kun vise faste forslag til et argument, og kun for tekst og tal. Bruge
 
 Et manifest med en skemafejl indlæses slet ikke, heller ikke i Word og PowerPoint, og Microsofts validator kan ikke nås fra byggemiljøet. Derfor:
 
-1. Koden er med i alle udgaver, men `scripts/make-manifest.mjs` lægger kun shared runtime og funktionerne i `manifest.dev.xml`. Uden dem findes `CustomFunctions` ikke, og intet om funktionerne vises.
-2. Når udviklingsmanifestet er afprøvet i rigtig Excel på Windows og Mac efter tjeklisten i [UDVIKLING.md](../UDVIKLING.md), slås funktionerne til i bridge-manifestet og det hostede manifest. Bridgens personlige manifest skal da også dække de nye adresser.
+1. Koden er med i alle udgaver, men `scripts/make-manifest.mjs` lægger kun shared runtime og funktionerne i `manifest.dev.xml`. Et manifest med funktionerne åbner task pane med `?functions=1`, og kun da registreres funktionerne, og statuslinjen og sektionen under Indstillinger vises. Siden kan ikke se det på `CustomFunctions`: Excels office.js definerer objektet i enhver task pane, også uden funktionerne i manifestet. Den første udgave (0.1.23) antog det modsatte og viste derfor sektionen i de udgivne installationer, hvor funktionen ikke fandtes i arket.
+2. Når udviklingsmanifestet er afprøvet i rigtig Excel på Windows og Mac efter tjeklisten i [UDVIKLING.md](../UDVIKLING.md), slås funktionerne til i bridge-manifestet og det hostede manifest. Bridgens personlige manifest (`personalizeManifest`) skal da også dække de nye adresser og sætte sit token på en adresse, der allerede har `?functions=1`.
 
 ## Konsekvenser
 

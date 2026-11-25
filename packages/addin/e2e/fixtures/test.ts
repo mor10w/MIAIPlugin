@@ -87,6 +87,8 @@ export const test = base.extend<{ open: Open }>({
         const body = typeof opts.orgConfig === "string" ? opts.orgConfig : JSON.stringify(opts.orgConfig);
         await page.route(`${origin}/miai-config.json`, (r) => r.fulfill({ contentType: "application/json", body }));
       }
+      // Et manifest med regnearksfunktionerne åbner task pane med ?functions=1 (#80).
+      if (opts.customFunctions) query += `${query ? "&" : "?"}functions=1`;
       await page.goto(`${origin}/taskpane.html${query}`);
       await expect(page.getByText(opts.mode === "bridge" ? "Via MIAI Bridge" : "Direkte forbindelse")).toBeVisible();
 
