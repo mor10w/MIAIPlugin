@@ -156,7 +156,7 @@
         <bt:Image id="MIAI.Icon.80" DefaultValue="{{BASE}}assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="{{BASE}}taskpane.html"/>
+        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="{{BASE}}taskpane.html{{TASKPANE_QUERY}}"/>
         <bt:Url id="MIAI.LearnMoreUrl" DefaultValue="{{BASE}}"/>{{FUNCTION_URLS}}
       </bt:Urls>
       <bt:ShortStrings>

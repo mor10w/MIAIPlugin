@@ -108,9 +108,17 @@ test("audit-loggen i direkte tilstand samler en kørsels cellekald i én post", 
   expect(log.filter((e) => e.task === "cell-ask")).toMatchObject([{ kind: "task", count: 3 }]);
 });
 
-test("uden regnearksfunktioner i manifestet (som i de udgivne manifester) vises intet om dem", async ({ open }) => {
+test("uden regnearksfunktioner i manifestet (som i de udgivne manifester) vises intet om dem, og intet registreres", async ({ open }) => {
+  // Som rigtig Excel: CustomFunctions findes i siden, selv om manifestet ikke har funktionerne med.
   const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: SHEET });
+  expect(await tp.page.evaluate(() => typeof (window as unknown as { CustomFunctions?: { associate?: unknown } }).CustomFunctions?.associate)).toBe("function");
+  expect(await tp.page.evaluate(() => (window as unknown as { __miai: { functions: () => string[] } }).__miai.functions())).toEqual([]);
   await tp.tab("Indstillinger");
   await expect(tp.page.getByRole("button", { name: "Generelt", exact: true })).toBeVisible();
   await expect(tp.page.getByRole("button", { name: "Excel-funktioner", exact: true })).toHaveCount(0);
+});
+
+test("med funktionerne i manifestet registreres ASK og MODELS", async ({ open }) => {
+  const tp = await open(EXCEL);
+  expect(await tp.page.evaluate(() => (window as unknown as { __miai: { functions: () => string[] } }).__miai.functions().sort())).toEqual(["ASK", "MODELS"]);
 });

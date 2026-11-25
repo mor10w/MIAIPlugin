@@ -139,7 +139,7 @@ node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 ```bash
 node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest-outlook.xml outlook
 ```
-**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem.
+**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Et manifest med funktionerne åbner task pane med `?functions=1`; uden den parameter registrerer siden ingen funktioner og viser intet om dem. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem.
 
 Outlook sideloades fra fil: Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug `manifest.outlook.dev.xml` med `npm run dev`.
 

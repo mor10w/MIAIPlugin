@@ -2,7 +2,7 @@ import { defaultSettings, Settings, type TaskEvent, type TaskRequest } from "@mi
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Backend } from "../backend";
 import { CellCache, type CacheStorage } from "./cache";
-import { CellError, createCellRuntime, PREVIEW_PLACEHOLDER, registerCellFunctions, type CellInvocation } from "./functions";
+import { CellError, createCellRuntime, functionsDeclared, PREVIEW_PLACEHOLDER, registerCellFunctions, type CellInvocation } from "./functions";
 
 const memory = (): CacheStorage => {
   const data = new Map<string, string>();
@@ -179,8 +179,29 @@ describe("=MIAI.MODELS()", () => {
 });
 
 describe("registrering", () => {
-  it("gør intet uden for Excels shared runtime", () => {
-    expect(registerCellFunctions(f.backend)).toBeUndefined();
+  const fakeApi = (fns: Record<string, (...a: unknown[]) => Promise<unknown>> = {}) => ({
+    associate: (id: string, fn: (...a: unknown[]) => Promise<unknown>) => (fns[id] = fn),
+  });
+
+  it("manifestet fortæller siden, om funktionerne er med (?functions=1)", () => {
+    expect(functionsDeclared("?functions=1")).toBe(true);
+    expect(functionsDeclared("?token=abc&functions=1")).toBe(true);
+    expect(functionsDeclared("?token=abc")).toBe(false);
+    expect(functionsDeclared("")).toBe(false);
+  });
+  it("gør intet uden for Excel, hvor CustomFunctions ikke findes", () => {
+    expect(registerCellFunctions(f.backend, true)).toBeUndefined();
+  });
+  it("gør intet, når manifestet ikke har funktionerne med – selv om Excels office.js altid definerer CustomFunctions", () => {
+    const fns = {};
+    (globalThis as Record<string, unknown>).CustomFunctions = fakeApi(fns);
+    try {
+      expect(registerCellFunctions(f.backend, false)).toBeUndefined();
+      expect(registerCellFunctions(f.backend)).toBeUndefined(); // ingen ?functions=1 i adressen
+      expect(Object.keys(fns)).toEqual([]);
+    } finally {
+      delete (globalThis as Record<string, unknown>).CustomFunctions;
+    }
   });
   it("knytter ASK og MODELS til, og fejl bliver til Excels egen fejltype med besked", async () => {
     const fns: Record<string, (...a: unknown[]) => Promise<unknown>> = {};
@@ -198,7 +219,7 @@ describe("registrering", () => {
       ErrorCode: { notAvailable: "#N/A", invalidValue: "#VALUE!" },
     };
     try {
-      expect(registerCellFunctions(Promise.resolve(f.backend))).toBeDefined();
+      expect(registerCellFunctions(Promise.resolve(f.backend), true)).toBeDefined();
       expect(Object.keys(fns).sort()).toEqual(["ASK", "MODELS"]);
       expect(await fns.ASK("p", [["x"]], null, null, {})).toBe("svar på x");
       const err = await fns.ASK("", null, null, null, {}).catch((e) => e);

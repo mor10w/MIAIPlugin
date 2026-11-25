@@ -17,7 +17,10 @@ export interface FakeOfficeOptions {
   host: HostName;
   /** Højeste understøttede version pr. requirement set, fx { WordApi: "1.4" }. Manglende = ikke understøttet. */
   apiSets?: Record<string, string>;
-  /** Excel med shared runtime: regnearksfunktionerne =MIAI.ASK() og =MIAI.MODELS() kan registreres (#80). */
+  /**
+   * Excel åbnet med et manifest, der har regnearksfunktionerne =MIAI.ASK() og =MIAI.MODELS() med
+   * (#80): task pane åbnes med ?functions=1, som manifestet gør.
+   */
   customFunctions?: boolean;
   /** Markeret tekst (Word, PowerPoint). Sammen med `paragraphs` markeres de hele afsnit, teksten ligger i. */
   selection?: string;
@@ -184,9 +187,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
   }
 
   // --- Excels regnearksfunktioner (#80) --------------------------------------------------------
-  // Som i shared runtime: CustomFunctions findes i samme side som task pane. Testen kalder de
-  // tilknyttede funktioner med window.__miai.fn("ASK", ...), som Excel ville gøre for en celle.
-  if (o.customFunctions) {
+  // Som rigtig office.js: CustomFunctions findes i enhver task pane i Excel, også når manifestet
+  // ikke har funktionerne med. Om de er med, ser siden på ?functions=1 i sin adresse (fixtures/test.ts).
+  // Testen kalder de tilknyttede funktioner med window.__miai.fn("ASK", ...), som Excel ville for en celle.
+  if (o.host === "Excel") {
     const fns: Record<string, (...a: unknown[]) => unknown> = {};
     class CfError extends Error {
       constructor(

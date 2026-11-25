@@ -64,6 +64,9 @@ const FUNCTION_PARTS = {
             </ExtensionPoint>
           </AllFormFactors>`,
   EXCEL_TASKPANE_ID: "",
+  // Siden kan ikke selv se, om manifestet har funktionerne med: Excels office.js definerer altid
+  // CustomFunctions. Parameteren fortæller den det (functionsDeclared i cell/functions.ts).
+  TASKPANE_QUERY: "?functions=1",
   FUNCTION_URLS: `
         <bt:Url id="MIAI.Functions.Script.Url" DefaultValue="{{BASE}}functions-fallback.js"/>
         <bt:Url id="MIAI.Functions.Metadata.Url" DefaultValue="{{BASE}}functions.json">
@@ -76,6 +79,7 @@ const NO_FUNCTION_PARTS = {
   EXCEL_FUNCTIONS: "",
   EXCEL_TASKPANE_ID: `
                       <TaskpaneId>MIAI.Taskpane</TaskpaneId>`,
+  TASKPANE_QUERY: "",
   FUNCTION_URLS: "",
   FUNCTION_STRINGS: "",
 };
