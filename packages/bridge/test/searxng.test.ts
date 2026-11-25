@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checkSettings, effectiveSearch, isUrlAllowed, Policy, Settings } from "@miai/shared";
-import { looksLikeUnparsedResults, parseDdgHtml, searchWeb } from "../src/search.js";
+import { BOT_CHALLENGE_TEXT, looksLikeBotChallenge, looksLikeUnparsedResults, parseDdgHtml, searchWeb } from "../src/search.js";
 
 /** Web-søgning med selvhostet SearXNG og robust DuckDuckGo-aflæsning (#12). */
 
@@ -96,5 +96,30 @@ describe("DuckDuckGo: ændret markup opdages", () => {
   it("en ægte tom resultatside er ikke en fejl", () => {
     expect(looksLikeUnparsedResults('<div class="no-results">No results.</div>')).toBe(false);
     expect(looksLikeUnparsedResults("<html><body>Intet her</body></html>")).toBe(false);
+  });
+});
+
+describe("DuckDuckGo: robot-tjek er ikke 'ingen resultater'", () => {
+  // Uddrag af siden, DuckDuckGo svarer med (HTTP 202), når den tror, søgningen kommer fra en robot.
+  const challenge =
+    '<form id="challenge-form" action="//duckduckgo.com/anomaly.js?sv=html&cc=botnet"><div class="anomaly-modal__title">Unfortunately, bots use DuckDuckGo too.</div></form>';
+
+  it("genkender siden med opgaven", () => {
+    expect(parseDdgHtml(challenge)).toEqual([]);
+    expect(looksLikeBotChallenge(challenge)).toBe(true);
+    expect(looksLikeBotChallenge('<div class="no-results">No results.</div>')).toBe(false);
+  });
+
+  it("søgningen meldes som mislykket, og modellen får besked om ikke at gætte", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(challenge, { status: 202, headers: { "content-type": "text/html" } })) as typeof fetch;
+    try {
+      const r = await searchWeb({ provider: "duckduckgo" }, "novo nordisk aktiekurs", allowAll);
+      expect(r.ok).toBe(false);
+      expect(r.text).toBe(BOT_CHALLENGE_TEXT);
+      expect(r.text).toContain("gæt ikke");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 });

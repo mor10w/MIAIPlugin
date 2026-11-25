@@ -175,6 +175,7 @@ describe("executeTask (direkte tilstand)", () => {
       policy: Policy.parse({}),
       emit: (e) => events.push(e),
       signal: new AbortController().signal,
+      now: () => new Date(2026, 10, 25, 23, 30),
       tools: {
         specs: [{ type: "function", function: { name: "web_search", description: "Søg på webbet", parameters: {} } }],
         run: async (_name, args) => {
@@ -184,6 +185,8 @@ describe("executeTask (direkte tilstand)", () => {
       },
     });
     expect(calls).toHaveLength(1); // præcis ét værktøjskald, derefter endeligt svar
+    // Med søgning kender modellen dags dato (ellers afviser den nylige datoer som fremtidige).
+    expect(lastBody.messages?.[0].content).toContain("Today's date is 2026-11-25.");
     expect(JSON.parse(calls[0])).toEqual({ query: "test query" });
     const text = events
       .filter((e) => e.type === "delta")

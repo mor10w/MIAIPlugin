@@ -86,6 +86,19 @@ export function looksLikeUnparsedResults(html: string): boolean {
   return /class="[^"]*\bresult(s|__body|__title)?\b/i.test(html);
 }
 
+/**
+ * DuckDuckGo's robot-tjek ("bots use DuckDuckGo too"): siden svarer 202 med en opgave i stedet
+ * for resultater, typisk efter mange søgninger på kort tid eller fra en VPN-adresse. Det er ikke
+ * det samme som "ingen resultater": modellen skal vide, at søgningen ikke blev udført.
+ */
+export function looksLikeBotChallenge(html: string): boolean {
+  return /anomaly-modal|anomaly\.js|bots use DuckDuckGo/i.test(html);
+}
+
+/** Beskeden til modellen, når søgetjenesten har afvist søgningen med et robot-tjek. */
+export const BOT_CHALLENGE_TEXT =
+  "Web-søgningen blev afvist af søgetjenesten (robot-tjek efter for mange søgninger), så der er ingen søgeresultater. Søg ikke igen, og gæt ikke på tal eller fakta: sig, at web-søgningen ikke virkede lige nu.";
+
 function withTimeout(signal?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(15_000);
   return signal ? AbortSignal.any([signal, timeout]) : timeout;
@@ -101,6 +114,10 @@ async function searchDuckDuckGo(query: string, signal?: AbortSignal): Promise<Se
   const html = await res.text();
   const results = parseDdgHtml(html);
   if (results.length) return { host, ok: true, text: formatResults(results) };
+  if (res.status === 202 || looksLikeBotChallenge(html)) {
+    console.warn("[miai] DuckDuckGo afviste søgningen med et robot-tjek.");
+    return { host, ok: false, text: BOT_CHALLENGE_TEXT };
+  }
   if (looksLikeUnparsedResults(html)) {
     console.warn("[miai] DuckDuckGo-siden indeholdt resultater, som ikke kunne læses – formatet er måske ændret.");
     return { host, ok: false, text: "Søgetjenestens side kunne ikke læses (formatet er måske ændret). Svar uden søgeresultater, og sig det til brugeren." };

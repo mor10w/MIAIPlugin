@@ -45,6 +45,15 @@ const MAX_TOOL_ROUNDS = 4;
 const SEARCH_AWARENESS =
   "You have access to a web_search tool that searches the web. Use it when you need current information (news, prices, versions, recent events) or a fact you are not confident about; do not use it when the document already answers the question. If your answer uses web results, cite sources with their URLs.";
 
+/**
+ * Dags dato til systemprompten, når modellen kan søge. Uden den regner modellen med datoen fra sin
+ * træning og afviser fx en kurs fra sidste uge som "en dato i fremtiden". Brugerens lokale dato.
+ */
+export function todayLine(now: Date): string {
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `Today's date is ${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}.`;
+}
+
 /** Map-trinnet ved opdeling af lange tekster (#3). */
 const MAP_INSTRUCTION =
   "This is one part of a longer document. Summarize this part concisely: keep key facts, numbers, names, decisions and conclusions. Do not add an introduction. Answer in the same language as the text.";
@@ -154,6 +163,8 @@ export interface EngineDeps {
   client?: ClientOptions;
   /** Leveres kun af bridgen – direkte tilstand har ingen værktøjer. */
   tools?: ToolExecutor;
+  /** Uret (til tests). Standard: maskinens. */
+  now?: () => Date;
 }
 
 export interface TaskSummary {
@@ -343,7 +354,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     let msgs: ApiMessage[] = messages;
     if (tools) {
       const [sys, ...rest] = msgs;
-      msgs = [{ ...sys, content: `${sys.content}\n${SEARCH_AWARENESS}` }, ...rest];
+      msgs = [{ ...sys, content: `${sys.content}\n${SEARCH_AWARENESS}\n${todayLine(deps.now?.() ?? new Date())}` }, ...rest];
     }
     // Løkke: modellen kan kalde web_search, hvorefter resultatet sendes tilbage som tool-besked.
     // Ved MAX_TOOL_ROUNDS tillades ingen nye kald – modellen skal svare med det, den har.
