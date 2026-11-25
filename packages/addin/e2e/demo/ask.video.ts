@@ -2,17 +2,20 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
 import { fakeOfficeScript, type FakeOfficeOptions } from "../fixtures/office";
-import { startStaticHost } from "../fixtures/servers";
+import { startBridge } from "../fixtures/servers";
 
 /**
  * Video om regnearksfunktionen =MIAI.ASK() (#80), til brug i opslag: formlen skrives i en celle,
- * trækkes ned over rækkerne, og svaret følger med, når teksten ændres.
+ * trækkes ned over rækkerne, svaret følger med, når teksten ændres, og til sidst slår en celle op
+ * på nettet (optimized = FALSK).
  *
  * Regnearket er scenens eget (stage.html, "formelscenen"): den spiller Excels rolle, viser #BUSY!
- * og kalder den funktion, add-in'et har registreret i task pane. Køen, cachen og statuslinjen
- * "MIAI.ASK: … i gang, … i kø" er derfor add-in'ets egne. Modelsvarene er indspillede (ROWS
- * nedenfor), så optagelsen er ens fra gang til gang. Det er en illustration af brugerfladen, ikke
- * en måling af en models kvalitet eller hastighed.
+ * og kalder den funktion, add-in'et har registreret i task pane. Task pane serveres af den rigtige
+ * bridge, som i MIAI App, så køen, cachen, statuslinjen "MIAI.ASK: … i gang, … i kø" og
+ * søgerunden (modellen beder om web_search, bridgen søger og sender resultatet tilbage) er MIAI's
+ * egen kode. Modelsvarene og søgeresultaterne er indspillede (ROWS og COMPANIES nedenfor), så
+ * optagelsen er ens fra gang til gang og ikke rører internettet. Det er en illustration af
+ * brugerfladen, ikke en måling af en models kvalitet eller hastighed.
  *
  *   npm run build && npx playwright test -c packages/addin/e2e/demo/playwright.config.ts ask.video.ts
  *
@@ -48,7 +51,48 @@ const SHEET: NonNullable<FakeOfficeOptions["excel"]> = {
   formats: { A1: { bold: true }, B1: { bold: true }, C1: { bold: true } },
 };
 
-/** Lille OpenAI-kompatibel model: finder henvendelsen i forespørgslen og svarer det indspillede. */
+/** Arket til websøgningen: kendte danske virksomheder og byen med hovedkontoret. */
+const COMPANIES: [name: string, city: string][] = [
+  ["LEGO", "Billund"],
+  ["Novo Nordisk", "Bagsværd"],
+  ["Vestas", "Aarhus"],
+  ["Danfoss", "Nordborg"],
+  ["Grundfos", "Bjerringbro"],
+  ["Carlsberg", "København"],
+];
+const LAST_COMPANY = FIRST + COMPANIES.length - 1;
+const HEAD_OFFICE = (row: number) => `=MIAI.ASK("Hvilken by ligger hovedkontoret i?"; A${row}; FALSK)`;
+const COMPANY_SHEET: NonNullable<FakeOfficeOptions["excel"]> = {
+  sheet: "Leverandører",
+  values: [["Virksomhed", "Hovedkontor"], ...COMPANIES.map(([name]) => [name, ""])],
+  formats: { A1: { bold: true }, B1: { bold: true } },
+};
+
+/** Lille søgetjeneste (SearXNG's JSON-format), så bridgens websøgning ikke rører internettet. */
+async function startSearch(): Promise<{ url: string; queries: string[]; stop: () => Promise<void> }> {
+  const queries: string[] = [];
+  const server: Server = createServer((req, res) => {
+    const q = new URL(req.url ?? "/", "http://x").searchParams.get("q") ?? "";
+    queries.push(q);
+    const hit = COMPANIES.find(([name]) => q.includes(name));
+    res.setHeader("content-type", "application/json");
+    res.end(
+      JSON.stringify({
+        results: hit
+          ? [{ title: `${hit[0]} – hovedkontor`, url: "https://example.invalid/virksomheder", content: `${hit[0]} har hovedkontor i ${hit[1]}.` }]
+          : [],
+      }),
+    );
+  });
+  await new Promise<void>((ok) => server.listen(0, "127.0.0.1", ok));
+  const { port } = server.address() as { port: number };
+  return { url: `http://127.0.0.1:${port}`, queries, stop: () => new Promise((ok) => server.close(() => ok())) };
+}
+
+/**
+ * Lille OpenAI-kompatibel model: finder rækken i forespørgslen og svarer det indspillede. Til en
+ * virksomhed beder den først om en websøgning (web_search) og svarer, når søgeresultatet er kommet.
+ */
 async function startModel(): Promise<{ url: string; stop: () => Promise<void> }> {
   const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
   let n = 0;
@@ -66,11 +110,29 @@ async function startModel(): Promise<{ url: string; stop: () => Promise<void> }>
       res.statusCode = 404;
       return res.end();
     }
-    const body = JSON.parse(raw) as { messages: { content: string }[]; stream?: boolean };
-    const asked = body.messages.map((m) => m.content).join("\n");
-    const row = [EDITED, ...ROWS].find(([text]) => asked.includes(text));
-    const answer = row ? (asked.includes("Kategorisér") ? row[1] : row[2]) : "?";
+    const body = JSON.parse(raw) as { messages: { role: string; content: string | null }[]; stream?: boolean };
+    const asked = body.messages.map((m) => m.content ?? "").join("\n");
+    const user = body.messages.find((m) => m.role === "user")?.content ?? "";
     await sleep(PROBE ? 30 : 950 + (n++ % 3) * 220); // "tænketid", lidt forskellig fra celle til celle
+    const company = COMPANIES.find(([name]) => user.includes(`\n${name}\n`));
+    if (company && !body.messages.some((m) => m.role === "tool")) {
+      // Første runde for en virksomhed: modellen beder om en websøgning.
+      const call = {
+        index: 0,
+        id: "call_1",
+        type: "function",
+        function: { name: "web_search", arguments: JSON.stringify({ query: `${company[0]} hovedkontor` }) },
+      };
+      if (!body.stream) {
+        res.setHeader("content-type", "application/json");
+        return res.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: null, tool_calls: [call] }, finish_reason: "tool_calls" }] }));
+      }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [call] }, finish_reason: "tool_calls" }] })}\n\n`);
+      return res.end("data: [DONE]\n\n");
+    }
+    const row = [EDITED, ...ROWS].find(([text]) => asked.includes(text));
+    const answer = company ? company[1] : row ? (asked.includes("Kategorisér") ? row[1] : row[2]) : "?";
     if (!body.stream) {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ choices: [{ message: { content: answer }, finish_reason: "stop" }] }));
@@ -162,8 +224,11 @@ async function fillDown(page: Page, src: string, last: number) {
 test("video: =MIAI.ASK()", async ({ page }) => {
   if (PROBE) page.on("pageerror", (e) => console.log("[scene]", e.message));
   const model = await startModel();
-  const host = await startStaticHost();
-  const office: FakeOfficeOptions = {
+  const search = await startSearch();
+  // Den rigtige bridge, som i MIAI App: websøgning i en celle findes kun dér.
+  const bridge = await startBridge(model.url, { defaultModel: "qwen3:14b", webSearch: true, search: { provider: "searxng", url: search.url } });
+  const pane = (sheet: string) => `${bridge.origin}/taskpane.html?token=${encodeURIComponent(bridge.token)}&functions=1&ark=${sheet}`;
+  let office: FakeOfficeOptions = {
     host: "Excel",
     apiSets: { ExcelApi: "1.10" },
     excel: SHEET,
@@ -171,13 +236,11 @@ test("video: =MIAI.ASK()", async ({ page }) => {
     documentUrl: "https://example.invalid/Henvendelser.xlsx",
   };
   await page.route("https://appsforoffice.microsoft.com/**", (r) => r.fulfill({ contentType: "text/javascript", body: fakeOfficeScript(office) }));
-  await page.route(`${host.origin}/demo-stage.html`, (r) =>
+  await page.route(`${bridge.origin}/demo-stage.html`, (r) =>
     r.fulfill({ contentType: "text/html", body: readFileSync(new URL("./stage.html", import.meta.url), "utf8") }),
   );
-  const settings = { endpoints: [{ id: "lokal", name: "Ollama (lokal)", baseUrl: model.url }], activeEndpoint: "lokal", defaultModel: "qwen3:14b" };
-  await page.addInitScript((s) => localStorage.setItem("miai.settings.v1", s), JSON.stringify(settings));
 
-  await page.goto(`${host.origin}/demo-stage.html`);
+  await page.goto(`${bridge.origin}/demo-stage.html`);
   await stage(
     page,
     "card",
@@ -187,9 +250,9 @@ test("video: =MIAI.ASK()", async ({ page }) => {
     "Demo med simuleret regneark og indspillede modelsvar",
   );
   // Et manifest med regnearksfunktionerne åbner task pane med ?functions=1.
-  await stage(page, "open", `${host.origin}/taskpane.html?functions=1`, "Henvendelser.xlsx");
+  await stage(page, "open", pane("henvendelser"), "Henvendelser.xlsx");
   const tp: FrameLocator = page.frameLocator("#tp");
-  await expect(tp.getByText("Direkte forbindelse")).toBeVisible();
+  await expect(tp.getByText("Via MIAI Bridge")).toBeVisible();
   await expect(page.locator("#sheet td", { hasText: "Bornholm" })).toBeVisible();
   await stage(page, "grid", { cols: ["A", "B", "C", "D", "E"], widths: { A: 350, B: 130, C: 120, D: 110, E: 110 }, rows: 14 });
   const bar = tp.getByTestId("cell-bar");
@@ -257,18 +320,62 @@ test("video: =MIAI.ASK()", async ({ page }) => {
   await pause(page, 3400);
   await snap("4-faerdig");
 
+  // --- 5. Websøgning i cellen (optimized = FALSK) ----------------------------------------------
+  await stage(page, "card", "Og med websøgning", "Med FALSK som sidste argument må cellen bruge de værktøjer, du har slået til under Indstillinger.", [
+    "Søger på nettet",
+    "Egne mapper",
+    "Tænkning",
+  ]);
+  await pause(page, 900);
+  office = {
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: COMPANY_SHEET,
+    customFunctions: true,
+    documentUrl: "https://example.invalid/Leverandører.xlsx",
+  };
+  await stage(page, "open", pane("leverandoerer"), "Leverandører.xlsx");
+  await expect(tp.getByText("Via MIAI Bridge")).toBeVisible();
+  await expect(page.locator("#sheet td", { hasText: "Grundfos" })).toBeVisible();
+  await stage(page, "grid", { cols: ["A", "B", "C", "D", "E"], widths: { A: 220, B: 200, C: 140, D: 130, E: 130 }, rows: 14 });
+  await stage(
+    page,
+    "caption",
+    "5 · Websøgning",
+    "FALSK: cellen må slå op på nettet",
+    "Modellen søger, læser resultatet og svarer. Det tager længere tid end SAND.",
+  );
+  await pause(page, 2600);
+  await stage(page, "card");
+  await pause(page, 1800);
+  await write(page, `B${FIRST}`, HEAD_OFFICE(FIRST));
+  await expect(cell(page, `B${FIRST}`)).toHaveText("#BUSY!");
+  await expect(cell(page, `B${FIRST}`)).toHaveText(COMPANIES[0][1]);
+  await stage(page, "fsel", `B${FIRST}`);
+  await pause(page, 1600);
+  await fillDown(page, `B${FIRST}`, LAST_COMPANY);
+  await expect(bar).toContainText("2 i gang");
+  await snap("5-koe");
+  for (const [i, company] of COMPANIES.entries()) await expect(cell(page, `B${FIRST + i}`)).toHaveText(company[1]);
+  await expect(bar).toBeHidden();
+  // Hver virksomhed er slået op gennem bridgens websøgning, ikke svaret direkte.
+  for (const [name] of COMPANIES) expect(search.queries).toContain(`${name} hovedkontor`);
+  await pause(page, 3200);
+  await snap("5-faerdig");
+
   // --- Afslutning ------------------------------------------------------------------------------
   await stage(
     page,
     "card",
     "=MIAI.ASK(prompt; input)",
     "En del af MIAI: AI-assistent til Word, Excel, PowerPoint og Outlook med jeres egne sprogmodeller. Åben kildekode under MIT-licensen.",
-    ["Kategorisér", "Udtræk", "Oversæt", "Opsummér"],
+    ["Kategorisér", "Udtræk", "Oversæt", "Slå op på nettet"],
     "github.com/mor10w/MIAIPlugin",
   );
   await pause(page, 5000);
 
   await page.close();
-  await host.stop();
+  await bridge.stop();
+  await search.stop();
   await model.stop();
 });
