@@ -63,7 +63,7 @@ Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
 Bridgen fra kildekoden bruger udviklingscertifikatet fra `npm run certs` (det samme som `npm run dev`).
 
-1. Afslut MIAI App (menuen → Afslut), så porten er fri.
+1. Afslut MIAI App (menuen → Afslut), så porten er fri. Kører appen stadig, vælger bridgen en anden port, og det manifest, Office allerede har, peger så på en port, hvor intet lytter.
 2. Byg og start bridgen med testmanifestet:
    ```bash
    npm run build
@@ -77,9 +77,41 @@ Bridgen fra kildekoden bruger udviklingscertifikatet fra `npm run certs` (det sa
    npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
    ```
    Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`.
-4. Under Indstillinger vises nu **Excel-funktioner**, og `=MIAI.ASK(` findes i arket.
+
+   Gør det igen, hver gang bridgen melder en anden port ved start. Manifestet i Office følger ikke selv med.
+4. Har Excel på denne maskine før brugt funktionerne fra et andet MIAI-manifest (typisk udviklingsmanifestet), så ryd Excels funktionscache, mens Excel er lukket. Se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne).
+5. Under Indstillinger vises nu **Excel-funktioner**, og `=MIAI.ASK(` findes i arket. Det første kald kan tage op mod et minut, mens modellen indlæses.
 
 **Tilbage til det almindelige:** stop bridgen med Ctrl+C, og start MIAI App. Den skriver sit eget manifest igen og lægger det ind i Office. Genstart Excel.
+
+### Skift mellem manifester med funktionerne
+
+Udviklingsmanifestet og testmanifestet har hver sit id, men samme navnerum (`MIAI`). Excel gemmer, hvilket add-in navnerummet hører til, og laver ikke registreringen om, når et andet manifest med samme navnerum lægges ind. Den gamle registrering peger så på et add-in, der ikke længere er der.
+
+Sådan ser det ud:
+
+- Panelet viser **Excel-funktioner** under Indstillinger, men `=MIAI.ASK(` foreslås ikke i arket, eller cellen viser `#NAME?`.
+- Eller cellen står på `#BUSY!`, og hverken bridgen eller modelserveren får et kald. Tidsgrænsen på 20 sekunder slår ikke til, fordi Excel aldrig kalder funktionen.
+
+Ryd funktionscachen, hver gang du skifter mellem `npm run dev` og bridgen med testmanifestet:
+
+1. Luk Excel helt (Cmd+Q på Mac).
+2. Slet mappen med Excels registreringer af regnearksfunktioner. Det er ren cache, som Excel bygger igen ved næste start.
+
+   macOS:
+   ```bash
+   rm -rf ~/Library/Containers/com.microsoft.Excel/Data/Library/Application\ Support/Microsoft/Office/16.0/Wef/CustomFunctions
+   ```
+   Windows: slet indholdet af `%LOCALAPPDATA%\Microsoft\Office\16.0\Wef\` (Microsofts anvisning til at rydde Office-cachen; ikke afprøvet her).
+3. Start Excel, åbn MIAI-panelet, og prøv formlen igen.
+
+Tjek på macOS, hvilket add-in der har registreringen:
+
+```bash
+cat ~/Library/Containers/com.microsoft.Excel/Data/Library/Application\ Support/Microsoft/Office/16.0/Wef/CustomFunctions/*/Registry/*/*/properties.json
+```
+
+`addinid` skal indeholde id'et fra det manifest, du har lagt ind (`fdac46a3-…` for bridgen, `3b0f5a2e-…` for udviklingsmanifestet).
 
 ## Tests
 ```bash
@@ -163,7 +195,7 @@ node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 ```bash
 node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest-outlook.xml outlook
 ```
-**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Et manifest med funktionerne åbner task pane med `?functions=1`; uden den parameter registrerer siden ingen funktioner og viser intet om dem. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem.
+**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Et manifest med funktionerne åbner task pane med `?functions=1`; uden den parameter registrerer siden ingen funktioner og viser intet om dem. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem. Excel cacher også, hvilket add-in navnerummet `MIAI` hører til; se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne).
 
 Outlook sideloades fra fil: Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug `manifest.outlook.dev.xml` med `npm run dev`.
 
@@ -221,6 +253,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Kontekst (#73): med Ollama uden `OLLAMA_CONTEXT_LENGTH` viser Indstillinger → Modeller den indlæste kontekst (4.096 på en maskine med under 24 GB VRAM) og en advarsel; efter `OLLAMA_CONTEXT_LENGTH=32768` og genstart viser **Tjek igen** 32.768 og ingen advarsel. I LM Studio vises den kontekst, modellen er indlæst med
 - [ ] Regnearksfunktioner (#80, med `manifest.dev.xml` og `npm run dev`), i Excel på Windows og Mac:
   - [ ] Manifestet indlæses, og MIAI virker som før i Word, Excel og PowerPoint (task pane åbner fra fanen Hjem)
+  - [ ] Har maskinen før haft et andet MIAI-manifest med funktionerne, er Excels funktionscache ryddet først (se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne))
   - [ ] `=MIAI.ASK("Hvilket land ligger byen i?"; A2)` viser `#BUSY!` og derefter svaret; formlen kan trækkes ned over 50 rækker, og task pane viser "i gang" og "i kø" med et virkende **Stop MIAI-funktioner**
   - [ ] Mens cellerne regner, viser panelet statuslinjen "MIAI.ASK: … i gang, … i kø" (gør det ikke, kører Excel funktionerne i en anden udgave af siden end panelet; notér det)
   - [ ] Mens formlen skrives, kaldes modellen ikke (ingen aktivitet i Ollama, før Enter)
