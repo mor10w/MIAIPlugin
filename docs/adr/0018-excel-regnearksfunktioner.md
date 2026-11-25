@@ -72,6 +72,9 @@ Til afprøvning med bridgen findes testmanifestet `manifest.functions.xml`: brid
 - Cellen stod på `#BUSY!` uden noget kald til bridgen. Funktionen ventede på panelets opstart, som kun afsluttes, når `Office.onReady` melder Excel som vært. Funktionerne opretter derfor selv deres backend, så snart siden er indlæst, og knyttes til, så snart Office.js har defineret `CustomFunctions`. Om Excel på Mac kører funktionerne i samme side som panelet eller i sin egen skjulte udgave af den, er ikke afklaret; koden virker nu i begge tilfælde.
 - Et kald venter højst 20 sekunder på MIAI selv (backend, indstillinger, modelliste). Derefter viser cellen `#N/A` med en forklaring.
 - Kører funktionerne i en anden udgave af siden end panelet, kan panelets statuslinje og Stop-knap ikke se køen. Det skal afklares.
+- Med testmanifestet gennem bridgen giver `=MIAI.ASK("…"; B3; SAND)` svar i cellen (Excel 16.115 på Mac, oMLX). Det første kald tog omkring 40 sekunder, mens modellen blev indlæst; derefter kom svarene hurtigt.
+- `#BUSY!` uden kald til bridgen havde endnu en årsag, som ikke ligger i koden: Excel gemmer, hvilket add-in navnerummet `MIAI` hører til. Maskinen havde først brugt udviklingsmanifestet og fik derefter testmanifestet, som har et andet id, men samme navnerum. Excel hentede testmanifestets `functions.json`, men beholdt den gamle registrering, og formlen stod på `#BUSY!` eller var ukendt i arket. Efter at registreringen var slettet med Excel lukket, oprettede Excel en ny ved næste start, og funktionerne virkede. Fremgangsmåden står i [UDVIKLING.md](../UDVIKLING.md#skift-mellem-manifester-med-funktionerne).
+- Det har en følge for trin 2 under Udrulning i to trin: en bruger, der har haft et andet MIAI-manifest med funktionerne, kan ramme det samme, når funktionerne slås til i bridge-manifestet og det hostede manifest. Det gælder i dag kun udviklere, fordi kun udviklingsmanifestet og testmanifestet har funktionerne.
 
 ## Skal bekræftes i rigtig Excel
 
