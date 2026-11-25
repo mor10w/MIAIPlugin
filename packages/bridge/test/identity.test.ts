@@ -83,9 +83,9 @@ describe("identitet pr. bruger (#11)", () => {
     expect(xml).not.toContain("44321");
   });
 
-  it("personligt manifest med regnearksfunktioner (#80): tokenet føjes til ?functions=1, og funktionernes adresser følger porten", () => {
+  it("personligt manifest ud fra det udgivne bridge-manifest (#80): tokenet føjes til ?functions=1, og funktionernes adresser følger porten", () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const base = readFileSync(join(here, "../../addin/manifest.functions.xml"), "utf8");
+    const base = readFileSync(join(here, "../../addin/manifest.xml"), "utf8");
     const xml = personalizeManifest(base, { port: 44_322, token: "abc_DEF-123" });
     // "&" skal være &amp; i XML; add-in'et læser både functions og token fra adressen.
     expect(xml).toContain('id="MIAI.Taskpane.Url" DefaultValue="https://localhost:44322/taskpane.html?functions=1&amp;token=abc_DEF-123"');
@@ -99,13 +99,12 @@ describe("identitet pr. bruger (#11)", () => {
     expect(xml.match(/<TaskpaneId>/g)).toHaveLength(2);
   });
 
-  it("det udgivne bridge-manifest har ingen regnearksfunktioner (slås først til efter afprøvning i rigtig Excel)", () => {
+  it("Outlook-manifestet har ingen regnearksfunktioner (de findes kun i Excel)", () => {
     const here = dirname(fileURLToPath(import.meta.url));
-    const xml = readFileSync(join(here, "../../addin/manifest.xml"), "utf8");
+    const xml = readFileSync(join(here, "../../addin/manifest.outlook.xml"), "utf8");
     expect(xml).not.toContain("CustomFunctions");
     expect(xml).not.toContain("<Runtimes>");
     expect(xml).not.toContain("functions=1");
-    expect(xml.match(/<TaskpaneId>/g)).toHaveLength(3);
   });
 
   it("sammenligner tokens sikkert", () => {

@@ -301,7 +301,9 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 
 #### Regnearksfunktionen `=MIAI.ASK()`
 
-> **Under afprøvning.** Funktionen findes foreløbig kun med udviklingsmanifestet (installation C). Den slås til i MIAI App og det hostede add-in, når den er afprøvet i rigtig Excel ([#80](https://github.com/mor10w/MIAIPlugin/issues/80)).
+> **Nyt og kun afprøvet på Mac.** Funktionen er med i MIAI App, det hostede add-in og udvikler-tilstanden. Den er afprøvet i Excel på Mac med MIAI App; Windows og Excel på web er ikke afprøvet endnu ([#80](https://github.com/mor10w/MIAIPlugin/issues/80)).
+>
+> **Har du MIAI i forvejen?** Opdatér MIAI App, og genstart Excel. Med det hostede add-in skal du hente manifestet igen og lægge det ind i Office som under [installation B](#b-hostet-add-in-uden-app); er MIAI rullet centralt ud, skal administratoren uploade det nye manifest.
 
 Skriv en prompt i en formel, og få svaret som værdi i cellen:
 
@@ -592,6 +594,7 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
 | "Modellen svarede ikke i tide" | Modellen var tavs længere end endpointens **Timeout** (standard 5 min). Det sker typisk med store dokumenter på langsom hardware, før modellen begynder at svare. Hæv den under Indstillinger → endpointens **Avanceret** → **Timeout** (op til 30 min), eller vælg en mindre model. |
 | Formel giver `#NAME?` efter indsættelse | Modellen brugte et funktionsnavn, din Excel ikke kender. Ret formelen manuelt eller klik **Fortryd**. |
 | Indstillinger genværrer ikke | Direkte tilstand gemmer i `localStorage`; nogle Mac-bygninger rydder den. Start på ny og gem igen, eller brug bridgen (gemmer i `config.json`). |
+| `=MIAI.ASK(` kendes ikke i arket (`#NAME?`), eller cellen bliver stående på `#BUSY!` | Genstart Excel, og åbn MIAI-panelet. Viser Indstillinger ikke **Excel-funktioner**, har Office et ældre manifest: opdatér MIAI App, eller hent det hostede manifest igen. Har maskinen haft en anden MIAI-installation (fx både MIAI App og det hostede add-in), kan Excel huske den gamle: luk Excel, og ryd funktionscachen som beskrevet i [UDVIKLING.md](UDVIKLING.md#skift-mellem-manifester-med-funktionerne). |
 | Task pane åbner ikke | Genstart Office efter sideload. Fjern evt. add-in'et (Indsæt → Tilføjelser → …) og sideload igen. |
 
 ## Se også

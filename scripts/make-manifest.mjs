@@ -1,8 +1,7 @@
 // Genererer add-in-manifester ud fra packages/addin/manifest.template.xml (Word, Excel,
 // PowerPoint) og manifest.outlook.template.xml (Outlook, MailApp – #7).
 //
-//   node scripts/make-manifest.mjs                            → bridge, dev og testmanifestet med
-//                                                              regnearksfunktioner (committes)
+//   node scripts/make-manifest.mjs                            → bridge og dev (committes)
 //   node scripts/make-manifest.mjs hosted <url> <ud> [outlook] → hostet variant (fx GitHub Pages eller
 //                                                              organisationens egen server)
 //
@@ -24,11 +23,17 @@ const OUTLOOK_IDS = {
 };
 
 // functions: Excels regnearksfunktioner =MIAI.ASK() og =MIAI.MODELS() (#80, ADR-0018). De kræver
-// shared runtime i Excel og er kun slået til i dev-varianten, indtil manifestet er afprøvet i rigtig
-// Excel på Windows og Mac. Et manifest med en skemafejl indlæses slet ikke – heller ikke i Word og
-// PowerPoint – så de udgivne varianter (bridge, hosted) er uændrede.
+// shared runtime i Excel og er slået til i alle tre varianter. Et manifest med en skemafejl
+// indlæses slet ikke – heller ikke i Word og PowerPoint – så sæt `functions: false` på en variant,
+// hvis dens manifest skal udgives uden dem.
 export const VARIANTS = {
-  bridge: { id: "fdac46a3-f2b8-4e84-b704-78a669531789", base: "https://localhost:44321/", suffix: " (bridge)", label: "serveres af MIAI Bridge" },
+  bridge: {
+    id: "fdac46a3-f2b8-4e84-b704-78a669531789",
+    base: "https://localhost:44321/",
+    suffix: " (bridge)",
+    label: "serveres af MIAI Bridge",
+    functions: true,
+  },
   dev: {
     id: "3b0f5a2e-7c41-4d8a-9e55-2f6c1d9b8a10",
     base: "https://localhost:3000/",
@@ -36,17 +41,7 @@ export const VARIANTS = {
     label: "Vite-udviklingsserver, direkte forbindelse",
     functions: true,
   },
-  hosted: { id: "9c7e2d14-5a3b-4f6e-8d21-b4a9e0c7f352", base: null, suffix: "", label: "statisk hostet, direkte forbindelse" },
-  // Testmanifest: bridge-varianten med regnearksfunktionerne, til afprøvning med bridgen fra
-  // kildekoden (MIAI_MANIFEST, se docs/UDVIKLING.md). Samme Id som bridge-varianten, så det
-  // erstatter den i Office, og MIAI App lægger selv det almindelige manifest tilbage.
-  "bridge-functions": {
-    id: "fdac46a3-f2b8-4e84-b704-78a669531789",
-    base: "https://localhost:44321/",
-    suffix: " (bridge)",
-    label: "serveres af MIAI Bridge, med regnearksfunktioner (test)",
-    functions: true,
-  },
+  hosted: { id: "9c7e2d14-5a3b-4f6e-8d21-b4a9e0c7f352", base: null, suffix: "", label: "statisk hostet, direkte forbindelse", functions: true },
 };
 
 /**
@@ -119,7 +114,6 @@ if (variant) {
   for (const [name, file, kind] of [
     ["bridge", "manifest.xml", "office"],
     ["dev", "manifest.dev.xml", "office"],
-    ["bridge-functions", "manifest.functions.xml", "office"],
     ["bridge", "manifest.outlook.xml", "outlook"],
     ["dev", "manifest.outlook.dev.xml", "outlook"],
   ]) {

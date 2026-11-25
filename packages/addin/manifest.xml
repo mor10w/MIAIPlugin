@@ -74,6 +74,23 @@
           </DesktopFormFactor>
         </Host>
         <Host xsi:type="Workbook">
+          <Runtimes>
+            <Runtime resid="MIAI.Taskpane.Url" lifetime="long"/>
+          </Runtimes>
+          <AllFormFactors>
+            <ExtensionPoint xsi:type="CustomFunctions">
+              <Script>
+                <SourceLocation resid="MIAI.Functions.Script.Url"/>
+              </Script>
+              <Page>
+                <SourceLocation resid="MIAI.Taskpane.Url"/>
+              </Page>
+              <Metadata>
+                <SourceLocation resid="MIAI.Functions.Metadata.Url"/>
+              </Metadata>
+              <Namespace resid="MIAI.Functions.Namespace"/>
+            </ExtensionPoint>
+          </AllFormFactors>
           <DesktopFormFactor>
             <GetStarted>
               <Title resid="MIAI.GetStarted.Title"/>
@@ -102,7 +119,6 @@
                       <bt:Image size="80" resid="MIAI.Icon.80"/>
                     </Icon>
                     <Action xsi:type="ShowTaskpane">
-                      <TaskpaneId>MIAI.Taskpane</TaskpaneId>
                       <SourceLocation resid="MIAI.Taskpane.Url"/>
                     </Action>
                   </Control>
@@ -157,14 +173,19 @@
         <bt:Image id="MIAI.Icon.80" DefaultValue="https://localhost:44321/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="https://localhost:44321/taskpane.html"/>
+        <bt:Url id="MIAI.Taskpane.Url" DefaultValue="https://localhost:44321/taskpane.html?functions=1"/>
         <bt:Url id="MIAI.LearnMoreUrl" DefaultValue="https://localhost:44321/"/>
+        <bt:Url id="MIAI.Functions.Script.Url" DefaultValue="https://localhost:44321/functions-fallback.js"/>
+        <bt:Url id="MIAI.Functions.Metadata.Url" DefaultValue="https://localhost:44321/functions.json">
+          <bt:Override Locale="en-US" Value="https://localhost:44321/functions.en.json"/>
+        </bt:Url>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="MIAI.GetStarted.Title" DefaultValue="MIAI er klar">
           <bt:Override Locale="en-US" Value="MIAI is ready"/>
         </bt:String>
         <bt:String id="MIAI.Group.Label" DefaultValue="MIAI"/>
+        <bt:String id="MIAI.Functions.Namespace" DefaultValue="MIAI"/>
         <bt:String id="MIAI.OpenPane.Label" DefaultValue="AI-assistent">
           <bt:Override Locale="en-US" Value="AI assistant"/>
         </bt:String>
