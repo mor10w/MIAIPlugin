@@ -33,6 +33,30 @@ export interface CellInvocation {
 /** Vises i forhåndsvisningen, mens formlen skrives, når svaret ikke allerede er i cachen. */
 export const PREVIEW_PLACEHOLDER = "…";
 
+/**
+ * Så længe venter et kald på, at MIAI selv svarer (backend, indstillinger, modelliste), før cellen
+ * får en fejl. Selve modelkaldet har endpointens egen timeout. Uden grænsen står cellen på #BUSY!
+ * uden forklaring, hvis noget i opstarten hænger.
+ */
+export const READY_TIMEOUT_MS = 20_000;
+
+/** Afviser med `error`, hvis `p` ikke er afgjort inden for `ms`. */
+function within<V>(p: V | Promise<V>, ms: number, error: () => Error): Promise<V> {
+  return new Promise<V>((resolve, reject) => {
+    const timer = setTimeout(() => reject(error()), ms);
+    Promise.resolve(p).then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 const MODELS_KEY = "miai.cellmodels.v1";
 const SETTINGS_TTL_MS = 5_000;
 const MODELS_TTL_MS = 30_000;
@@ -48,7 +72,7 @@ export interface CellRuntime {
   clearCache(): void;
 }
 
-export function createCellRuntime(backendReady: Backend | Promise<Backend>, cache = new CellCache()): CellRuntime {
+export function createCellRuntime(backendReady: Backend | Promise<Backend>, cache = new CellCache(), readyTimeoutMs = READY_TIMEOUT_MS): CellRuntime {
   let settingsAt = 0;
   let settings: { settings: Settings; baseUrl: string } | undefined;
   let modelsAt = 0;
@@ -129,8 +153,9 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
     async ask(promptArg, inputArg, optimizedArg, modelArg, invocation) {
       let t = makeT("da");
       try {
-        const backend = await backendReady;
-        const { settings: s, baseUrl } = await loadSettings(backend);
+        const notReady = () => new CellError("na", t("cellNotReady"));
+        const backend = await within(backendReady, readyTimeoutMs, notReady);
+        const { settings: s, baseUrl } = await within(loadSettings(backend), readyTimeoutMs, notReady);
         t = makeT(s.uiLanguage);
 
         const prompt = inputToText(promptArg).trim();
@@ -149,7 +174,7 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
         if (model) {
           let known: string[];
           try {
-            known = await loadModels(backend);
+            known = await within(loadModels(backend), readyTimeoutMs, () => new Error("timeout"));
           } catch {
             throw new CellError("na", t("cellUnreachable"));
           }
@@ -175,7 +200,11 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
     async models() {
       const t = makeT("da");
       try {
-        const list = await loadModels(await backendReady);
+        const list = await within(
+          Promise.resolve(backendReady).then((b) => loadModels(b)),
+          readyTimeoutMs,
+          () => new Error("timeout"),
+        );
         if (list.length) return list.map((m) => [m]);
       } catch {
         // Endpointen kan ikke nås: vis den sidst kendte liste, så en dropdown, der peger på den, ikke går i stykker.
@@ -251,6 +280,16 @@ export function registerCellFunctions(backend: Backend | Promise<Backend>, decla
   cf.associate("MODELS", guard(() => rt.models()) as never);
   registered = rt;
   return rt;
+}
+
+/**
+ * Som registerCellFunctions, men venter på, at Office.js har defineret `CustomFunctions`: det sker
+ * først, når Office.js har hentet sin Excel-del, og ikke nødvendigvis før sidens egen kode kører.
+ * Prøver i op til 30 sekunder og gør intet, når manifestet ikke har funktionerne med.
+ */
+export function registerCellFunctionsWhenReady(backend: Backend | Promise<Backend>, declared = functionsDeclared(), tries = 300): void {
+  if (!declared || registerCellFunctions(backend, declared) || tries <= 0) return;
+  setTimeout(() => registerCellFunctionsWhenReady(backend, declared, tries - 1), 100);
 }
 
 /** De registrerede funktioner, eller undefined uden for Excels shared runtime. */

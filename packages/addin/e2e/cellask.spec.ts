@@ -122,3 +122,15 @@ test("med funktionerne i manifestet registreres ASK og MODELS", async ({ open })
   const tp = await open(EXCEL);
   expect(await tp.page.evaluate(() => (window as unknown as { __miai: { functions: () => string[] } }).__miai.functions().sort())).toEqual(["ASK", "MODELS"]);
 });
+
+for (const mode of ["direct", "bridge"] as const) {
+  test(`funktionen virker i Excels skjulte udgave af siden, hvor panelet aldrig starter (${mode})`, async ({ open }) => {
+    // Regression: funktionen ventede på panelets opstart, som kun sker, når Office melder Excel som
+    // vært. I en side, der kun kører funktioner, stod cellen derfor på #BUSY! uden noget kald.
+    const tp = await open({ ...EXCEL, mode, hiddenRuntime: true });
+    await expect(tp.page.getByText("Denne Office-app understøttes ikke endnu.")).toBeVisible();
+    tp.model.reply = () => ({ stream: ["abc"] });
+    expect(await ask(tp.page, "Fjern _", [["a_b_c"]], true)).toEqual({ value: "abc" });
+    expect(tp.model.requests).toHaveLength(1);
+  });
+}

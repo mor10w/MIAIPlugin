@@ -90,7 +90,8 @@ export const test = base.extend<{ open: Open }>({
       // Et manifest med regnearksfunktionerne åbner task pane med ?functions=1 (#80).
       if (opts.customFunctions) query += `${query ? "&" : "?"}functions=1`;
       await page.goto(`${origin}/taskpane.html${query}`);
-      await expect(page.getByText(opts.mode === "bridge" ? "Via MIAI Bridge" : "Direkte forbindelse")).toBeVisible();
+      // I en skjult funktions-runtime starter panelet aldrig, så der er intet at vente på.
+      if (!opts.hiddenRuntime) await expect(page.getByText(opts.mode === "bridge" ? "Via MIAI Bridge" : "Direkte forbindelse")).toBeVisible();
 
       return {
         page,
