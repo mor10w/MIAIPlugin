@@ -181,6 +181,8 @@ export type TaskEvent =
       stopReason?: "repetition";
       /** input-truncated: modellen så mindre, end der blev sendt (kontekstgrænse). output-truncated: svaret ramte max_tokens. */
       warnings?: TaskWarning[];
+      /** Ved small-context: modellens kontekst og værktøjet, så UI'et kan vise den rigtige rettelse (#73). */
+      context?: { tokens: number; server?: "ollama" | "lmstudio" };
     };
 
 // ---------------------------------------------------------------------------
@@ -190,8 +192,9 @@ export type TaskEvent =
 /**
  * thinking-ignored: serveren eller modellen afviste indstillingen for tænkning/indsats, så
  * forespørgslen blev sendt uden den (svaret er lavet med modellens standard).
+ * small-context: agent eller chat kørte på en model med under 16k tokens kontekst (#73).
  */
-export type TaskWarning = "input-truncated" | "output-truncated" | "thinking-ignored";
+export type TaskWarning = "input-truncated" | "output-truncated" | "thinking-ignored" | "small-context";
 
 /**
  * Søgetjeneste til web-søgning (#12). duckduckgo = offentlig, uden opsætning (søgeord sendes til
@@ -228,11 +231,15 @@ export const Endpoint = z.object({
    */
   presencePenalty: z.number().min(0).max(2).optional(),
   /**
-   * Modellens kontekstlængde i tokens (#3). Udeladt = aflæses fra /v1/models, hvor værktøjet
-   * oplyser den (vLLM m.fl.); ellers ukendt, og der planlægges uden loft.
+   * Modellens kontekstlængde i tokens (#3). Udeladt = aflæses automatisk: fra /v1/models (vLLM
+   * m.fl.) eller værktøjets eget API (Ollama, LM Studio; #73). Ellers ukendt, og der planlægges
+   * uden loft.
    */
   contextTokens: z.number().int().min(512).max(2_000_000).optional(),
-  /** Ekstra felter, der flettes ind i hver chat/completions-forespørgsel (fx { "num_ctx": 8192 }). */
+  /**
+   * Ekstra felter, der flettes ind i hver chat/completions-forespørgsel (fx { "top_k": 20 } til
+   * llama.cpp). Bemærk: Ollamas OpenAI-lag ignorerer num_ctx her; konteksten sættes i Ollama selv.
+   */
   extraBody: z.record(z.string(), z.unknown()).default({}),
   /**
    * Hvor længe serveren må være tavs, før forespørgslen opgives: før svaret begynder (fx mens en

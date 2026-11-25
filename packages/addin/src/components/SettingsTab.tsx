@@ -56,6 +56,7 @@ import { useBackend } from "../backend";
 import { ui } from "../theme";
 import { useI18n } from "../i18n";
 import { SetupGuide } from "./SetupGuide";
+import { ModelContext } from "./ModelContext";
 import { TaskModels } from "./TaskModels";
 import { KnowledgeSection } from "./KnowledgeSection";
 
@@ -195,6 +196,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
       <Spinner />
     );
 
+  const activeEp = settings.endpoints.find((e) => e.id === settings.activeEndpoint);
   /** Viser også en værdi, der er sat manuelt i config.json og ikke er en af forudindstillingerne. */
   const thinkingLabel = (m: ThinkingMode) => t(m === "on" ? "thinkingOn" : m === "off" ? "thinkingOff" : "thinkingDefault");
   const effortLabel = (e: ReasoningEffort) => t(e === "low" ? "effortLow" : e === "medium" ? "effortMedium" : e === "high" ? "effortHigh" : "thinkingDefault");
@@ -473,6 +475,7 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
                 ))}
               </Dropdown>
             </Field>
+            {activeEp && (settings.defaultModel || models[0]) && <ModelContext endpoint={activeEp} model={settings.defaultModel || models[0]} />}
             <TaskModels groups={settings.groupModels} tasks={settings.taskModels} models={models} onChange={(next) => setSettings({ ...settings, ...next })} />
           </AccordionPanel>
         </AccordionItem>

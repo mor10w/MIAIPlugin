@@ -30,6 +30,12 @@ export interface ChatRequestBody {
   [key: string]: unknown;
 }
 
+/** Værktøjets eget API ud over /v1 (#73): Ollamas /api/show og /api/ps, LM Studios /api/v1/models. */
+export interface MockNative {
+  ollama?: { show: unknown; ps?: unknown };
+  lmstudio?: unknown;
+}
+
 /** OpenAI-kompatibel mock (som Ollama/LM Studio) på en tilfældig port. */
 export class MockModel {
   readonly requests: ChatRequestBody[] = [];
@@ -40,10 +46,24 @@ export class MockModel {
   private server?: Server;
   url = "";
 
-  constructor(readonly opts: { cors?: boolean; models?: string[]; port?: number } = {}) {}
+  constructor(readonly opts: { cors?: boolean; models?: string[]; port?: number; native?: MockNative } = {}) {}
 
   get lastRequest(): ChatRequestBody | undefined {
     return this.requests.at(-1);
+  }
+
+  /**
+   * Venter på, at task pane har kaldt modellen, og giver den seneste forespørgsel. Bruges lige
+   * efter "Kør": før chat-kaldet spørger MIAI efter modellens kontekst (#73), så kaldet kommer
+   * ikke nødvendigvis med det samme.
+   */
+  async waitForRequest(timeoutMs = 10_000): Promise<ChatRequestBody> {
+    const end = Date.now() + timeoutMs;
+    while (!this.requests.length) {
+      if (Date.now() > end) throw new Error("Modellen blev ikke kaldt.");
+      await new Promise((ok) => setTimeout(ok, 20));
+    }
+    return this.requests.at(-1)!;
   }
 
   async start(): Promise<this> {
@@ -53,6 +73,20 @@ export class MockModel {
         res.setHeader("access-control-allow-headers", "content-type, authorization");
       }
       if (req.method === "OPTIONS") return res.end();
+      const native = this.opts.native;
+      const nativeReply =
+        native?.ollama && req.url === "/api/show" && req.method === "POST"
+          ? native.ollama.show
+          : native?.ollama && req.url === "/api/ps"
+            ? (native.ollama.ps ?? { models: [] })
+            : native?.lmstudio && req.url === "/api/v1/models"
+              ? native.lmstudio
+              : undefined;
+      if (nativeReply !== undefined) {
+        if (req.method === "POST") await readBody(req);
+        res.setHeader("content-type", "application/json");
+        return res.end(JSON.stringify(nativeReply));
+      }
       if (req.url === "/v1/models") {
         res.setHeader("content-type", "application/json");
         return res.end(JSON.stringify({ object: "list", data: (this.opts.models ?? ["qwen3:4b"]).map((id) => ({ id })) }));

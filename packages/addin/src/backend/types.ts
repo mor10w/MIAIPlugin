@@ -4,6 +4,7 @@ import type {
   ExportSheetRequest,
   HealthInfo,
   KnowledgeStatus,
+  ModelDetails,
   ProbeResult,
   ModelInfo,
   Policy,
@@ -52,6 +53,8 @@ export interface Backend {
   deleteUserTask(id: string): Promise<void>;
   /** Tester en (evt. ikke gemt) endpoint: svarer den, og hvilke modeller har den? (#4) */
   probe(endpoint: Endpoint): Promise<ProbeResult>;
+  /** Kontekst og kapabiliteter for en model på en (evt. ikke gemt) endpoint (#73). */
+  modelDetails(endpoint: Endpoint, model: string): Promise<ModelDetails>;
   /** Seneste audit-logposter (kun metadata). */
   audit(): Promise<AuditEntry[]>;
   /** Kører en opgave; kalder onEvent for hver hændelse. Kaster kun ved transportfejl. */

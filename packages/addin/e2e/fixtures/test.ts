@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { fakeOfficeScript, type FakeOfficeOptions, type OfficeCall } from "./office";
-import { MockModel, startBridge, startStaticHost } from "./servers";
+import { MockModel, startBridge, startStaticHost, type MockNative } from "./servers";
 
 export { expect };
 
@@ -17,6 +17,8 @@ export interface TaskpaneOptions extends FakeOfficeOptions {
   models?: string[];
   /** Fast port til mock-modellen (fx 11434 for at ligne Ollama). Standard: tilfældig. */
   modelPort?: number;
+  /** Mock-modellen svarer også som Ollamas eller LM Studios eget API (#73). */
+  native?: MockNative;
   /** Direkte tilstand: organisationens miai-config.json på add-in'ets adresse (#7). Streng = råt indhold (fx ugyldig JSON). */
   orgConfig?: Record<string, unknown> | string;
   /** Bridge: åbn task pane uden adgangstoken (som med et gammelt manifest). */
@@ -54,7 +56,7 @@ export const test = base.extend<{ open: Open }>({
     page.on("pageerror", (e) => errors.push(e.message));
 
     await use(async (opts) => {
-      const model = await new MockModel({ cors: opts.cors, models: opts.models, port: opts.modelPort }).start();
+      const model = await new MockModel({ cors: opts.cors, models: opts.models, port: opts.modelPort, native: opts.native }).start();
       cleanup.push(() => model.stop());
 
       await page.route("https://appsforoffice.microsoft.com/**", (r) => r.fulfill({ contentType: "text/javascript", body: fakeOfficeScript(opts) }));

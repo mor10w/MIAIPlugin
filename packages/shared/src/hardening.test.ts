@@ -25,6 +25,8 @@ let rejectStreamOptions = false;
 beforeAll(async () => {
   server = createServer((req, res) => {
     if (req.url === "/v1/models") return res.end(JSON.stringify({ data: models }));
+    // Som et værktøj uden Ollamas eller LM Studios eget API (#73).
+    if (!req.url?.endsWith("/chat/completions")) return res.writeHead(404).end();
     let raw = "";
     req.on("data", (c) => (raw += c));
     req.on("end", () => {

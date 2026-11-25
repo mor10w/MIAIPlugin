@@ -10,6 +10,7 @@ export * from "./policy.js";
 export * from "./openai.js";
 export * from "./engine.js";
 export * from "./context.js";
+export * from "./modelInfo.js";
 export * from "./tools.js";
 export * from "./defaults.js";
 export * from "./audit.js";

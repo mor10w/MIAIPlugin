@@ -25,7 +25,9 @@ const readBody = (req: IncomingMessage) =>
 
 beforeAll(async () => {
   server = createServer(async (req, res) => {
-    if (req.url?.endsWith("/models")) return res.end(JSON.stringify({ object: "list", data: [{ id: "mock" }] }));
+    if (req.url === "/v1/models") return res.end(JSON.stringify({ object: "list", data: [{ id: "mock" }] }));
+    // Som et værktøj uden Ollamas eller LM Studios eget API (#73).
+    if (!req.url?.endsWith("/chat/completions")) return res.writeHead(404).end();
     const body = JSON.parse(await readBody(req));
     bodies.push(body);
     const r = replies.shift() ?? { text: "" };

@@ -20,6 +20,8 @@ export interface TaskState {
   stopReason?: "repetition";
   /** Fx at modellen så mindre, end der blev sendt (kontekstgrænse). */
   warnings?: TaskWarning[];
+  /** Ved small-context: modellens kontekst og værktøjet (#73). */
+  context?: { tokens: number; server?: "ollama" | "lmstudio" };
   /** Fremskridt ved opdeling af lange tekster (map-reduce). */
   step?: { done: number; total: number };
 }
@@ -77,7 +79,7 @@ export function useTask() {
                 update((s) => ({ ...s, text: s.text.slice(0, Math.max(0, s.text.length - e.chars)) }));
                 break;
               case "done":
-                update((s) => ({ ...s, status: "done", stopReason: e.stopReason, warnings: e.warnings, step: undefined }));
+                update((s) => ({ ...s, status: "done", stopReason: e.stopReason, warnings: e.warnings, context: e.context, step: undefined }));
                 break;
             }
           },

@@ -498,8 +498,11 @@ Knapper, som din Office-version ikke understøtter, skjules.
 - **Lange dokumenter og kontekstlængde**: hver model har en kontekstgrænse (hvor meget tekst den kan læse ad gangen).
   - **Opsummér** deler lange dokumenter (op til ca. 60 sider) i dele, opsummerer hver del og samler til sidst. Mens det sker, vises "Læser lang tekst: del 3 af 12…".
   - Andre opgaver sender højst 24.000 tegn. Bliver teksten afkortet, siger MIAI det.
-  - Har modellen alligevel ikke fået hele teksten med, vises en advarsel. MIAI sammenligner modellens egen optælling med det sendte; det sker fx med Ollama, hvis `num_ctx` er mindre end teksten. Øg så kontekstlængden i værktøjet (Ollama: `OLLAMA_CONTEXT_LENGTH`), og skriv den under **Kontekstlængde** for endpointen.
-  - Kendes kontekstlængden (angivet eller aflæst fra fx vLLM), begrænses svarlængden, så prompt og svar passer, og en alt for lang tekst afvises, før den sendes.
+  - **MIAI aflæser kontekstlængden selv** fra Ollama, LM Studio og vLLM og viser den under **Indstillinger → Modeller → Modellens kontekst**, sammen med hvad modellen kan (billeder, værktøjer, tænkning). Ollama oplyser først konteksten, når modellen er indlæst. Brug den én gang, og tryk **Tjek igen**.
+  - **Ollama bruger kun 4.096 tokens** på maskiner med under 24 GB grafikhukommelse, medmindre andet er sat. Agent og chat har brug for mindst 16.384, så MIAI advarer både under Indstillinger og under svaret. Sæt kontekstlængden under Settings i Ollama-appen, eller med miljøvariablen `OLLAMA_CONTEXT_LENGTH` (fx 32768), og genstart Ollama. `num_ctx` under endpointens ekstra felter virker ikke, fordi Ollamas OpenAI-API ignorerer det.
+  - **LM Studio:** indlæs modellen med en større **Context Length**.
+  - Har modellen alligevel ikke fået hele teksten med, vises en advarsel. MIAI sammenligner modellens egen optælling med det sendte.
+  - Kendes kontekstlængden, begrænses svarlængden, så prompt og svar passer, og en alt for lang tekst afvises, før den sendes. Oplyser værktøjet den ikke, kan du skrive den under **Kontekstlængde** for endpointen; det tal går forud for det aflæste.
   - Chat om meget store dokumenter kommer med lokal RAG (fase 4).
 - **Fejlbeskeder** vises på dansk eller engelsk med en forklaring (fx "tjek API-nøglen" ved 401/403) og serverens egen besked som detalje.
 - **Timeout**: MIAI giver op, når modellen har været tavs længere end endpointens **Timeout** (Indstillinger → endpointens *Avanceret*; standard 5 min, 10–1800 s). Det gælder både tiden, før svaret begynder (fx mens en lang prompt behandles), og pauser undervejs. Et svar, der skrives løbende, afbrydes aldrig, uanset hvor langt det er. En organisation kan sætte værdien centralt som `timeoutMs` på endpointen i `miai-config.json`.
