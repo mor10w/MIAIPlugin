@@ -22,6 +22,23 @@ const CHAT_EDIT_RULES =
   "do not give click-by-click instructions: say in one sentence that MIAI's agent can do it directly in the document (the user gets a button for it below your answer), and at most list in 2–4 short bullets what it would change. " +
   "New or rewritten text is fine to write here – the user can insert it with the buttons below your answer.";
 
+/**
+ * Grafer af tal i Excel-chatten: et rigtigt Excel-diagram gennem agenten, ikke en tegning. Svaret
+ * skal nævne agenten (så får brugeren knappen under svaret) og give tallene som en tabel, når de
+ * ikke står i arket i forvejen – fx når de er slået op på nettet. Agenten får svaret som materiale.
+ */
+const EXCEL_CHART_RULES =
+  "In Excel, a chart or graph of numbers must be a real Excel chart, never a drawing: do not use mermaid or svg for it. " +
+  "Start with one sentence saying that MIAI's agent can insert it as an Excel chart in the sheet (the user gets a button for it below your answer). " +
+  "If the numbers are already in the workbook, name the range and stop there. " +
+  "If they are not, get them yourself – with web_search when you have that tool – instead of asking the user to supply them, and give them in exactly ONE Markdown table for all series, which the agent writes to the sheet: the first column holds the dates or categories, then one column per series; plain numbers with a decimal point and no units or thousands separators; leave a cell empty where a series has no value. " +
+  "Keep the whole answer short: the sentence, the table, and at most three lines below it for units, currency, method and sources. Never show your calculations, intermediate lists or a plan of what you will do. " +
+  "Diagrams of structure (flows, hierarchies, relations) are still drawn with mermaid.";
+
+/** Mermaids diagram over tal (xychart-beta) er strengt: kun tal i serierne, og etiketter i anførselstegn. */
+const MERMAID_CHART_RULES =
+  'For a chart of numbers in mermaid use xychart-beta: write the x-axis as a list of double-quoted labels without line breaks, e.g. x-axis ["1. nov", "2. nov"]; every line or bar is a list of plain numbers only – never null, text or empty slots – with exactly one number per x-axis label. A series cannot start later on the axis: put history and forecast in one series, or repeat the history in the second series. ';
+
 export const TASKS: TaskDefinition[] = [
   {
     id: "grammar",
@@ -592,9 +609,15 @@ export const TASKS: TaskDefinition[] = [
         system(
           req,
           "Be concise and practical. Use Markdown when it helps.",
-          "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. " +
+          // I Excel er en graf af tal et rigtigt diagram gennem agenten (EXCEL_CHART_RULES); kun strukturdiagrammer tegnes.
+          (ctx.host === "excel"
+            ? "When the user asks for a diagram of structure (a flow, hierarchy, process or relations – not a chart of numbers) or the answer benefits from one: include exactly ONE fenced code block"
+            : "When the user asks for a figure (diagram, chart, grafik) or the answer benefits from one: include exactly ONE fenced code block") +
+            " — prefer ```mermaid; use a self-contained ```svg block (no external references, no scripts) for free-form graphics. Write the complete code inside the fence and keep any surrounding text to a short caption — never raw XML, tool calls or search queries in the reply. " +
             'Mermaid rules: put EVERY node and subgraph label in double quotes, e.g. A["Platformarkitekt (eksisterende gruppe)"] – unquoted parentheses, brackets or braces break the diagram; use <br/> for line breaks and no other HTML (no <b> or <i>). ' +
+            (ctx.host === "excel" ? "" : MERMAID_CHART_RULES) +
             "The add-in shows the figure and has a button that inserts it into the document as an image – never explain how to insert or export it, and never mention copy/paste, Mermaid Live, plugins or other external tools.",
+          ctx.host === "excel" ? EXCEL_CHART_RULES : undefined,
           ctx.host === "excel" ? EXCEL_SCOPE_RULES : undefined,
           // Henvisninger kan klikkes i add-in'et (#22), så svaret skal pege præcist på stedet.
           ctx.host === "excel"

@@ -149,6 +149,18 @@ type Message = ChatMessage & {
 };
 
 /**
+ * Rettebeskeden til et diagram, der ikke kan tegnes. Et diagram over tal (xychart) fejler af andre
+ * grunde end et rutediagram (null i serierne, etiketter uden anførselstegn), så rådet er et andet.
+ */
+export const diagramFixKey = (answer: string) => (/^\s*xychart(?:-beta)?\b/m.test(answer) ? "diagramFixPromptChart" : "diagramFixPrompt");
+
+/**
+ * Har modellen tegnet en graf af tal (Mermaids xychart eller pie)? I Excel skal sådan en graf være
+ * et rigtigt diagram i arket, så panelet tilbyder agenten, også når modellen ikke selv henviser til den.
+ */
+export const drawsChart = (answer: string) => /```mermaid[^\n]*\n(?:\s*%%[^\n]*\n)*\s*(?:xychart(?:-beta)?|pie)\b/.test(answer);
+
+/**
  * Henviser svaret til agenten? Chat-prompten beder modellen om det, når brugeren vil have dokumentet
  * ændret, så det fanger de ønsker, ordgenkendelsen (looksLikeEditRequest) ikke kender.
  */
@@ -450,7 +462,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
                     <Caption1 className={s.muted}>{diagramErrors[i]}</Caption1>
                   </span>
                   {i === lastAssistant && !running && (
-                    <Button size="small" appearance="primary" onClick={() => void send(t("diagramFixPrompt", { error: diagramErrors[i] }))}>
+                    <Button size="small" appearance="primary" onClick={() => void send(t(diagramFixKey(m.content), { error: diagramErrors[i] }))}>
                       {t("diagramFixCta")}
                     </Button>
                   )}
@@ -468,28 +480,33 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
                     }}
                     copyText={m.content}
                   />
-                  {onUseAgent && canAct && lastUserPrompt && (looksLikeEditRequest(lastUserPrompt) || refersToAgent(m.content)) && (
-                    <div className={s.agentSuggest}>
-                      <span>
-                        <Text weight="semibold">{t("agentSuggestTitle")}</Text>
-                        <br />
-                        <Caption1 className={s.muted}>{t("agentSuggestText")}</Caption1>
-                      </span>
-                      <Button
-                        size="small"
-                        appearance="primary"
-                        icon={<Flash20Regular />}
-                        // Må chatten ændre dokumentet, laves planen her i samtalen; ellers på fanen Handlinger.
-                        onClick={() =>
-                          act
-                            ? void send(lastUserPrompt, { plan: true, echo: false, extra: { material: m.content.slice(0, 3_900) } })
-                            : onUseAgent({ prompt: lastUserPrompt, material: m.content })
-                        }
-                      >
-                        {t("agentSuggestCta")}
-                      </Button>
-                    </div>
-                  )}
+                  {onUseAgent &&
+                    canAct &&
+                    lastUserPrompt &&
+                    (looksLikeEditRequest(lastUserPrompt) || refersToAgent(m.content) || (adapter.host === "excel" && drawsChart(m.content))) && (
+                      <div className={s.agentSuggest}>
+                        <span>
+                          <Text weight="semibold">{t(adapter.host === "excel" && drawsChart(m.content) ? "chartSuggestTitle" : "agentSuggestTitle")}</Text>
+                          <br />
+                          <Caption1 className={s.muted}>
+                            {t(adapter.host === "excel" && drawsChart(m.content) ? "chartSuggestText" : "agentSuggestText")}
+                          </Caption1>
+                        </span>
+                        <Button
+                          size="small"
+                          appearance="primary"
+                          icon={<Flash20Regular />}
+                          // Må chatten ændre dokumentet, laves planen her i samtalen; ellers på fanen Handlinger.
+                          onClick={() =>
+                            act
+                              ? void send(lastUserPrompt, { plan: true, echo: false, extra: { material: m.content.slice(0, 3_900) } })
+                              : onUseAgent({ prompt: lastUserPrompt, material: m.content })
+                          }
+                        >
+                          {t("agentSuggestCta")}
+                        </Button>
+                      </div>
+                    )}
                 </div>
               )}
             </div>

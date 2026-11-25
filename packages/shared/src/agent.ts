@@ -25,7 +25,9 @@ export const MAX_AGENT_ACTIONS = 20;
 /** Maks. antal celler, én Excel-handling må skrive. */
 export const MAX_AGENT_CELLS = 2_000;
 
-const reason = z.string().max(200).describe("Very short reason shown to the user, in the user's language");
+// Valgfri: en lokal model glemmer af og til forklaringen på enkelte handlinger, og en manglende
+// forklaring må ikke få hele planen afvist. Uden den vises handlingen blot uden begrundelse.
+const reason = z.string().max(200).default("").describe("Very short reason shown to the user, in the user's language");
 const find = z.string().min(1).max(255).describe("Exact text copied verbatim from ONE paragraph of the document (a few words up to one sentence)");
 const paragraph = z.number().int().min(1).max(100_000).describe("Paragraph number (¶) from the document structure");
 
@@ -457,6 +459,7 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       "- sortRange {target, by, order}: sort a table (by name) or a data range with its header row by one column (header text or letter), asc or desc.",
       "- conditionalFormat {address, rule, value?}: highlight values with Excel's standard formats – colorScale, dataBar, greaterThan/lessThan (with value), duplicates, top10. Address = the values without the header.",
       "- addChart {source, type, title?}: a chart (column, bar, line, pie, area, scatter) of a table or a range with headers; it is placed next to the data.",
+      "  Numbers that are not in the sheet yet (e.g. a table in the chat material): first write them with setValues to an empty area, headers in the first row and dates or categories in the first column, then addChart on exactly that range. Use line for a development over time. Series on very different scales get their own range and chart.",
       "- freezeRows {rows}: keep the top rows visible when scrolling (1 = the header row; 0 = remove).",
       "- addPivotTable {source, rows, columns?, values, destination}: a pivot table of a table (by name) or a range with headers. rows/columns/values name fields by their header text; each value has summarize sum (default), count, average, max or min. Put it in an empty area ('F1') or on a new sheet (addSheet Pivot, then destination 'Pivot!A1').",
       "- setValidation {address, list? | min?, max?, whole?}: data validation – a drop-down list of allowed values, or a number between min and max (whole: true for whole numbers).",

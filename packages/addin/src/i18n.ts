@@ -74,6 +74,8 @@ const da = {
   agentSuggestTitle: "Vil du have ændringerne sat ind i dokumentet?",
   agentSuggestText: "Agenten foreslår konkrete handlinger, som du godkender én for én – først derefter ændres dokumentet.",
   agentSuggestCta: "Gør det med agenten",
+  chartSuggestTitle: "Vil du have grafen som et rigtigt Excel-diagram?",
+  chartSuggestText: "Agenten skriver tallene i arket og laver diagrammet. Intet ændres, før du har godkendt planen.",
   chatAct: "Må ændre dokumentet",
   chatActHint: "Beder du om en ændring, foreslår MIAI konkrete handlinger her i samtalen. Intet ændres, før du har godkendt dem.",
   chatPlanning: "Planlægger ændringerne…",
@@ -82,6 +84,8 @@ const da = {
   diagramFixCta: "Bed modellen rette diagrammet",
   diagramFixPrompt:
     'Mermaid-diagrammet i dit svar kan ikke tegnes. Fejlen er: {error}\nSend hele diagrammet igen, rettet, i én ```mermaid-blok. Sæt alle etiketter i anførselstegn, fx A["Tekst (note)"], og brug ingen HTML-mærker.',
+  diagramFixPromptChart:
+    'Mermaid-diagrammet i dit svar kan ikke tegnes. Fejlen er: {error}\nSend hele diagrammet igen, rettet, i én ```mermaid-blok. I xychart-beta må serierne kun indeholde tal: ingen null, tekst eller tomme pladser, og præcis ét tal pr. etiket på x-aksen. Skriv x-aksen som en liste af etiketter i anførselstegn uden linjeskift, fx x-axis ["1. nov", "2. nov"]. En serie kan ikke starte senere på aksen: saml historik og prognose i én serie.',
   agentMaterial: "Bruger chatsvaret som indhold.",
   agentMaterialRemove: "Fjern",
   noEdits: "Ingen fejl fundet.",
@@ -581,6 +585,8 @@ const en: Dict = {
   agentSuggestTitle: "Want to apply these changes to your document?",
   agentSuggestText: "The agent proposes concrete actions you approve one by one – only then is the document changed.",
   agentSuggestCta: "Do it with the agent",
+  chartSuggestTitle: "Want the graph as a real Excel chart?",
+  chartSuggestText: "The agent writes the numbers to the sheet and creates the chart. Nothing changes until you approve the plan.",
   chatAct: "May change the document",
   chatActHint: "When you ask for a change, MIAI proposes concrete actions here in the conversation. Nothing changes until you approve them.",
   chatPlanning: "Planning the changes…",
@@ -589,6 +595,8 @@ const en: Dict = {
   diagramFixCta: "Ask the model to fix the diagram",
   diagramFixPrompt:
     'The Mermaid diagram in your answer cannot be drawn. The error is: {error}\nSend the whole diagram again, fixed, in one ```mermaid block. Put every label in double quotes, e.g. A["Text (note)"], and use no HTML tags.',
+  diagramFixPromptChart:
+    'The Mermaid diagram in your answer cannot be drawn. The error is: {error}\nSend the whole diagram again, fixed, in one ```mermaid block. In xychart-beta the series may only contain numbers: no null, text or empty slots, and exactly one number per x-axis label. Write the x-axis as a list of double-quoted labels without line breaks, e.g. x-axis ["Nov 1", "Nov 2"]. A series cannot start later on the axis: put history and forecast in one series.',
   agentMaterial: "Uses the chat answer as content.",
   agentMaterialRemove: "Remove",
   noEdits: "No errors found.",

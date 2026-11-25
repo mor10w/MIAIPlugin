@@ -291,6 +291,88 @@ test("chat: et ønske, ordgenkendelsen ikke fanger, kan stadig udføres i samtal
   expect(last).toContain("<material>");
 });
 
+test("Excel-chat: en graf bliver et rigtigt Excel-diagram gennem agenten, ikke en tegning i chatten", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Aktier",
+      values: [
+        ["Aktie", "Kurs"],
+        ["NOVO-B", 274.3],
+      ],
+    },
+  });
+  await tp.tab("Chat");
+  // "Dan en trendgraf" fanges ikke af ordgenkendelsen, så chatten svarer. Vejledningen beder den
+  // henvise til agenten og give tallene som en tabel i stedet for at tegne med Mermaid.
+  const answer =
+    "MIAI's agent kan indsætte grafen som et Excel-diagram i arket.\n\n| Dato | NOVO-B |\n|---|---|\n| 2026-11-23 | 266.35 |\n| 2026-11-24 | 274.65 |\n| 2026-11-25 | 274.30 |";
+  tp.model.reply = () => ({ stream: [answer] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Dan en trendgraf for aktien de seneste dage");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText(/indsætte grafen som et Excel-diagram/)).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).toContain("must be a real Excel chart, never a drawing");
+
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Skriver kurserne i arket og laver et kurvediagram.",
+      actions: [
+        {
+          action: "setValues",
+          address: "D1",
+          values: [
+            ["Dato", "NOVO-B"],
+            ["2026-11-23", 266.35],
+            ["2026-11-24", 274.65],
+            ["2026-11-25", 274.3],
+          ],
+          reason: "Kurserne fra chatten",
+        },
+        { action: "addChart", source: "D1:E4", type: "line", title: "NOVO-B", reason: "Udviklingen over tid" },
+      ],
+    }),
+  });
+  await tp.page.getByRole("button", { name: "Gør det med agenten" }).click();
+  await expect(tp.page.getByText("Skriver kurserne i arket og laver et kurvediagram.")).toBeVisible();
+  // Agenten får chatsvaret med tabellen som materiale og ved, at tallene først skal skrives i arket.
+  const request = tp.model.lastRequest!;
+  expect(request.messages.at(-1)!.content).toContain("| 2026-11-24 | 274.65 |");
+  expect(request.messages[0].content).toContain("first write them with setValues");
+
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  const calls = await tp.calls();
+  expect(calls.find((c) => c.kind === "values")).toMatchObject({ address: "Aktier!D1:E4" });
+  expect(calls.find((c) => c.kind === "chartAdd")).toMatchObject({ source: "D1:E4" });
+});
+
+test("Excel-chat: tegner modellen alligevel en graf med Mermaid, tilbydes et rigtigt Excel-diagram", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { sheet: "Aktier", values: [["Aktie"], ["NOVO-B"]] } });
+  await tp.tab("Chat");
+  const drawing = 'Her er grafen:\n\n```mermaid\nxychart-beta\n    x-axis ["24. nov", "25. nov"]\n    line [274.65, 274.3]\n```';
+  tp.model.reply = () => ({ stream: [drawing] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Dan en trendgraf for aktien");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Vil du have grafen som et rigtigt Excel-diagram?")).toBeVisible();
+
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Laver et kurvediagram af kurserne.", actions: [] }) });
+  await tp.page.getByRole("button", { name: "Gør det med agenten" }).click();
+  await expect(tp.page.getByText("Laver et kurvediagram af kurserne.")).toBeVisible();
+  // Agenten får tegningens tal som materiale.
+  expect(tp.model.lastRequest!.messages.at(-1)!.content).toContain("line [274.65, 274.3]");
+});
+
+test("Word-chat: en Mermaid-graf er stadig en figur, ikke et tilbud om et Excel-diagram", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
+  await tp.tab("Chat");
+  tp.model.reply = () => ({ stream: ['```mermaid\nxychart-beta\n    x-axis ["a", "b"]\n    line [1, 2]\n```'] });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Vis udviklingen som en graf");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByRole("button", { name: "Kopiér" }).first()).toBeVisible();
+  await expect(tp.page.getByText("Vil du have grafen som et rigtigt Excel-diagram?")).toHaveCount(0);
+});
+
 test("agentens plan i Word (#22): 'Vis i dokumentet' markerer teksten eller afsnittet, handlingen gælder", async ({ open }) => {
   const tp = await open({ host: "Word", apiSets: { WordApi: "1.6" }, paragraphs: PARAS });
   tp.model.reply = () => ({
