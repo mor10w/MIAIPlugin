@@ -57,21 +57,18 @@ På Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`. Linux: `
 
 Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
-### Regnearksfunktionerne med bridgen (testmanifest)
+### Regnearksfunktionerne med bridgen fra kildekoden
 
-`=MIAI.ASK()` er kun slået til i udviklingsmanifestet, som kører direkte mod modellen og derfor kræver, at modelserveren tillader CORS fra `https://localhost:3000`. Med en server uden CORS (fx oMLX), eller for at prøve websøgning og egne mapper i cellen, bruges testmanifestet `packages/addin/manifest.functions.xml`. Det er bridge-manifestet med funktionerne slået til. Bridgen fra kildekoden bruger samme konfigurationsmappe som MIAI App, så endpoints, modeller og adgangstoken er de samme.
-
-Bridgen fra kildekoden bruger udviklingscertifikatet fra `npm run certs` (det samme som `npm run dev`).
+`=MIAI.ASK()` og `=MIAI.MODELS()` er med i alle tre manifester til Word, Excel og PowerPoint. Udviklingsmanifestet kører direkte mod modellen og kræver derfor, at modelserveren tillader CORS fra `https://localhost:3000`. Med en server uden CORS (fx oMLX), eller for at prøve websøgning og egne mapper i cellen, bruges bridgen fra kildekoden. Den bruger samme konfigurationsmappe som MIAI App, så endpoints, modeller og adgangstoken er de samme, og udviklingscertifikatet fra `npm run certs` (det samme som `npm run dev`).
 
 1. Afslut MIAI App (menuen → Afslut), så porten er fri. Kører appen stadig, vælger bridgen en anden port, og det manifest, Office allerede har, peger så på en port, hvor intet lytter.
-2. Byg og start bridgen med testmanifestet:
+2. Byg og start bridgen:
    ```bash
    npm run build
    ```
    ```bash
-   MIAI_MANIFEST="$PWD/packages/addin/manifest.functions.xml" npm start
+   npm start
    ```
-   Windows (cmd): `set MIAI_MANIFEST=%CD%\packages\addin\manifest.functions.xml` og derefter `npm start`.
 3. Læg det personlige manifest, bridgen har skrevet, ind i Office, og genstart Excel:
    ```bash
    npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
@@ -82,18 +79,18 @@ Bridgen fra kildekoden bruger udviklingscertifikatet fra `npm run certs` (det sa
 4. Har Excel på denne maskine før brugt funktionerne fra et andet MIAI-manifest (typisk udviklingsmanifestet), så ryd Excels funktionscache, mens Excel er lukket. Se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne).
 5. Under Indstillinger vises nu **Excel-funktioner**, og `=MIAI.ASK(` findes i arket. Det første kald kan tage op mod et minut, mens modellen indlæses.
 
-**Tilbage til det almindelige:** stop bridgen med Ctrl+C, og start MIAI App. Den skriver sit eget manifest igen og lægger det ind i Office. Genstart Excel.
+**Tilbage til MIAI App:** stop bridgen med Ctrl+C, og start MIAI App. Den skriver manifestet igen og lægger det ind i Office. Genstart Excel.
 
 ### Skift mellem manifester med funktionerne
 
-Udviklingsmanifestet og testmanifestet har hver sit id, men samme navnerum (`MIAI`). Excel gemmer, hvilket add-in navnerummet hører til, og laver ikke registreringen om, når et andet manifest med samme navnerum lægges ind. Den gamle registrering peger så på et add-in, der ikke længere er der.
+Udviklingsmanifestet, bridge-manifestet og det hostede manifest har hver sit id, men samme navnerum (`MIAI`). Excel gemmer, hvilket add-in navnerummet hører til, og laver ikke registreringen om, når et andet manifest med samme navnerum lægges ind. Den gamle registrering peger så på et add-in, der ikke længere er der.
 
 Sådan ser det ud:
 
 - Panelet viser **Excel-funktioner** under Indstillinger, men `=MIAI.ASK(` foreslås ikke i arket, eller cellen viser `#NAME?`.
 - Eller cellen står på `#BUSY!`, og hverken bridgen eller modelserveren får et kald. Tidsgrænsen på 20 sekunder slår ikke til, fordi Excel aldrig kalder funktionen.
 
-Ryd funktionscachen, hver gang du skifter mellem `npm run dev` og bridgen med testmanifestet:
+Ryd funktionscachen, hver gang du skifter mellem `npm run dev`, bridgen og det hostede add-in:
 
 1. Luk Excel helt (Cmd+Q på Mac).
 2. Slet mappen med Excels registreringer af regnearksfunktioner. Det er ren cache, som Excel bygger igen ved næste start.
@@ -111,7 +108,7 @@ Tjek på macOS, hvilket add-in der har registreringen:
 cat ~/Library/Containers/com.microsoft.Excel/Data/Library/Application\ Support/Microsoft/Office/16.0/Wef/CustomFunctions/*/Registry/*/*/properties.json
 ```
 
-`addinid` skal indeholde id'et fra det manifest, du har lagt ind (`fdac46a3-…` for bridgen, `3b0f5a2e-…` for udviklingsmanifestet).
+`addinid` skal indeholde id'et fra det manifest, du har lagt ind (`fdac46a3-…` for bridgen, `3b0f5a2e-…` for udviklingsmanifestet, `9c7e2d14-…` for det hostede).
 
 ## Tests
 ```bash
@@ -195,7 +192,7 @@ node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 ```bash
 node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest-outlook.xml outlook
 ```
-**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Et manifest med funktionerne åbner task pane med `?functions=1`; uden den parameter registrerer siden ingen funktioner og viser intet om dem. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem. Excel cacher også, hvilket add-in navnerummet `MIAI` hører til; se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne).
+**Regnearksfunktioner (#80, ADR-0018):** alle tre manifester til Word, Excel og PowerPoint (bridge, dev og hostet) har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Outlook-manifesterne har dem ikke. Bridge-manifestet er afprøvet i rigtig Excel på Mac; Windows, Excel på web og det hostede manifest er ikke afprøvet endnu. Et manifest med en skemafejl indlæses slet ikke, heller ikke i Word og PowerPoint, så sæt `functions: false` på en variant og kør `npm run manifests`, hvis den skal udgives uden funktionerne. Et manifest med funktionerne åbner task pane med `?functions=1`; uden den parameter registrerer siden ingen funktioner og viser intet om dem. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem. Excel cacher også, hvilket add-in navnerummet `MIAI` hører til; se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne).
 
 Outlook sideloades fra fil: Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug `manifest.outlook.dev.xml` med `npm run dev`.
 
@@ -251,7 +248,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
 - [ ] Kontekst (#73): med Ollama uden `OLLAMA_CONTEXT_LENGTH` viser Indstillinger → Modeller den indlæste kontekst (4.096 på en maskine med under 24 GB VRAM) og en advarsel; efter `OLLAMA_CONTEXT_LENGTH=32768` og genstart viser **Tjek igen** 32.768 og ingen advarsel. I LM Studio vises den kontekst, modellen er indlæst med
-- [ ] Regnearksfunktioner (#80, med `manifest.dev.xml` og `npm run dev`), i Excel på Windows og Mac:
+- [ ] Regnearksfunktioner (#80), i Excel på Windows og Mac, med både MIAI App (bridge) og `npm run dev` eller det hostede add-in (direkte):
   - [ ] Manifestet indlæses, og MIAI virker som før i Word, Excel og PowerPoint (task pane åbner fra fanen Hjem)
   - [ ] Har maskinen før haft et andet MIAI-manifest med funktionerne, er Excels funktionscache ryddet først (se [Skift mellem manifester med funktionerne](#skift-mellem-manifester-med-funktionerne))
   - [ ] `=MIAI.ASK("Hvilket land ligger byen i?"; A2)` viser `#BUSY!` og derefter svaret; formlen kan trækkes ned over 50 rækker, og task pane viser "i gang" og "i kø" med et virkende **Stop MIAI-funktioner**
