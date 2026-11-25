@@ -1,0 +1,59 @@
+{
+  "allowCustomDataForDataTypeAny": false,
+  "functions": [
+    {
+      "id": "ASK",
+      "name": "ASK",
+      "description": "Sender en prompt til din AI-model i MIAI og viser svaret i cellen.",
+      "parameters": [
+        {
+          "name": "prompt",
+          "description": "Hvad modellen skal gøre. Tekst eller en celle.",
+          "type": "any",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "input",
+          "description": "Cellen eller området, prompten gælder.",
+          "type": "any",
+          "dimensionality": "matrix",
+          "optional": true
+        },
+        {
+          "name": "optimized",
+          "description": "SAND = hurtigt og kort svar uden websøgning og tænkning. Brug det til mange rækker. Standard er FALSK.",
+          "type": "boolean",
+          "dimensionality": "scalar",
+          "optional": true
+        },
+        {
+          "name": "model",
+          "description": "Modelnavn eller en celle med det. Udeladt = modellen fra Indstillinger.",
+          "type": "any",
+          "dimensionality": "scalar",
+          "optional": true
+        }
+      ],
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
+      "options": {
+        "cancelable": true
+      }
+    },
+    {
+      "id": "MODELS",
+      "name": "MODELS",
+      "description": "Viser modellerne på din endpoint i MIAI, én pr. række.",
+      "parameters": [],
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "options": {
+        "volatile": true
+      }
+    }
+  ]
+}

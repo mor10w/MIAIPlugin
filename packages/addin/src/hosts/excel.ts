@@ -19,6 +19,9 @@ const MAX_READ_FORMULAS = 60;
 /** Agentens overblik over projektmappen dækker højst så mange ark. */
 const MAX_SHEETS = 30;
 
+/** Skjult hjælpeark med modellisten bag modelvælgeren (#80). */
+export const MODEL_SHEET = "MIAI_modeller";
+
 export class ExcelAdapter implements HostAdapter {
   readonly host = "excel" as const;
 
@@ -317,6 +320,26 @@ export class ExcelAdapter implements HostAdapter {
   }
 
   /** Det markerede område med arknavn (#26). */
+  async insertModelPicker(model: string): Promise<string> {
+    return Excel.run(async (ctx) => {
+      const sheets = ctx.workbook.worksheets;
+      let helper = sheets.getItemOrNullObject(MODEL_SHEET);
+      await ctx.sync();
+      if (helper.isNullObject) {
+        helper = sheets.add(MODEL_SHEET);
+        helper.visibility = "Hidden";
+      }
+      // Listen er et dynamisk område, så den følger med, når en model hentes eller fjernes.
+      helper.getRange("A1").formulas = [["=MIAI.MODELS()"]];
+      const cell = ctx.workbook.getSelectedRange().getCell(0, 0);
+      cell.dataValidation.rule = { list: { inCellDropDown: true, source: `=${MODEL_SHEET}!$A$1#` } };
+      if (model) cell.values = [[model]];
+      cell.load("address");
+      await ctx.sync();
+      return cell.address;
+    });
+  }
+
   async selectionInfo(): Promise<SelectionInfo | null> {
     return Excel.run(async (ctx) => {
       const sel = ctx.workbook.getSelectedRange();

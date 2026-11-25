@@ -1,0 +1,59 @@
+{
+  "allowCustomDataForDataTypeAny": false,
+  "functions": [
+    {
+      "id": "ASK",
+      "name": "ASK",
+      "description": "Sends a prompt to your AI model in MIAI and shows the answer in the cell.",
+      "parameters": [
+        {
+          "name": "prompt",
+          "description": "What the model should do. Text or a cell.",
+          "type": "any",
+          "dimensionality": "scalar"
+        },
+        {
+          "name": "input",
+          "description": "The cell or range the prompt is about.",
+          "type": "any",
+          "dimensionality": "matrix",
+          "optional": true
+        },
+        {
+          "name": "optimized",
+          "description": "TRUE = fast, short answer without web search and thinking. Use it for many rows. Default is FALSE.",
+          "type": "boolean",
+          "dimensionality": "scalar",
+          "optional": true
+        },
+        {
+          "name": "model",
+          "description": "Model name or a cell containing it. Omitted = the model from Settings.",
+          "type": "any",
+          "dimensionality": "scalar",
+          "optional": true
+        }
+      ],
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
+      "options": {
+        "cancelable": true
+      }
+    },
+    {
+      "id": "MODELS",
+      "name": "MODELS",
+      "description": "Lists the models on your endpoint in MIAI, one per row.",
+      "parameters": [],
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "options": {
+        "volatile": true
+      }
+    }
+  ]
+}

@@ -275,6 +275,11 @@ export const Settings = z.object({
   uiLanguage: z.enum(["da", "en"]).default("da"),
   auditLog: z.boolean().default(false),
   /**
+   * Hvor mange celler regnearksfunktionen =MIAI.ASK() må sende til modellen på samme tid (#80).
+   * 2 passer til en lokal model; en server med flere pladser kan tage flere.
+   */
+  cellConcurrency: z.number().int().min(1).max(16).default(2),
+  /**
    * Modellen kan søge på webbet (kræver bridge – direkte tilstand har ingen eksekverer).
    * Slået FRA som standard: søgeordene dannes af modellen ud fra dokumentet og sendes til en
    * ekstern søgetjeneste, så det skal være et aktivt valg (løftet om, at data bliver lokalt).

@@ -73,7 +73,7 @@
             </ExtensionPoint>
           </DesktopFormFactor>
         </Host>
-        <Host xsi:type="Workbook">
+        <Host xsi:type="Workbook">{{EXCEL_FUNCTIONS}}
           <DesktopFormFactor>
             <GetStarted>
               <Title resid="MIAI.GetStarted.Title"/>
@@ -101,8 +101,7 @@
                       <bt:Image size="32" resid="MIAI.Icon.32"/>
                       <bt:Image size="80" resid="MIAI.Icon.80"/>
                     </Icon>
-                    <Action xsi:type="ShowTaskpane">
-                      <TaskpaneId>MIAI.Taskpane</TaskpaneId>
+                    <Action xsi:type="ShowTaskpane">{{EXCEL_TASKPANE_ID}}
                       <SourceLocation resid="MIAI.Taskpane.Url"/>
                     </Action>
                   </Control>
@@ -158,13 +157,13 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="MIAI.Taskpane.Url" DefaultValue="{{BASE}}taskpane.html"/>
-        <bt:Url id="MIAI.LearnMoreUrl" DefaultValue="{{BASE}}"/>
+        <bt:Url id="MIAI.LearnMoreUrl" DefaultValue="{{BASE}}"/>{{FUNCTION_URLS}}
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="MIAI.GetStarted.Title" DefaultValue="MIAI er klar">
           <bt:Override Locale="en-US" Value="MIAI is ready"/>
         </bt:String>
-        <bt:String id="MIAI.Group.Label" DefaultValue="MIAI"/>
+        <bt:String id="MIAI.Group.Label" DefaultValue="MIAI"/>{{FUNCTION_STRINGS}}
         <bt:String id="MIAI.OpenPane.Label" DefaultValue="AI-assistent">
           <bt:Override Locale="en-US" Value="AI assistant"/>
         </bt:String>

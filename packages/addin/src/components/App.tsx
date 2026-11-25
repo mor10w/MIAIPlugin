@@ -22,6 +22,7 @@ import type { HostAdapter } from "../hosts";
 import { I18n, makeT, type Lang } from "../i18n";
 import { statusColors, ui, useOfficeTheme } from "../theme";
 import { ActionsTab } from "./ActionsTab";
+import { CellBar } from "./CellFunctions";
 import { ChatTab, type AgentRequest } from "./ChatTab";
 import { useKitStyles } from "./kit";
 import { SettingsTab } from "./SettingsTab";
@@ -186,6 +187,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 </MessageBarActions>
               </MessageBar>
             )}
+            {/* Regnearksfunktionen =MIAI.ASK() arbejder (#80): status og Stop, uanset fane. */}
+            <CellBar className={s.banner} />
             {tab === "actions" && <ActionsTab adapter={adapter} agentRequest={agentRequest} onAgentRequestConsumed={() => setAgentRequest(null)} />}
             {tab === "tasks" && <TasksTab />}
             {/* Chatten bygges første gang, den åbnes, og bliver derefter liggende skjult, så en samtale
@@ -202,7 +205,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 />
               </div>
             )}
-            {tab === "settings" && <SettingsTab onLanguage={setLang} onSaved={() => void check()} />}
+            {tab === "settings" && <SettingsTab adapter={adapter} onLanguage={setLang} onSaved={() => void check()} />}
           </main>
         </div>
       </FluentProvider>

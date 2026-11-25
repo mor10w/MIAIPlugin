@@ -299,6 +299,33 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 - **Oversæt** – markér et område; oversættelsen skrives tilbage i cellerne (antal rækker/kolonner bevares, tal og datoer roterer). Konteksten er max. 200 rækker × 30 kolonner.
 - **Analyser data** – markér en tabel (eller brug hele arket). Modellen beskriver, hvad data viser, angiver nøgletal ud fra kolonnens statistikker, og foreslår konkret: en pivot-tabellayout (rækker/kolonner/værdier), diagramtype med præcist område og evt. formler, der verificerer nøgletallene. Resultatet kan indsættes **som kommentar** på det markerede område.
 
+#### Regnearksfunktionen `=MIAI.ASK()`
+
+> **Under afprøvning.** Funktionen findes foreløbig kun med udviklingsmanifestet (installation C). Den slås til i MIAI App og det hostede add-in, når den er afprøvet i rigtig Excel ([#80](https://github.com/mor10w/MIAIPlugin/issues/80)).
+
+Skriv en prompt i en formel, og få svaret som værdi i cellen:
+
+```
+=MIAI.ASK(prompt; [input]; [optimized]; [model])
+
+=MIAI.ASK("Hvilket land ligger byen i? Svar kun med landets navn."; A2)
+=MIAI.ASK($B$1; A2:C2)
+=MIAI.ASK("Kategorisér som Drift, Anlæg eller Andet"; D2; SAND)
+=MIAI.ASK("Skriv en kort vurdering af kunden"; A2:F2; ; $H$1)
+```
+
+- **`prompt`** er tekst eller en celle. **`input`** er en celle eller et område; et område sendes som det står.
+- **`optimized`**: `SAND` giver et hurtigt, kort svar uden websøgning, søgning i egne mapper og tænkning. Brug det, når formlen trækkes ned over mange rækker. Uden det (`FALSK`) bruger cellen de værktøjer, du har slået til under Indstillinger, som et spørgsmål i chatten. Med websøgning slået til kan hver celle så søge på nettet.
+- **`model`** er et modelnavn fra din endpoint eller en celle med det. Uden det bruges modellen for *MIAI.ASK (Excel-funktion)* under Indstillinger → Modeller. Findes modellen ikke, viser cellen `#VALUE!`.
+- **Dropdown til modellen:** Indstillinger → Excel-funktioner → **Indsæt modelvælger** laver en dropdown med dine modeller i den markerede celle. Peg på cellen som fjerde argument. `=MIAI.MODELS()` viser selv listen.
+- **Mens den arbejder** viser cellen `#BUSY!`, og task pane viser, hvor mange celler der er i gang og i kø. **Stop MIAI-funktioner** tømmer køen. Antallet af samtidige kald sættes under Indstillinger → Excel-funktioner (standard 2).
+- **Samme celle giver samme svar.** Svarene gemmes, så F9 og genåbning ikke spørger modellen igen. Cellen beregnes igen, når prompt eller input ændres. **Ryd cache** under Indstillinger → Excel-funktioner tvinger nye svar.
+- **Tal og tekst:** svaret bliver et tal, når hele svaret er et entydigt tal ("1234,5"). "0045", "2300 København" og "1.234" forbliver tekst. Svaret indsættes altid som værdi, aldrig som formel.
+- **Fejl** vises som `#N/A` eller `#VALUE!`; hold musen over cellens fejlmærke for forklaringen, fx "MIAI kan ikke nå modellen".
+- **Hvornår en formel er bedre:** til præcise opslag i egne data er `XOPSLAG` hurtigere og altid rigtig. Brug `MIAI.ASK` til det, formler ikke kan: fritekst, kategorier, udtræk og oversættelse. Modellen kan tage fejl, så kontrollér vigtige tal.
+- **Deling:** en kollega uden MIAI ser den sidst beregnede værdi og får `#NAME?`, hvis arket beregnes igen.
+- **Platforme:** Excel på Windows, Mac og web. Ikke iPad og ikke volumenlicenseret Office 2021 eller ældre.
+
 ### PowerPoint
 
 - **Omskriv / Parafrasér / Forenkl** – markér tekst i en tekstboks; resultatet erstatter teksten i boksen.

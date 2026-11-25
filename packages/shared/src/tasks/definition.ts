@@ -73,5 +73,26 @@ export interface TaskDefinition {
   chunking?: "map-reduce";
   /** Lav temperatur for rettelser, højere for kreativ tekst. Overstyrer indstillingen, hvis sat. */
   temperature?: number;
+  /** Fast seed, så samme forespørgsel giver samme svar, hvor serveren understøtter det (#80). */
+  seed?: number;
+  /**
+   * Justering pr. forespørgsel (#80): en opgave kan fravælge værktøjer og tænkning og sætte et
+   * lavere loft over svarlængden, fx når en regnearksfunktion kører over mange celler.
+   */
+  tuning?(req: ParsedTaskRequest): TaskTuning;
   buildMessages(req: ParsedTaskRequest): ChatMessage[];
+}
+
+/** Opgaven bag regnearksfunktionen =MIAI.ASK() (#80). */
+export const CELL_ASK_TASK = "cell-ask";
+/** Loft over svarlængden, når funktionen kaldes med optimized = SAND. */
+export const CELL_ASK_OPTIMIZED_TOKENS = 256;
+
+export interface TaskTuning {
+  /** Ingen værktøjer (web-søgning), uanset indstillingen. */
+  noTools?: boolean;
+  /** Slå tænkning fra, uanset indstillingen. */
+  noThinking?: boolean;
+  /** Loft over svarlængden i tokens (aldrig over indstillingen). */
+  maxTokens?: number;
 }

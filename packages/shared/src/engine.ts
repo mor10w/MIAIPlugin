@@ -217,7 +217,11 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
 
   // Værktøjer (ADR-0010): kun når bridgen leverer en eksekverer, brugeren har slået web-søgning
   // til, og politikken tillader det (søgeord sendes til en ekstern tjeneste).
-  const tools = deps.tools && settings.webSearch && policy.webSearch ? deps.tools : undefined;
+  // Opgavens egen justering (#80): fx regnearksfunktionen med optimized = SAND.
+  const tuning = task.tuning?.(req) ?? {};
+  const tools = deps.tools && settings.webSearch && policy.webSearch && !tuning.noTools ? deps.tools : undefined;
+  const maxTokensSetting = tuning.maxTokens ? Math.min(settings.maxTokens, tuning.maxTokens) : settings.maxTokens;
+  const thinking = tuning.noThinking ? "off" : settings.thinking === "default" ? undefined : settings.thinking;
 
   const addUsage = (u: { promptTokens?: number; completionTokens?: number } | undefined) => {
     if (!u) return;
@@ -256,7 +260,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
         "CONTEXT_OVERFLOW",
       );
     }
-    const maxTokens = outputBudget(settings.maxTokens, promptEstimate, contextTokens);
+    const maxTokens = outputBudget(maxTokensSetting, promptEstimate, contextTokens);
     let reqUsage: { promptTokens?: number } | undefined;
     let finishReason: string | null | undefined;
     // Værktøjskald bygges op over stream-chunks (arguments ankommer som fragmenter).
@@ -270,11 +274,12 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
           temperature,
           maxTokens,
           presencePenalty,
+          seed: task.seed,
           responseFormat,
           signal,
           tools: useTools ? tools?.specs : undefined,
-          thinking: settings.thinking === "default" ? undefined : settings.thinking,
-          reasoningEffort: settings.reasoningEffort === "default" ? undefined : settings.reasoningEffort,
+          thinking,
+          reasoningEffort: tuning.noThinking || settings.reasoningEffort === "default" ? undefined : settings.reasoningEffort,
         },
         client,
       ),

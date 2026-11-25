@@ -23,7 +23,8 @@ test("model pr. opgave (#13): valgt model bruges kun til den opgave", async ({ o
 
   await tp.run("Parafrasér");
   await expect(tp.page.getByText("qwen3:4b")).toBeVisible();
-  expect(tp.model.lastRequest?.model).toBe("qwen3:4b"); // standard: første model fra endpointen
+  // Modelnavnet vises, før forespørgslen er sendt (konteksten slås op først, #73) – vent på den.
+  await expect.poll(() => tp.model.lastRequest?.model).toBe("qwen3:4b"); // standard: første model fra endpointen
 });
 
 test("model pr. opgavetype: én model til Ret og omskriv gælder alle dens opgaver; en undtagelse har forrang", async ({ open }) => {
@@ -50,7 +51,7 @@ test("model pr. opgavetype: én model til Ret og omskriv gælder alle dens opgav
   expect(tp.model.lastRequest?.model).toBe("qwen3:32b"); // typens model
   await tp.run("Oversæt");
   await expect(tp.page.getByText("gemma3:12b")).toBeVisible();
-  expect(tp.model.lastRequest?.model).toBe("gemma3:12b"); // undtagelsen
+  await expect.poll(() => tp.model.lastRequest?.model).toBe("gemma3:12b"); // undtagelsen
 
   tp.model.reply = () => ({ stream: chunks("Svar i chatten.") });
   await tp.tab("Chat");

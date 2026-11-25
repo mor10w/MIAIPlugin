@@ -27,7 +27,10 @@ export const AuditEntry = z.object({
   outputChars: z.number().int().nonnegative().max(1_000_000).optional(),
   promptTokens: z.number().int().nonnegative().max(1_000_000).optional(),
   completionTokens: z.number().int().nonnegative().max(1_000_000).optional(),
-  /** index: antal filer indekseret/fjernet; retrieve: antal uddrag fundet. Aldrig stier eller indhold. */
+  /**
+   * index: antal filer indekseret/fjernet; retrieve: antal uddrag fundet; task = cell-ask: antal
+   * celler samlet i posten (#80). Aldrig stier eller indhold.
+   */
   count: z.number().int().nonnegative().max(10_000_000).optional(),
 });
 export type AuditEntry = z.infer<typeof AuditEntry>;
@@ -37,3 +40,30 @@ export const MAX_LOCAL_AUDIT_ENTRIES = 200;
 
 /** Maks. størrelse på bridgens audit.log, før den roteres (audit.log → audit.log.old). */
 export const MAX_AUDIT_FILE_BYTES = 1_048_576;
+
+/** Cellekald, der ligger tættere end dette, hører til samme kørsel. */
+const CELL_RUN_WINDOW_MS = 60_000;
+
+/**
+ * Regnearksfunktionen =MIAI.ASK() (#80) kan give tusind kald i én kørsel, og den lokale log rummer
+ * kun MAX_LOCAL_AUDIT_ENTRIES poster. Hører `entry` til samme kørsel som den seneste post (samme
+ * opgave, host, model og udfald, kort efter hinanden), returneres én samlet post; ellers undefined.
+ */
+export function mergeCellAudit(last: AuditEntry | undefined, entry: AuditEntry): AuditEntry | undefined {
+  if (!last || entry.kind !== "task" || entry.task !== "cell-ask") return undefined;
+  if (last.kind !== "task" || last.task !== entry.task || last.host !== entry.host || last.model !== entry.model) return undefined;
+  if (last.status !== entry.status || last.code !== entry.code) return undefined;
+  const gap = Date.parse(entry.ts) - Date.parse(last.ts);
+  if (!(gap >= 0 && gap <= CELL_RUN_WINDOW_MS)) return undefined;
+  const sum = (a: number | undefined, b: number | undefined, max: number) =>
+    a === undefined && b === undefined ? undefined : Math.min(max, (a ?? 0) + (b ?? 0));
+  return {
+    ...entry,
+    count: (last.count ?? 1) + (entry.count ?? 1),
+    durationMs: sum(last.durationMs, entry.durationMs, 3_600_000),
+    inputChars: sum(last.inputChars, entry.inputChars, 1_000_000),
+    outputChars: sum(last.outputChars, entry.outputChars, 1_000_000),
+    promptTokens: sum(last.promptTokens, entry.promptTokens, 1_000_000),
+    completionTokens: sum(last.completionTokens, entry.completionTokens, 1_000_000),
+  };
+}
