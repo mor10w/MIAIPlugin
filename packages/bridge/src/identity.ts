@@ -123,7 +123,12 @@ export function tokenMatches(expected: string, given: unknown): boolean {
  */
 export function personalizeManifest(baseXml: string, id: BridgeIdentity): string {
   const origin = `https://localhost:${id.port}`;
-  return baseXml.replaceAll("https://localhost:44321", origin).replaceAll(`${origin}/taskpane.html"`, `${origin}/taskpane.html?token=${id.token}"`);
+  // Adressen kan allerede have en forespørgsel (?functions=1 i manifester med regnearksfunktioner,
+  // #80); så føjes tokenet til den. "&" skal skrives som &amp; i XML.
+  const taskpane = new RegExp(`${origin.replace(/[.]/g, "\\.")}/taskpane\\.html(\\?[^"]*)?"`, "g");
+  return baseXml
+    .replaceAll("https://localhost:44321", origin)
+    .replace(taskpane, (_m, query?: string) => `${origin}/taskpane.html${query ? `${query}&amp;` : "?"}token=${id.token}"`);
 }
 
 /** Skriver brugerens manifest i konfigurationsmappen (kun læsbart af brugeren) og returnerer stien. */

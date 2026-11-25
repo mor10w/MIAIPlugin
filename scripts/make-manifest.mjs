@@ -1,7 +1,8 @@
 // Genererer add-in-manifester ud fra packages/addin/manifest.template.xml (Word, Excel,
 // PowerPoint) og manifest.outlook.template.xml (Outlook, MailApp – #7).
 //
-//   node scripts/make-manifest.mjs                            → bridge + dev, begge apps (committes)
+//   node scripts/make-manifest.mjs                            → bridge, dev og testmanifestet med
+//                                                              regnearksfunktioner (committes)
 //   node scripts/make-manifest.mjs hosted <url> <ud> [outlook] → hostet variant (fx GitHub Pages eller
 //                                                              organisationens egen server)
 //
@@ -36,6 +37,16 @@ export const VARIANTS = {
     functions: true,
   },
   hosted: { id: "9c7e2d14-5a3b-4f6e-8d21-b4a9e0c7f352", base: null, suffix: "", label: "statisk hostet, direkte forbindelse" },
+  // Testmanifest: bridge-varianten med regnearksfunktionerne, til afprøvning med bridgen fra
+  // kildekoden (MIAI_MANIFEST, se docs/UDVIKLING.md). Samme Id som bridge-varianten, så det
+  // erstatter den i Office, og MIAI App lægger selv det almindelige manifest tilbage.
+  "bridge-functions": {
+    id: "fdac46a3-f2b8-4e84-b704-78a669531789",
+    base: "https://localhost:44321/",
+    suffix: " (bridge)",
+    label: "serveres af MIAI Bridge, med regnearksfunktioner (test)",
+    functions: true,
+  },
 };
 
 /**
@@ -108,6 +119,7 @@ if (variant) {
   for (const [name, file, kind] of [
     ["bridge", "manifest.xml", "office"],
     ["dev", "manifest.dev.xml", "office"],
+    ["bridge-functions", "manifest.functions.xml", "office"],
     ["bridge", "manifest.outlook.xml", "outlook"],
     ["dev", "manifest.outlook.dev.xml", "outlook"],
   ]) {

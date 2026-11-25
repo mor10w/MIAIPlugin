@@ -57,6 +57,30 @@ På Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`. Linux: `
 
 Watch-tilstand for både add-in og bridge: `npm run dev:bridge`.
 
+### Regnearksfunktionerne med bridgen (testmanifest)
+
+`=MIAI.ASK()` er kun slået til i udviklingsmanifestet, som kører direkte mod modellen og derfor kræver, at modelserveren tillader CORS fra `https://localhost:3000`. Med en server uden CORS (fx oMLX), eller for at prøve websøgning og egne mapper i cellen, bruges testmanifestet `packages/addin/manifest.functions.xml`. Det er bridge-manifestet med funktionerne slået til. Bridgen fra kildekoden bruger samme konfigurationsmappe som MIAI App, så endpoints, modeller og adgangstoken er de samme.
+
+Bridgen fra kildekoden bruger udviklingscertifikatet fra `npm run certs` (det samme som `npm run dev`).
+
+1. Afslut MIAI App (menuen → Afslut), så porten er fri.
+2. Byg og start bridgen med testmanifestet:
+   ```bash
+   npm run build
+   ```
+   ```bash
+   MIAI_MANIFEST="$PWD/packages/addin/manifest.functions.xml" npm start
+   ```
+   Windows (cmd): `set MIAI_MANIFEST=%CD%\packages\addin\manifest.functions.xml` og derefter `npm start`.
+3. Læg det personlige manifest, bridgen har skrevet, ind i Office, og genstart Excel:
+   ```bash
+   npm run sideload:mac -- ~/Library/Application\ Support/MIAI/manifest.xml
+   ```
+   Windows: `npm run sideload:windows -- %APPDATA%\MIAI\manifest.xml`.
+4. Under Indstillinger vises nu **Excel-funktioner**, og `=MIAI.ASK(` findes i arket.
+
+**Tilbage til det almindelige:** stop bridgen med Ctrl+C, og start MIAI App. Den skriver sit eget manifest igen og lægger det ind i Office. Genstart Excel.
+
 ## Tests
 ```bash
 npm test
