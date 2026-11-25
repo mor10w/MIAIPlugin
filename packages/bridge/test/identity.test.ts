@@ -1,7 +1,8 @@
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { platform, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { Settings } from "@miai/shared";
 import { ConfigStore } from "../src/config.js";
@@ -80,6 +81,31 @@ describe("identitet pr. bruger (#11)", () => {
     expect(xml).toContain('https://localhost:44322/assets/icon-32.png"');
     expect(xml).toContain("<AppDomain>https://localhost:44322</AppDomain>");
     expect(xml).not.toContain("44321");
+  });
+
+  it("personligt manifest med regnearksfunktioner (#80): tokenet føjes til ?functions=1, og funktionernes adresser følger porten", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const base = readFileSync(join(here, "../../addin/manifest.functions.xml"), "utf8");
+    const xml = personalizeManifest(base, { port: 44_322, token: "abc_DEF-123" });
+    // "&" skal være &amp; i XML; add-in'et læser både functions og token fra adressen.
+    expect(xml).toContain('id="MIAI.Taskpane.Url" DefaultValue="https://localhost:44322/taskpane.html?functions=1&amp;token=abc_DEF-123"');
+    expect(xml).toContain('<SourceLocation DefaultValue="https://localhost:44322/taskpane.html?token=abc_DEF-123"/>');
+    expect(xml).toContain('DefaultValue="https://localhost:44322/functions.json"');
+    expect(xml).toContain('DefaultValue="https://localhost:44322/functions-fallback.js"');
+    expect(xml).not.toContain("44321");
+    expect(xml).not.toMatch(/&(?!amp;)/); // ingen rå & i XML'en
+    // Shared runtime kun i Excel: dér har knappen intet TaskpaneId; Word og PowerPoint har det stadig.
+    expect(xml.match(/<Runtime /g)).toHaveLength(1);
+    expect(xml.match(/<TaskpaneId>/g)).toHaveLength(2);
+  });
+
+  it("det udgivne bridge-manifest har ingen regnearksfunktioner (slås først til efter afprøvning i rigtig Excel)", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const xml = readFileSync(join(here, "../../addin/manifest.xml"), "utf8");
+    expect(xml).not.toContain("CustomFunctions");
+    expect(xml).not.toContain("<Runtimes>");
+    expect(xml).not.toContain("functions=1");
+    expect(xml.match(/<TaskpaneId>/g)).toHaveLength(3);
   });
 
   it("sammenligner tokens sikkert", () => {
