@@ -30,6 +30,17 @@ beforeAll(async () => {
       res.setHeader("content-type", "application/json");
       return res.end(JSON.stringify({ object: "list", data: [{ id: "mock-model" }, { id: "other" }] }));
     }
+    // Som Ollama (#73): modellen er indlæst med 4.096 tokens kontekst.
+    if (req.url === "/api/show") {
+      res.setHeader("content-type", "application/json");
+      return res.end(
+        JSON.stringify({ model_info: { "general.architecture": "llama", "llama.context_length": 131_072 }, capabilities: ["completion", "vision"] }),
+      );
+    }
+    if (req.url === "/api/ps") {
+      res.setHeader("content-type", "application/json");
+      return res.end(JSON.stringify({ models: [{ name: "mock-model:latest", model: "mock-model:latest", context_length: 4_096 }] }));
+    }
     if (req.url === "/v1/chat/completions") {
       lastBody = JSON.parse(await readBody(req));
       const parts = nextReply.shift()?.split("|") ?? ["ok"];
@@ -158,6 +169,27 @@ describe("probe (#4)", () => {
     });
     expect(r.json().ok).toBe(true);
     expect(lastAuth).toBe("Bearer hemmelig");
+  });
+});
+
+describe("modellens kontekst (#73)", () => {
+  it("læser Ollamas indlæste kontekst og kapabiliteter for en ikke-gemt endpoint", async () => {
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/model-details",
+      headers: H,
+      payload: { endpoint: { id: "ny", name: "Ny", baseUrl: mockUrl }, model: "mock-model" },
+    });
+    expect(r.json()).toMatchObject({ server: "ollama", contextTokens: 4_096, contextSource: "ollama-loaded", maxContextTokens: 131_072, vision: true });
+  });
+  it("respekterer politikken", async () => {
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/model-details",
+      headers: H,
+      payload: { endpoint: { id: "c", name: "Cloud", baseUrl: "https://api.example.com/v1" }, model: "m" },
+    });
+    expect(r.statusCode).toBe(403);
   });
 });
 

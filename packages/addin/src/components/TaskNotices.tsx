@@ -1,5 +1,5 @@
 import { Caption1, MessageBar, MessageBarBody, MessageBarTitle, makeStyles, tokens } from "@fluentui/react-components";
-import type { DocContext } from "@miai/shared";
+import { MIN_AGENT_CONTEXT, type DocContext, type ModelServer } from "@miai/shared";
 import { useI18n, type T } from "../i18n";
 import type { TaskState } from "../useTask";
 
@@ -38,6 +38,11 @@ export function describeError(t: T, code?: string, status?: number): string | un
     default:
       return undefined;
   }
+}
+
+/** Hvordan konteksten gøres større i værktøjet (#73). */
+export function contextFixText(t: T, server: ModelServer | undefined): string {
+  return t(server === "ollama" ? "fixOllama" : server === "lmstudio" ? "fixLmStudio" : "fixGeneric");
 }
 
 /**
@@ -84,6 +89,13 @@ export function TaskNotices({ state, ctx, inputError }: { state: TaskState; ctx?
       {done && state.warnings?.includes("thinking-ignored") && (
         <MessageBar intent="warning">
           <MessageBarBody>{t("warnThinkingIgnored")}</MessageBarBody>
+        </MessageBar>
+      )}
+      {done && state.warnings?.includes("small-context") && state.context && (
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            {t("warnSmallContext", { n: nf.format(state.context.tokens), min: nf.format(MIN_AGENT_CONTEXT) })} {contextFixText(t, state.context.server)}
+          </MessageBarBody>
         </MessageBar>
       )}
       {done && state.stopReason === "repetition" && (

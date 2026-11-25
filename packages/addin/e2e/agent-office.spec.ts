@@ -311,7 +311,7 @@ test("Excel, kodetilstand slået fra: et script fra modellen kan ikke vælges", 
   });
   await tp.run("Agent: redigér dokumentet");
   // Modellen får ikke vejledningen til script-værktøjet, når det er slået fra (skemaet nævner det stadig).
-  expect(tp.model.lastRequest!.messages[0].content).not.toContain("runScript {description, code}");
+  expect((await tp.model.waitForRequest()).messages[0].content).not.toContain("runScript {description, code}");
   await expect(tp.page.getByText("Kodetilstanden er slået fra (Indstillinger)")).toBeVisible();
   await expect(tp.page.getByRole("checkbox", { name: "Kør script: Summen i E2" })).not.toBeChecked();
 });
@@ -323,7 +323,7 @@ test("Excel, kodetilstand: scriptet vises, køres i sandkassen og kan fortrydes"
     json: JSON.stringify({ summary: "Lægger omsætningen sammen.", actions: [{ action: "runScript", description: "Summen i E2", code: SCRIPT, reason: "" }] }),
   });
   await tp.run("Agent: redigér dokumentet");
-  expect(tp.model.lastRequest!.messages[0].content).toContain("runScript {description, code}");
+  expect((await tp.model.waitForRequest()).messages[0].content).toContain("runScript {description, code}");
   await expect(tp.page.getByText("Fjerner indhold")).toBeVisible();
   await tp.page.getByText("Vis koden").click();
   await expect(tp.page.getByText('sheet.getRange("E1:E2").values')).toBeVisible();
@@ -586,7 +586,7 @@ test("Excel (#25): pivottabel på et nyt ark og datavalidering uden kodetilstand
   });
   await tp.run("Agent: redigér dokumentet");
   // Værktøjerne er altid med i prompten – kodetilstanden er slået fra.
-  const sys = tp.model.lastRequest!.messages[0].content;
+  const sys = (await tp.model.waitForRequest()).messages[0].content;
   expect(sys).toContain("addPivotTable {source, rows, columns?, values, destination}");
   expect(sys).not.toContain("runScript {description, code}");
   await expect(tp.page.getByRole("checkbox", { name: "Pivottabel af Salg i Pivot!A1: gennemsnit af Omsætning pr. region" })).toBeChecked();
@@ -722,7 +722,7 @@ test("PowerPoint: kun det ændrede ændres, nye slides følger skabelonen, og fo
   });
   await tp.run("Agent: redigér dokumentet");
   await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
-  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  const prompt = (await tp.model.waitForRequest()).messages.map((m) => m.content).join("\n");
   expect(prompt).toContain(
     "Slide 2 (layout: Title and Content)\n  2.1 [title] Title 1: Resultater\n  2.2 [body] Content 2: Omsætning +12 % i Q3 ⏎ Margin 38 %",
   );
@@ -797,7 +797,7 @@ test("kodetilstand i PowerPoint (#23): scriptet kører i sandkassen, fortryd læ
 
   tp.model.reply = () => script(`${remove}\nreturn "Slettede det første slide";`);
   await tp.run("Agent: redigér dokumentet");
-  expect(tp.model.lastRequest!.messages[0].content).toContain("`context` (PowerPoint.RequestContext) and `PowerPoint` in scope");
+  expect((await tp.model.waitForRequest()).messages[0].content).toContain("`context` (PowerPoint.RequestContext) and `PowerPoint` in scope");
   await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
   await expect(tp.page.getByText("Slettede det første slide", { exact: true })).toBeVisible();
   expect(withoutIds(await deck(tp.page))).toEqual(before.slice(1));

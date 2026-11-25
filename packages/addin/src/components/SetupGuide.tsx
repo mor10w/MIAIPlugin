@@ -4,6 +4,7 @@ import { ArrowClockwise16Regular, Copy16Regular } from "@fluentui/react-icons";
 import { corsSteps, discoveryTargets, Endpoint, type KnownTool, type ProbeResult } from "@miai/shared";
 import { useBackend } from "../backend";
 import { useI18n } from "../i18n";
+import { ModelContext } from "./ModelContext";
 
 const useStyles = makeStyles({
   card: { display: "flex", flexDirection: "column", gap: tokens.spacingVerticalS, padding: tokens.spacingHorizontalM },
@@ -36,6 +37,8 @@ interface Found {
   result?: ProbeResult;
 }
 
+const endpointFor = (tool: KnownTool) => Endpoint.parse({ id: tool.id, name: tool.name, baseUrl: tool.baseUrl, structuredOutput: tool.structuredOutput });
+
 /**
  * Førstegangsguide (#4): finder OpenAI-kompatible værktøjer på kendte porte, viser præcis
  * CORS-opsætning, hvis browseren ikke må læse svaret, og opretter endpointen med ét klik.
@@ -48,10 +51,7 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
   const [scanning, setScanning] = useState(false);
   const origin = window.location.origin;
 
-  const probe = useCallback(
-    (tool: KnownTool) => api.probe(Endpoint.parse({ id: tool.id, name: tool.name, baseUrl: tool.baseUrl, structuredOutput: tool.structuredOutput })),
-    [api],
-  );
+  const probe = useCallback((tool: KnownTool) => api.probe(endpointFor(tool)), [api]);
 
   const scan = useCallback(async () => {
     setScanning(true);
@@ -94,6 +94,7 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
           </div>
           <Caption1>{f.baseUrl}</Caption1>
           {f.tools.length > 1 && <Caption1>{t("setupSharedPort")}</Caption1>}
+          {f.result?.ok && f.result.models[0] && <ModelContext endpoint={endpointFor(f.tools[0])} model={f.result.models[0]} />}
           <div className={s.row}>
             {f.tools.map((tool) => (
               <Button key={tool.id} size="small" appearance="primary" onClick={() => void onUse(tool, f.result?.ok ? f.result.models : [])}>

@@ -357,7 +357,7 @@ test("Word-tabeller (#24): ny tabel, ny række, slettet række og rettet celle; 
   });
   await tp.run("Agent: redigér dokumentet");
   // Modellen ser cellerne med tabel, række og kolonne.
-  const prompt = tp.model.lastRequest!.messages.map((m) => m.content).join("\n");
+  const prompt = (await tp.model.waitForRequest()).messages.map((m) => m.content).join("\n");
   expect(prompt).toContain("¶4 [Normal] (table 1, row 2, col 1) Æble\n¶5 [Normal] (table 1, row 2, col 2) 4 kr");
   expect(prompt).toContain("insertTable {position, paragraph?, rows}");
   await expect(tp.page.getByRole("checkbox", { name: "Ny tabelrække ved ¶4 “Æble”: Banan | 3 kr" })).toBeChecked();
@@ -440,7 +440,7 @@ test("kodetilstand i Word (#23): scriptet kører i sandkassen, kan fortrydes, og
   // Excel-objektet findes ikke i Word, og netværk er spærret som i Excel.
   tp.model.reply = () => script("const s = Excel.run; await fetch('https://evil.example');", "Forkert vært");
   await tp.run("Agent: redigér dokumentet");
-  expect(tp.model.lastRequest!.messages[0].content).toContain("`context` (Word.RequestContext) and `Word` in scope");
+  expect((await tp.model.waitForRequest()).messages[0].content).toContain("`context` (Word.RequestContext) and `Word` in scope");
   await expect(tp.page.getByText("Bruger noget, sandkassen ikke tillader")).toBeVisible();
 
   tp.model.reply = () =>

@@ -13,6 +13,7 @@ import {
   type ToolCall,
   type ToolSpec,
 } from "./openai.js";
+import { clearNativeCache, contextFix, fetchNativeModelInfo, MIN_AGENT_CONTEXT, type ModelDetails, type ModelServer } from "./modelInfo.js";
 import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
 import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
@@ -85,14 +86,47 @@ export async function cachedModels(ep: Endpoint, signal?: AbortSignal, opts?: Cl
   return (await cachedEntries(ep, signal, opts)).map((m) => m.id);
 }
 
+const detailsCache = new Map<string, { details: ModelDetails; at: number }>();
+
 /**
- * Modellens kontekstlængde: endpointens indstilling, ellers hvad værktøjet oplyser i /v1/models.
- * Ukendt (fx Ollama, hvis num_ctx ikke oplyses) → undefined; så planlægges der uden loft.
+ * Modellens kontekst og kapabiliteter (#73). Konteksten tages i denne rækkefølge: endpointens
+ * indstilling, /v1/models (vLLM m.fl.), værktøjets eget API (Ollama, LM Studio). Kapabiliteterne
+ * kommer kun fra værktøjets eget API. Ukendt kontekst (fx Ollama med en model, der ikke er indlæst
+ * endnu) → undefined; så planlægges der uden loft. `fresh` springer cachen over, fx efter en
+ * kørsel, der har indlæst modellen.
  */
+export async function modelDetails(
+  ep: Endpoint,
+  model: string,
+  opts: { signal?: AbortSignal; client?: ClientOptions; fresh?: boolean } = {},
+): Promise<ModelDetails> {
+  const key = `${ep.baseUrl}|${ep.apiKey}|${model}`;
+  const hit = detailsCache.get(key);
+  if (!opts.fresh && hit && Date.now() - hit.at < 30_000) return withEndpointContext(ep, hit.details);
+  const native = await fetchNativeModelInfo(ep, model, { signal: opts.signal, fresh: opts.fresh });
+  let fromModels: number | undefined;
+  if (!native?.contextTokens) {
+    try {
+      fromModels = (await cachedEntries(ep, opts.signal, opts.client)).find((m) => m.id === model)?.contextTokens;
+    } catch {
+      /* ukendt */
+    }
+  }
+  const details: ModelDetails = fromModels ? { ...native, model, contextTokens: fromModels, contextSource: "models" } : (native ?? { model });
+  detailsCache.set(key, { details, at: Date.now() });
+  return withEndpointContext(ep, details);
+}
+
+/** Endpointens egen indstilling har forrang for det aflæste. */
+function withEndpointContext(ep: Endpoint, d: ModelDetails): ModelDetails {
+  return ep.contextTokens ? { ...d, contextTokens: ep.contextTokens, contextSource: "endpoint" } : d;
+}
+
+/** Modellens kontekstlængde, eller undefined, når den ikke kendes (se modelDetails). */
 export async function contextTokensFor(ep: Endpoint, model: string, signal?: AbortSignal, opts?: ClientOptions): Promise<number | undefined> {
   if (ep.contextTokens) return ep.contextTokens;
   try {
-    return (await cachedEntries(ep, signal, opts)).find((m) => m.id === model)?.contextTokens;
+    return (await modelDetails(ep, model, { signal, client: opts })).contextTokens;
   } catch {
     return undefined;
   }
@@ -100,6 +134,8 @@ export async function contextTokensFor(ep: Endpoint, model: string, signal?: Abo
 
 export function clearModelCache(): void {
   modelCache.clear();
+  detailsCache.clear();
+  clearNativeCache();
 }
 
 /** Værktøjer, modellen kan kalde (ADR-0010). Bridgen leverer eksekveringen; browseren gør det ikke. */
@@ -158,7 +194,8 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   if (!model) throw new UpstreamError(`${ep.name} har ingen modeller. Hent eller indlæs en model i dit inference-værktøj.`, "NO_MODEL");
   emit({ type: "meta", model, endpoint: ep.name });
 
-  const contextTokens = await contextTokensFor(ep, model, signal, client);
+  const details = await modelDetails(ep, model, { signal, client });
+  const contextTokens = details.contextTokens;
   const warnings = new Set<TaskWarning>();
   let inputReq = req;
 
@@ -215,7 +252,7 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     const promptEstimate = estimateMessages(msgs);
     if (contextTokens && promptEstimate > contextTokens * 1.1) {
       throw new UpstreamError(
-        `Teksten er for lang til modellens kontekst (ca. ${promptEstimate} tokens; modellen kan ${contextTokens}). Markér mindre tekst, eller vælg en model med større kontekst.`,
+        `Teksten er for lang til modellens kontekst (ca. ${promptEstimate} tokens; modellen kan ${contextTokens}). Markér mindre tekst, eller vælg en model med større kontekst.${contextFix(details.server, " ")}`,
         "CONTEXT_OVERFLOW",
       );
     }
@@ -368,7 +405,18 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
     emit({ type: "result", data: parsed.data });
   }
 
-  emit({ type: "done", usage, stopReason, warnings: warnings.size ? [...warnings] : undefined });
+  // Lille kontekst (#73): agent og chat har brug for plads til systemprompt, dokument og historik.
+  // Ollama kender først konteksten, når modellen er indlæst – det er den nu, så spørg igen.
+  let context: { tokens: number; server?: ModelServer } | undefined;
+  if (task.id === "agent" || task.id === "chat") {
+    const d = contextTokens || details.server !== "ollama" ? details : await modelDetails(ep, model, { signal, client, fresh: true });
+    if (d.contextTokens && d.contextTokens < MIN_AGENT_CONTEXT) {
+      warnings.add("small-context");
+      context = { tokens: d.contextTokens, ...(d.server ? { server: d.server } : {}) };
+    }
+  }
+
+  emit({ type: "done", usage, stopReason, warnings: warnings.size ? [...warnings] : undefined, ...(context ? { context } : {}) });
   return {
     model,
     output,

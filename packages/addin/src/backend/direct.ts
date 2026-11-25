@@ -12,6 +12,7 @@ import {
   MAX_LOCAL_AUDIT_ENTRIES,
   Endpoint,
   probeEndpoint,
+  modelDetails,
   type ProbeResult,
   Policy,
   Settings,
@@ -25,6 +26,7 @@ import {
   type AuditEntry,
   type ClientOptions,
   type HealthInfo,
+  type ModelDetails,
   type ModelInfo,
   type SettingsView,
   type TaskDefinition,
@@ -214,6 +216,13 @@ export class DirectBackend implements Backend {
     const rest = all.filter((x) => x.id !== id);
     if (rest.length === all.length) throw new Error("Opgaven findes ikke.");
     store.set(KEY_USER_TASKS, JSON.stringify(rest));
+  }
+
+  async modelDetails(endpoint: Endpoint, model: string): Promise<ModelDetails> {
+    const ep = Endpoint.parse(endpoint);
+    if (!isUrlAllowed(ep.baseUrl, this.policyNow)) throw new Error("Endpoint er ikke tilladt af politikken.");
+    // Fra Indstillinger: spørg altid værktøjet igen (fx efter at konteksten er ændret).
+    return modelDetails(ep, model, { signal: timeout(5_000), client: this.client, fresh: true });
   }
 
   async probe(endpoint: Endpoint): Promise<ProbeResult> {

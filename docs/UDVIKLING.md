@@ -192,6 +192,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Tilføj en host under Tilladte hosts og gem: task pane genindlæses, Indstillinger åbner igen, og den nye host kan kaldes
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
+- [ ] Kontekst (#73): med Ollama uden `OLLAMA_CONTEXT_LENGTH` viser Indstillinger → Modeller den indlæste kontekst (4.096 på en maskine med under 24 GB VRAM) og en advarsel; efter `OLLAMA_CONTEXT_LENGTH=32768` og genstart viser **Tjek igen** 32.768 og ingen advarsel. I LM Studio vises den kontekst, modellen er indlæst med
 
 **Outlook og central udrulning (#7)**
 - [ ] Outlook (Windows, Mac, nyt Outlook, web): manifestet tilføjes fra fil; knappen AI-assistent vises i en læst mail og i et udkast

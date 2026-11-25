@@ -5,6 +5,7 @@ import type {
   HealthInfo,
   KnowledgeStatus,
   ProbeResult,
+  ModelDetails,
   ModelInfo,
   Policy,
   Settings,
@@ -74,6 +75,9 @@ export class BridgeBackend implements Backend {
   }
   probe(endpoint: Endpoint) {
     return fetch("/api/probe", { method: "POST", headers: H, body: JSON.stringify({ endpoint }) }).then((r) => json<ProbeResult>(r));
+  }
+  modelDetails(endpoint: Endpoint, model: string) {
+    return fetch("/api/model-details", { method: "POST", headers: H, body: JSON.stringify({ endpoint, model }) }).then((r) => json<ModelDetails>(r));
   }
   audit() {
     return fetch("/api/audit", { headers: H }).then((r) => json<AuditEntry[]>(r));

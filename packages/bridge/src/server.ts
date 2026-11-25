@@ -7,6 +7,7 @@ import {
   cachedModels,
   Endpoint,
   probeEndpoint,
+  modelDetails,
   isUrlAllowed,
   Policy,
   Settings,
@@ -183,6 +184,16 @@ export async function buildServer({
     const ep = body.data.endpoint;
     if (ep.apiKey === KEY_MASK) ep.apiKey = store.getSettings().endpoints.find((e) => e.id === ep.id)?.apiKey ?? "";
     return probeEndpoint(ep, store.getPolicy(), { signal: AbortSignal.timeout(6_000) });
+  });
+
+  /** Kontekst og kapabiliteter for en model (#73). Maskerede nøgler slås op som ved /api/probe. */
+  app.post("/api/model-details", async (req, reply) => {
+    const body = z.object({ endpoint: Endpoint, model: z.string().min(1).max(300) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: z.prettifyError(body.error) });
+    const ep = body.data.endpoint;
+    if (ep.apiKey === KEY_MASK) ep.apiKey = store.getSettings().endpoints.find((e) => e.id === ep.id)?.apiKey ?? "";
+    if (!isUrlAllowed(ep.baseUrl, store.getPolicy())) return reply.code(403).send({ error: "Endpoint ikke tilladt af politikken" });
+    return modelDetails(ep, body.data.model, { signal: AbortSignal.timeout(6_000), fresh: true });
   });
 
   app.get("/api/settings", async (): Promise<SettingsView> => {

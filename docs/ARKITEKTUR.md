@@ -39,11 +39,12 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
   - streamer svaret og filtrerer `<think>`
   - ved JSON-opgaver: sætter `response_format` efter endpointens `structuredOutput`, sender skemaet i prompten, validerer med Zod og prøver én gang mere ved fejl
 - **`context.ts`** (#3): token-estimat, svarbudget, opdeling ved afsnit og detektion af afkortning. Motoren bruger dem til:
-  - at begrænse `max_tokens` og afvise for lange prompts, når kontekstlængden er kendt (endpointens `contextTokens` eller aflæst fra `/v1/models`)
+  - at begrænse `max_tokens` og afvise for lange prompts, når kontekstlængden er kendt (endpointens `contextTokens`, aflæst fra `/v1/models` eller fra værktøjets eget API, se `modelInfo.ts`)
   - at køre map-reduce for opgaver med `chunking: "map-reduce"` (opsummering)
   - at melde `done.warnings`, når `usage.prompt_tokens` viser, at modellen fik mindre, end der blev sendt, eller når `finish_reason` er `length`
 
   Tekst fra en værktøjsrunde trækkes tilbage med en `retract`-event.
+- **`modelInfo.ts`** (#73): modellens kontekst og kapabiliteter fra værktøjets eget API, fordi OpenAI's `/v1/models` hverken oplyser Ollamas kontekst eller LM Studios indlæste kontekst. Ollama: `POST /api/show` (Modelfile-parametre, trænet kontekst, `capabilities`) og `GET /api/ps` (konteksten, en indlæst model kører med). LM Studio: `GET /api/v1/models` (`max_context_length`, den indlæste instans' `context_length`, `vision`, `trained_for_tool_use`). Kaldene går til endpointens egen host og port. En server, der ikke svarer som nogen af dem, spørges ikke igen i 10 minutter. `engine.ts` samler det i `modelDetails()` (30 s cache) og melder `small-context` i `done.warnings`, når agent eller chat kører med under 16.384 tokens.
 - **`openai.ts`**: minimal klient. Bruger `fetch` + `ReadableStream.getReader()` og har fallback for `AbortSignal.any`. GET-kald sendes uden ekstra headers, så browseren undgår CORS-preflight. Tåler servere, der ignorerer `stream: true`.
 - **`policy.ts`**: `allowedHosts` med `*.domæne`-wildcards.
 
