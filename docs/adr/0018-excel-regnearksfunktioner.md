@@ -66,6 +66,13 @@ Til afprøvning med bridgen findes testmanifestet `manifest.functions.xml`: brid
 - Med shared runtime lever siden, så længe projektmappen er åben. Genindlæsningen ved ændret politik (#28) afbryder kørende funktioner.
 - En projektmappe med `MIAI.ASK` viser den sidst beregnede værdi hos en kollega uden MIAI, og `#NAME?` ved genberegning.
 
+## Erfaringer fra rigtig Excel (Mac, november 2026)
+
+- Manifestet indlæses, task pane åbner uden `<TaskpaneId>`, og `=MIAI.ASK(` findes i arket med testmanifestet gennem bridgen.
+- Cellen stod på `#BUSY!` uden noget kald til bridgen. Funktionen ventede på panelets opstart, som kun afsluttes, når `Office.onReady` melder Excel som vært. Funktionerne opretter derfor selv deres backend, så snart siden er indlæst, og knyttes til, så snart Office.js har defineret `CustomFunctions`. Om Excel på Mac kører funktionerne i samme side som panelet eller i sin egen skjulte udgave af den, er ikke afklaret; koden virker nu i begge tilfælde.
+- Et kald venter højst 20 sekunder på MIAI selv (backend, indstillinger, modelliste). Derefter viser cellen `#N/A` med en forklaring.
+- Kører funktionerne i en anden udgave af siden end panelet, kan panelets statuslinje og Stop-knap ikke se køen. Det skal afklares.
+
 ## Skal bekræftes i rigtig Excel
 
 - At manifestet indlæses i Word, Excel og PowerPoint.

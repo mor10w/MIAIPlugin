@@ -1,5 +1,5 @@
 import { defaultSettings, Settings, type TaskEvent, type TaskRequest } from "@miai/shared";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Backend } from "../backend";
 import { CellCache, type CacheStorage } from "./cache";
 import { CellError, createCellRuntime, functionsDeclared, PREVIEW_PLACEHOLDER, registerCellFunctions, type CellInvocation } from "./functions";
@@ -169,6 +169,29 @@ describe("=MIAI.ASK()", () => {
   });
 });
 
+describe("funktionen hænger aldrig uden forklaring", () => {
+  it("bliver MIAI aldrig klar, får cellen #N/A med en forklaring i stedet for at stå på #BUSY!", async () => {
+    const never = new Promise<Backend>(() => {});
+    const stuck = createCellRuntime(never, new CellCache(memory()), 30);
+    expect(await stuck.ask("p", [["x"]], true, null).catch((e) => e)).toMatchObject({
+      kind: "na",
+      message: "MIAI svarer ikke. Åbn MIAI-panelet, tjek forbindelsen, og beregn cellen igen.",
+    });
+    expect(await stuck.models().catch((e) => e)).toMatchObject({ kind: "na" });
+  });
+  it("svarer indstillingerne aldrig, gælder det samme", async () => {
+    const slow = { ...f.backend, settings: () => new Promise(() => {}) } as unknown as Backend;
+    const rt2 = createCellRuntime(slow, new CellCache(memory()), 30);
+    expect(await rt2.ask("p", [["x"]], true, null).catch((e) => e)).toMatchObject({ kind: "na" });
+    expect(f.calls).toHaveLength(0);
+  });
+  it("en backend, der først bliver klar lidt senere, er ikke en fejl", async () => {
+    const later = new Promise<Backend>((ok) => setTimeout(() => ok(f.backend), 20));
+    const rt2 = createCellRuntime(later, new CellCache(memory()), 2_000);
+    expect(await rt2.ask("p", [["x"]], true, null)).toBe("svar på x");
+  });
+});
+
 describe("=MIAI.MODELS()", () => {
   it("giver modellerne som en kolonne; en endpoint uden modeller giver #N/A", async () => {
     expect(await rt.models()).toEqual([["qwen3:4b"], ["qwen3:32b"]]);
@@ -199,6 +222,22 @@ describe("registrering", () => {
       expect(registerCellFunctions(f.backend, false)).toBeUndefined();
       expect(registerCellFunctions(f.backend)).toBeUndefined(); // ingen ?functions=1 i adressen
       expect(Object.keys(fns)).toEqual([]);
+    } finally {
+      delete (globalThis as Record<string, unknown>).CustomFunctions;
+    }
+  });
+  it("venter på, at Office.js definerer CustomFunctions, når det sker efter sidens egen kode", async () => {
+    const fns: Record<string, (...a: unknown[]) => Promise<unknown>> = {};
+    // Registreringen sker kun én gang pr. side; en frisk kopi af modulet svarer til en ny side.
+    vi.resetModules();
+    const { registerCellFunctionsWhenReady } = await import("./functions");
+    try {
+      registerCellFunctionsWhenReady(f.backend, false); // manifestet har ikke funktionerne med: intet sker
+      registerCellFunctionsWhenReady(f.backend, true);
+      expect(Object.keys(fns)).toEqual([]);
+      setTimeout(() => ((globalThis as Record<string, unknown>).CustomFunctions = fakeApi(fns)), 150);
+      await new Promise((r) => setTimeout(r, 450));
+      expect(Object.keys(fns).sort()).toEqual(["ASK", "MODELS"]);
     } finally {
       delete (globalThis as Record<string, unknown>).CustomFunctions;
     }

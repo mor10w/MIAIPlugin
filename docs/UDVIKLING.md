@@ -222,6 +222,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Regnearksfunktioner (#80, med `manifest.dev.xml` og `npm run dev`), i Excel på Windows og Mac:
   - [ ] Manifestet indlæses, og MIAI virker som før i Word, Excel og PowerPoint (task pane åbner fra fanen Hjem)
   - [ ] `=MIAI.ASK("Hvilket land ligger byen i?"; A2)` viser `#BUSY!` og derefter svaret; formlen kan trækkes ned over 50 rækker, og task pane viser "i gang" og "i kø" med et virkende **Stop MIAI-funktioner**
+  - [ ] Mens cellerne regner, viser panelet statuslinjen "MIAI.ASK: … i gang, … i kø" (gør det ikke, kører Excel funktionerne i en anden udgave af siden end panelet; notér det)
   - [ ] Mens formlen skrives, kaldes modellen ikke (ingen aktivitet i Ollama, før Enter)
   - [ ] F9 og Ctrl+Alt+F9 spørger ikke modellen igen for uændrede celler
   - [ ] Gem, luk og åbn projektmappen: kaldes funktionerne igen? Notér resultatet her: ______

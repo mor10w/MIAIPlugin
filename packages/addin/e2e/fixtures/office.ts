@@ -22,6 +22,11 @@ export interface FakeOfficeOptions {
    * (#80): task pane åbnes med ?functions=1, som manifestet gør.
    */
   customFunctions?: boolean;
+  /**
+   * Siden kører kun regnearksfunktioner (Excels egen skjulte udgave af siden): Office.onReady melder
+   * ingen vært, så panelet starter aldrig. Funktionerne skal virke alligevel.
+   */
+  hiddenRuntime?: boolean;
   /** Markeret tekst (Word, PowerPoint). Sammen med `paragraphs` markeres de hele afsnit, teksten ligger i. */
   selection?: string;
   /** Word: hele dokumentets tekst (bruges, når intet er markeret). Standard: markeringen. */
@@ -261,9 +266,11 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         },
       }),
     }),
-    onReady(cb: (info: { host: string }) => void) {
-      setTimeout(() => cb({ host: o.host }), 0);
-      return Promise.resolve({ host: o.host });
+    onReady(cb: (info: { host: string | null }) => void) {
+      // I en skjult side, der kun kører regnearksfunktioner, melder Office ingen vært (se hiddenRuntime).
+      const host = o.hiddenRuntime ? null : o.host;
+      setTimeout(() => cb({ host }), 0);
+      return Promise.resolve({ host });
     },
   });
 
