@@ -70,3 +70,19 @@ politikken (ADR-0006) eller audit-loggen. Rettet:
 - **Politik:** adressen valideres mod `allowedHosts` både ved gem og ved hver søgning. En maskinpolitik kan låse tjenesten med `Policy.search`.
 - **Audit-log:** registrerer den faktiske søgehost.
 - **DuckDuckGo:** en side med resultater, som ikke kan læses (ændret markup), skelnes nu fra "ingen resultater". Modellen og loggen får besked, så et brud opdages.
+
+## Tillæg (2026-11-25): Exa som søgetjeneste, og robot-tjek hos DuckDuckGo
+
+Afprøvningen af `=MIAI.ASK(…; FALSK)` viste to svagheder ved DuckDuckGo som eneste tjeneste uden opsætning:
+
+- DuckDuckGo svarer med et robot-tjek (HTTP 202) efter få søgninger på kort tid. En celle kan søge op til fire gange, så en kolonne rammer det hurtigt. Bridgen meldte det som "ingen resultater"; nu meldes søgningen som mislykket, og modellen får besked om ikke at gætte.
+- Resultaterne er korte uddrag. Et præcist tal, fx en lukkekurs på en bestemt dag, står sjældent i dem.
+
+Derfor kan `Settings.search.provider` nu også være `"exa"`:
+
+- **Hvordan:** bridgen kalder værktøjet `web_search_exa` på Exas hostede MCP-server (`https://mcp.exa.ai/mcp`) med ét JSON-RPC-kald. Serveren kræver hverken session, konto eller nøgle, så beslutningen om søgning uden API-nøgle holder. Svaret er tekst med titel, URL og uddrag af selve siden; det afkortes til 8.000 tegn, og der bedes om fire resultater.
+- **Ikke standard:** DuckDuckGo er stadig standard. Exa er et aktivt valg, fordi søgeordene går til en anden tredjepart, og fordi Exas vilkår for brug af den nøglefri adgang fra et produkt som MIAI ikke er afklaret.
+- **Grænser:** uden nøgle gælder Exas gratis grænse (intet tal er oplyst). Er den nået, svarer serveren 429; modellen får samme besked som ved robot-tjekket. Nøglefri adgang kræver ifølge Exa en direkte IPv4-forbindelse.
+- **Politik og audit-log:** som DuckDuckGo er Exa en fast, offentlig adresse og tjekkes ikke mod `allowedHosts`. `Policy.search` kan låse tjenesten til `{"provider": "exa"}`, og `Policy.webSearch: false` forbyder al søgning. Audit-loggen får hosten `mcp.exa.ai`.
+- **Ikke med:** en valgfri Exa-nøgle for højere grænser (kræver samme håndtering i nøgleringen som endpoint-nøgler) og Exas `web_fetch_exa`, som henter en bestemt side.
+- **Dags dato:** når modellen kan søge, får systemprompten dags dato. Uden den afviste modellen en dato i sidste uge som "i fremtiden".

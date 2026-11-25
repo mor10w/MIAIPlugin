@@ -165,6 +165,22 @@ test("Svar: Temperatur og Maks. tokens flugter og holder sig inden for kortet", 
   await expectSideBySide(field("Temperatur"), field("Maks. tokens i svar"));
 });
 
+test("Exa kan vælges som søgetjeneste", async ({ open }) => {
+  const tp = await open({ host: "Word", mode: "bridge", settings: { webSearch: true } });
+  await tp.tab("Indstillinger");
+  await tp.page.getByRole("button", { name: "Forbindelse", exact: true }).click();
+  await tp.section("Privatliv og politik");
+  const provider = tp.page.getByRole("combobox", { name: "Søgetjeneste" });
+  await provider.scrollIntoViewIfNeeded();
+  await expect(provider).toHaveText("DuckDuckGo");
+  await provider.click();
+  await tp.page.getByRole("option", { name: "Exa" }).click();
+  await expect(provider).toHaveText("Exa");
+  // Hjælpeteksten siger, hvor søgeordene sendes hen. Exa har ingen adresse at udfylde.
+  await expect(tp.page.getByText("Søgeordene sendes til Exa (mcp.exa.ai).")).toBeVisible();
+  await expect(tp.page.getByRole("textbox", { name: "SearXNG-adresse" })).toHaveCount(0);
+});
+
 test("Søgetjeneste og SearXNG-adresse flugter og holder sig inden for kortet", async ({ open }) => {
   const tp = await open({ host: "Word", mode: "bridge", settings: { webSearch: true, search: { provider: "searxng", url: "http://127.0.0.1:1" } } });
   await tp.tab("Indstillinger");
