@@ -212,6 +212,105 @@
       #sheet td.band {
         background: #eaf2fb;
       }
+      /* Formelscenen (videoen om =MIAI.ASK()): formellinje, markering, redigering og #BUSY!. */
+      #fbar {
+        display: flex;
+        align-items: center;
+        height: 30px;
+        border-bottom: 1px solid #d5dae1;
+        font-size: 13px;
+      }
+      #fbar .name,
+      #fbar .fx {
+        line-height: 30px;
+        text-align: center;
+        border-right: 1px solid #d5dae1;
+      }
+      #fbar .name {
+        width: 72px;
+      }
+      #fbar .fx {
+        width: 36px;
+        color: var(--muted);
+        font-style: italic;
+        font-family: Georgia, "Times New Roman", serif;
+      }
+      #fbar .ftext {
+        padding: 0 10px;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      #sheet td.busy {
+        color: #8a94a3;
+        text-align: center;
+        font-size: 12px;
+        letter-spacing: 0.02em;
+      }
+      #sheet td.fresh {
+        animation: flash 1.8s ease-out both;
+      }
+      #sheet td.insel {
+        background-color: rgba(16, 124, 65, 0.08);
+      }
+      #sheet td.corner,
+      #sheet td.edit {
+        position: relative;
+        overflow: visible;
+      }
+      #sheet td .handle {
+        position: absolute;
+        right: -4px;
+        bottom: -4px;
+        width: 8px;
+        height: 8px;
+        background: #107c41;
+        border: 1px solid #fff;
+        z-index: 4;
+      }
+      #sheet td.edit {
+        padding: 0;
+      }
+      #sheet td .ed {
+        position: absolute;
+        left: -1px;
+        top: -1px;
+        min-width: calc(100% + 2px);
+        height: 28px;
+        line-height: 24px;
+        padding: 0 8px;
+        background: #fff;
+        border: 2px solid #107c41;
+        white-space: nowrap;
+        z-index: 5;
+      }
+      #sheet td .ed::after {
+        content: "";
+        display: inline-block;
+        width: 1px;
+        height: 15px;
+        margin-left: 1px;
+        vertical-align: -2px;
+        background: #111;
+        animation: blink 1s steps(1) infinite;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0;
+        }
+      }
+      #sheet td .tip {
+        position: absolute;
+        left: -1px;
+        top: 30px;
+        padding: 3px 9px;
+        background: #fffbe6;
+        border: 1px solid #cfc8a4;
+        box-shadow: 0 2px 6px rgba(16, 24, 40, 0.12);
+        font-size: 11.5px;
+        color: #444;
+        white-space: nowrap;
+        z-index: 6;
+      }
       #chart {
         position: absolute;
         background: #fff;
@@ -459,7 +558,7 @@
     <script>
       const $ = (id) => document.getElementById(id);
       const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true, chartShown: false, thumbs: [], seenSlides: null };
+      const state = { tracked: null, sel: [], last: "", seen: new Set(), first: true, chartShown: false, thumbs: [], seenSlides: null, f: null };
 
       // Ordvis forskel (længste fælles delsekvens) til visning af sporede ændringer.
       function diff(a, b) {
@@ -585,6 +684,12 @@
       }
 
       function renderSheet(sheet) {
+        // Formelscenen (stage.grid): egne kolonner, formellinje, markering og celler, scenen selv beregner.
+        const F = state.f;
+        const cols = F ? F.cols : COLS;
+        const widthOf = (l) => (F && F.widths[l]) || WIDTH[l] || COLW;
+        const sel = F && F.sel ? parseRange(F.sel) : null;
+        const multi = sel && (sel.r0 !== sel.r1 || sel.c0 !== sel.c1);
         const tables = sheet.tables.map((t) => ({ ...t, g: parseRange(t.range) }));
         const bars = sheet.conditionalFormats.filter((c) => /DataBar/i.test(c.type)).map((c) => parseRange(c.address));
         const barMax = bars.map((g) => {
@@ -593,29 +698,61 @@
             for (let c = g.c0; c <= g.c1; c++) if (typeof (sheet.values[r] || [])[c] === "number") m = Math.max(m, sheet.values[r][c]);
           return m;
         });
-        let html = `<table><colgroup><col style="width:${HEAD}px">${COLS.map((l) => `<col style="width:${WIDTH[l] || COLW}px">`).join("")}</colgroup>`;
-        html += `<tr><th></th>${COLS.map((l) => `<th>${l}</th>`).join("")}</tr>`;
-        for (let r = 0; r < ROWS; r++) {
+        let html = F ? formulaBar(sheet) : "";
+        html += `<table><colgroup><col style="width:${HEAD}px">${cols.map((l) => `<col style="width:${widthOf(l)}px">`).join("")}</colgroup>`;
+        html += `<tr><th></th>${cols.map((l) => `<th>${l}</th>`).join("")}</tr>`;
+        for (let r = 0; r < (F ? F.rows : ROWS); r++) {
           html += `<tr><th>${r + 1}</th>`;
-          COLS.forEach((l, c) => {
-            const v = (sheet.values[r] || [])[c];
-            const f = sheet.formats[l + (r + 1)] || {};
+          cols.forEach((l) => {
+            const c = colIndex(l);
+            const a = l + (r + 1);
+            const own = F && F.cells[a];
+            const v = own ? own.v : (sheet.values[r] || [])[c];
+            const f = sheet.formats[a] || {};
             const t = tables.find((x) => x.style && inside(x.g, r, c));
-            const cls = [typeof v === "number" ? "num" : "", t ? (r === t.g.r0 ? "head" : (r - t.g.r0) % 2 ? "band" : "") : ""].filter(Boolean).join(" ");
+            const classes = [typeof v === "number" ? "num" : "", t ? (r === t.g.r0 ? "head" : (r - t.g.r0) % 2 ? "band" : "") : ""];
             let style = f.bold && !t ? "font-weight:600;" : "";
+            let extra = "";
+            if (own && own.busy) classes.push("busy");
+            // Et nyt svar blinker kort. Gitteret tegnes om undervejs, så blinket fortsætter, hvor det var.
+            const age = own && own.at ? Date.now() - own.at : Infinity;
+            if (age < 1800) {
+              classes.push("fresh");
+              style += `animation-delay:-${age}ms;`;
+            }
+            if (inside(sel, r, c)) {
+              const edges = [
+                r === sel.r0 && "inset 0 2px 0 #107c41",
+                r === sel.r1 && "inset 0 -2px 0 #107c41",
+                c === sel.c0 && "inset 2px 0 0 #107c41",
+                c === sel.c1 && "inset -2px 0 0 #107c41",
+              ].filter(Boolean);
+              style += `box-shadow:${edges.join(",")};`;
+              if (multi && !(r === sel.r0 && c === sel.c0)) classes.push("insel");
+              if (r === sel.r1 && c === sel.c1) {
+                classes.push("corner");
+                extra = '<i class="handle"></i>';
+              }
+            }
+            if (F && F.edit && F.edit.a === a) {
+              const tip = F.edit.text.startsWith("=MIAI.ASK(") ? '<span class="tip"><b>MIAI.ASK</b>(prompt; [input]; [optimized]; [model])</span>' : "";
+              html += `<td class="edit" data-a="${a}"><span class="ed">${esc(F.edit.text)}</span>${tip}</td>`;
+              return;
+            }
+            const cls = classes.filter(Boolean).join(" ");
             const b = bars.findIndex((g) => inside(g, r, c));
             if (b >= 0 && typeof v === "number" && barMax[b]) {
               const pct = Math.max(4, Math.round((v / barMax[b]) * 100));
               style += `background-image:linear-gradient(to right, rgba(42,120,214,.30) ${pct}%, transparent ${pct}%);`;
             }
-            html += `<td class="${cls}" style="${style}">${v === undefined || v === "" ? "" : show(v, f.numberFormat)}</td>`;
+            html += `<td class="${cls}" data-a="${a}" style="${style}">${v === undefined || v === "" ? "" : show(v, f.numberFormat)}${extra}</td>`;
           });
           html += "</tr>";
         }
         html += "</table>";
         for (const ch of sheet.charts) {
           const at = parseRange(ch.at || "E1") || { c0: 4, r0: 0 };
-          const left = HEAD + COLS.slice(0, at.c0).reduce((n, l) => n + (WIDTH[l] || COLW), 0) + 14;
+          const left = HEAD + COLS.slice(0, at.c0).reduce((n, l) => n + widthOf(l), 0) + 14;
           html += `<div id="chart" style="left:${left}px;top:${HEADH + (at.r0 + 1) * ROWH}px">${chartSvg(sheet, ch)}</div>`;
         }
         $("sheet").innerHTML = html;
@@ -623,6 +760,56 @@
         const chart = $("chart");
         if (chart && state.chartShown) chart.style.animation = "none";
         state.chartShown = !!chart;
+      }
+
+      // --- Formelscenen ---------------------------------------------------------------------------
+      // Scenen spiller Excels rolle for =MIAI.ASK(): den holder formlerne, viser #BUSY! og kalder den
+      // funktion, add-in'et har registreret i task pane (window.__miai.fn i den simulerede Office).
+      // Køen, cachen og statuslinjen i panelet er altså add-in'ets egne.
+      const ASK = /^=MIAI\.ASK\("([^"]*)";\s*([A-Z]+\d+)(?:;\s*(SAND|FALSK))?\)$/;
+      const paneApi = () => $("tp").contentWindow && $("tp").contentWindow.__miai;
+      const sheetKey = (sheet) => JSON.stringify([sheet, state.f]);
+
+      /** Tegner regnearket igen med det samme (ellers sker det ved næste rundspørge). */
+      function refresh() {
+        const api = paneApi();
+        if (!api || !api.sheet) return;
+        const sheet = api.sheet();
+        state.last = sheetKey(sheet);
+        renderSheet(sheet);
+      }
+
+      function cellValue(sheet, a) {
+        const own = state.f.cells[a];
+        if (own) return own.v;
+        const g = parseRange(a);
+        const v = (sheet.values[g.r0] || [])[g.c0];
+        return v === undefined ? "" : v;
+      }
+
+      function formulaBar(sheet) {
+        const F = state.f;
+        const a = F.edit ? F.edit.a : F.sel ? F.sel.split(":")[0] : "";
+        const text = F.edit ? F.edit.text : a ? (F.formulas[a] ?? String(cellValue(sheet, a))) : "";
+        return `<div id="fbar"><span class="name">${a}</span><span class="fx">fx</span><span class="ftext">${esc(text)}</span></div>`;
+      }
+
+      /** Beregner en celle med en formel: #BUSY!, indtil funktionen i task pane har svaret. */
+      function calc(a) {
+        const F = state.f;
+        const m = ASK.exec(F.formulas[a]);
+        if (!m) return void (F.cells[a] = { v: "#NAME?", busy: true });
+        // Som Excel: et kald, der stadig er i gang for cellen, afbrydes, når den beregnes igen.
+        const before = F.cells[a];
+        if (before && before.invocation && before.invocation.onCanceled) before.invocation.onCanceled();
+        const invocation = {};
+        F.cells[a] = { v: "#BUSY!", busy: true, invocation };
+        const api = paneApi();
+        api.fn("ASK", m[1], [[cellValue(api.sheet(), m[2])]], m[3] ? m[3] === "SAND" : null, null, invocation).then((r) => {
+          if (!state.f || !state.f.cells[a] || state.f.cells[a].invocation !== invocation) return;
+          state.f.cells[a] = r.error ? { v: r.error, busy: true } : { v: r.value, at: Date.now() };
+          refresh();
+        });
       }
 
       // --- Præsentation ---------------------------------------------------------------------------
@@ -677,7 +864,7 @@
         // Excel-scenen: den simulerede Excel har et ark, den simulerede Word har afsnit.
         if (api.sheet) {
           const sheet = api.sheet();
-          const key = JSON.stringify(sheet);
+          const key = sheetKey(sheet);
           if (key === state.last) return;
           state.last = key;
           $("desk").classList.add("sheet");
@@ -696,6 +883,50 @@
         open(url, docname) {
           $("docname").textContent = docname;
           $("tp").src = url;
+          state.f = null;
+        },
+        /** Formelscenen: regnearket får formellinje og de viste kolonner, bredder og rækker. */
+        grid(opts) {
+          state.f = { cols: opts.cols || COLS, widths: opts.widths || {}, rows: opts.rows || ROWS, cells: {}, formulas: {}, sel: null, edit: null };
+          document.querySelector("#bar .sim").textContent = "Simuleret regneark · indspillede modelsvar";
+          refresh();
+        },
+        /** Markerer en celle eller et område ("B2" eller "B2:B9"). */
+        fsel(range) {
+          state.f.sel = range;
+          refresh();
+        },
+        /** Viser teksten, mens den skrives i cellen og i formellinjen. */
+        fedit(a, text) {
+          state.f.edit = { a, text };
+          refresh();
+        },
+        /** Enter: cellen får teksten. En formel beregnes; en ændret værdi beregner de formler, der peger på cellen. */
+        fcommit(a, text) {
+          const F = state.f;
+          F.edit = null;
+          if (text.startsWith("=")) {
+            F.formulas[a] = text;
+            calc(a);
+          } else {
+            delete F.formulas[a];
+            F.cells[a] = { v: text };
+            for (const [b, formula] of Object.entries(F.formulas)) if ((ASK.exec(formula) || [])[2] === a) calc(b);
+          }
+          refresh();
+        },
+        /** Trækker formlen i `src` ned over `range`; henvisningerne følger rækken. */
+        ffill(src, range) {
+          const F = state.f;
+          const from = parseRange(src);
+          const g = parseRange(range);
+          for (let r = g.r0; r <= g.r1; r++) {
+            const a = COLS[g.c0] + (r + 1);
+            if (a === src) continue;
+            F.formulas[a] = F.formulas[src].replace(/("[^"]*")|([A-Z]+)(\d+)/g, (all, str, col, row) => str || col + (+row + r - from.r0));
+            calc(a);
+          }
+          refresh();
         },
         caption(n, t, s) {
           const c = $("caption");
