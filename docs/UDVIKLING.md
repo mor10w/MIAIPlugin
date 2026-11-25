@@ -179,6 +179,16 @@ ffmpeg -i packages/addin/demo-results/demo.video.ts-demovideo/video.webm -c:v li
 ```
 Dokumentet, regnearket, præsentationen, modelsvarene og rækkefølgen står øverst i `demo.video.ts`; scenen (dokument, regneark, slides, billedtekster, markør) er `stage.html`. Slides fra designet vises med MIAI's egen forhåndsvisning, fordi simuleringen ikke kan tegne en .pptx; den bygger på de samme skabeloner som den master, MIAI sætter ind. `MIAI_DEMO_PROBE=1` kører det hele igennem på få sekunder og gemmer et stillbillede pr. scene.
 
+**Videoen om `=MIAI.ASK()`** (`ask.video.ts`, knap et minut) viser regnearksfunktionen til brug i opslag: formlen skrives i en celle, trækkes ned over rækkerne, en ny prompt giver en ny kolonne, og svaret følger med, når teksten rettes. Regnearket er scenens eget (`stage.grid` i `stage.html`): scenen spiller Excels rolle, viser `#BUSY!` og kalder den funktion, add-in'et har registreret i task pane. Køen, cachen og statuslinjen "MIAI.ASK: … i gang, … i kø" er derfor add-in'ets egne; kun gitteret og modelsvarene er simulerede. Henvendelserne, promptene og svarene står øverst i filen.
+
+```bash
+npx playwright test -c packages/addin/e2e/demo/playwright.config.ts ask.video.ts
+```
+```bash
+ffmpeg -i "packages/addin/demo-results/ask.video.ts-video-MIAI-ASK-/video.webm" -c:v libx264 -crf 20 -preset slow -pix_fmt yuv420p -movflags +faststart -an docs/demo/miai-demo-excel-ask.mp4
+```
+Uden filnavn optager kommandoen begge videoer. Den færdige video ligger i [`docs/demo/miai-demo-excel-ask.mp4`](demo/miai-demo-excel-ask.mp4).
+
 Videoen beviser ikke, at det samme virker i rigtig Office med en rigtig model. [`docs/demo/TJEKLISTE.md`](demo/TJEKLISTE.md) gentager videoens forløb i rigtig Word og Excel med testfilerne i samme mappe; kør den, før videoen bruges udadtil.
 
 ## Manifester
