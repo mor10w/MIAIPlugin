@@ -51,11 +51,14 @@ import {
   Shield20Regular,
   TextEditStyle20Regular,
   BookSearch20Regular,
+  TableCalculator20Regular,
 } from "@fluentui/react-icons";
 import { useBackend } from "../backend";
 import { ui } from "../theme";
 import { useI18n } from "../i18n";
 import { SetupGuide } from "./SetupGuide";
+import { CellSection, cellFunctionsAvailable } from "./CellFunctions";
+import type { HostAdapter } from "../hosts";
 import { ModelContext } from "./ModelContext";
 import { TaskModels } from "./TaskModels";
 import { KnowledgeSection } from "./KnowledgeSection";
@@ -129,7 +132,16 @@ function uniqueId(base: string, taken: string[]): string {
   return id;
 }
 
-export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "en") => void; onSaved?: () => void }) {
+export function SettingsTab({
+  onLanguage,
+  onSaved,
+  adapter,
+}: {
+  onLanguage: (l: "da" | "en") => void;
+  onSaved?: () => void;
+  /** Værten, til det, der kun findes i ét program (fx modelvælgeren i Excel). */
+  adapter?: HostAdapter;
+}) {
   const { t, lang } = useI18n();
   const s = useStyles();
   const api = useBackend();
@@ -672,6 +684,18 @@ export function SettingsTab({ onLanguage, onSaved }: { onLanguage: (l: "da" | "e
             <KnowledgeSection key={saves} settings={settings} setSettings={setSettings} policy={policy} models={models} api={api.knowledge} />
           </AccordionPanel>
         </AccordionItem>
+
+        {/* --- Excel-funktioner (#80): kun når =MIAI.ASK() er registreret ----------------- */}
+        {cellFunctionsAvailable() && (
+          <AccordionItem value="cells" className={s.section}>
+            <AccordionHeader icon={<TableCalculator20Regular />} size="large">
+              {t("secCells")}
+            </AccordionHeader>
+            <AccordionPanel className={s.panel}>
+              <CellSection settings={settings} setSettings={setSettings} adapter={adapter} models={models} onMessage={setMsg} />
+            </AccordionPanel>
+          </AccordionItem>
+        )}
 
         {/* --- Generelt ---------------------------------------------------------------- */}
         <AccordionItem value="general" className={s.section}>

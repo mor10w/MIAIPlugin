@@ -139,6 +139,8 @@ node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest.xml
 ```bash
 node scripts/make-manifest.mjs hosted https://intern.server/miai/ manifest-outlook.xml outlook
 ```
+**Regnearksfunktioner (#80, ADR-0018):** kun `manifest.dev.xml` har Excels shared runtime og funktionerne `=MIAI.ASK()` og `=MIAI.MODELS()` (`functions: true` i `scripts/make-manifest.mjs`). Bridge-manifestet og de hostede manifester er uden dem, indtil udviklingsmanifestet er afprøvet i rigtig Excel. Metadata ligger i `packages/addin/public/functions.json` (dansk) og `functions.en.json`. Office cacher funktionernes metadata; ryd Office-cachen, hvis en ændring ikke slår igennem.
+
 Outlook sideloades fra fil: Hent tilføjelsesprogrammer → Mine tilføjelsesprogrammer → Tilføj brugerdefineret → Tilføj fra fil. Brug `manifest.outlook.dev.xml` med `npm run dev`.
 
 **Central konfiguration (direkte tilstand):** en `miai-config.json` ved siden af `taskpane.html` giver organisationens låste politik og standardindstillinger (ADR-0015). I dev kan filen lægges i `packages/addin/public/`.
@@ -193,6 +195,18 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Mørkt Office-tema
 - [ ] Reasoning-model (Qwen3): ingen `<think>` i output
 - [ ] Kontekst (#73): med Ollama uden `OLLAMA_CONTEXT_LENGTH` viser Indstillinger → Modeller den indlæste kontekst (4.096 på en maskine med under 24 GB VRAM) og en advarsel; efter `OLLAMA_CONTEXT_LENGTH=32768` og genstart viser **Tjek igen** 32.768 og ingen advarsel. I LM Studio vises den kontekst, modellen er indlæst med
+- [ ] Regnearksfunktioner (#80, med `manifest.dev.xml` og `npm run dev`), i Excel på Windows og Mac:
+  - [ ] Manifestet indlæses, og MIAI virker som før i Word, Excel og PowerPoint (task pane åbner fra fanen Hjem)
+  - [ ] `=MIAI.ASK("Hvilket land ligger byen i?"; A2)` viser `#BUSY!` og derefter svaret; formlen kan trækkes ned over 50 rækker, og task pane viser "i gang" og "i kø" med et virkende **Stop MIAI-funktioner**
+  - [ ] Mens formlen skrives, kaldes modellen ikke (ingen aktivitet i Ollama, før Enter)
+  - [ ] F9 og Ctrl+Alt+F9 spørger ikke modellen igen for uændrede celler
+  - [ ] Gem, luk og åbn projektmappen: kaldes funktionerne igen? Notér resultatet her: ______
+  - [ ] En `MIAI.ASK`-celle som input til en anden giver ét modelkald pr. celle
+  - [ ] `optimized = SAND` er mærkbart hurtigere; uden det og med websøgning slået til (bridge) søger cellen på nettet
+  - [ ] **Indsæt modelvælger** laver en dropdown i den markerede celle med modellerne (accepterer Excel kilden `=MIAI_modeller!$A$1#`?), og `=MIAI.ASK("…"; A2; ; $H$1)` bruger den valgte model
+  - [ ] Et ukendt modelnavn giver `#VALUE!` med forklaringen i fejlmenuen
+  - [ ] Stop Ollama: cellen viser `#N/A` med "MIAI kan ikke nå modellen"
+  - [ ] Windows: kald til Ollama på localhost virker fra funktionen (loopback, #9)
 
 **Outlook og central udrulning (#7)**
 - [ ] Outlook (Windows, Mac, nyt Outlook, web): manifestet tilføjes fra fil; knappen AI-assistent vises i en læst mail og i et udkast

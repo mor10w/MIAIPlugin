@@ -38,6 +38,8 @@ export interface ChatParams {
   temperature?: number;
   maxTokens?: number;
   presencePenalty?: number;
+  /** OpenAI `seed`: samme forespørgsel giver samme svar, hvor serveren understøtter det. */
+  seed?: number;
   responseFormat?: Record<string, unknown>;
   /** OpenAI-værktøjsdefinitioner (fx web_search). Se ADR-0010. */
   tools?: ToolSpec[];
@@ -252,6 +254,7 @@ export async function* streamChat(ep: Endpoint, p: ChatParams, opts: ClientOptio
   if (p.temperature !== undefined) body.temperature = p.temperature;
   if (p.maxTokens !== undefined) body.max_tokens = p.maxTokens;
   if (p.presencePenalty !== undefined) body.presence_penalty = p.presencePenalty;
+  if (p.seed !== undefined) body.seed = p.seed;
   if (p.responseFormat) body.response_format = p.responseFormat;
   if (p.tools?.length) body.tools = p.tools;
   // Bed om usage i strømmen: bruges til at opdage, at modellen har afkortet prompten (#3).

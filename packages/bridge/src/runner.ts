@@ -1,5 +1,6 @@
 import { appendAudit, auditFile } from "./audit.js";
 import {
+  CELL_ASK_TASK,
   effectiveSearch,
   errorEvent,
   executeTask,
@@ -29,8 +30,10 @@ interface RunOptions {
  * Spørgsmålet, der søges med: prompten – og ved korte opfølgninger ("og i Sverige?") også
  * brugerens forrige besked, så søgningen har nok at gå efter.
  */
-function retrievalQuery(req: ParsedTaskRequest): string {
+function retrievalQuery(req: ParsedTaskRequest, taskId?: string): string {
   const prompt = (req.params.prompt ?? "").trim();
+  // Regnearksfunktionen: prompten er ofte generel ("Hvad er kundens rabat?"), og cellens input siger hvem.
+  if (taskId === CELL_ASK_TASK) return `${prompt}\n${(req.context.table || req.context.text).slice(0, 500)}`.trim();
   if (prompt.length >= 40) return prompt;
   const prev = [...req.history].reverse().find((m) => m.role === "user")?.content ?? "";
   return `${prev}\n${prompt}`.trim();
@@ -107,10 +110,12 @@ export async function runTask({ task, req: clientReq, store, emit, signal, knowl
     // Kilder kommer kun fra bridgens eget indeks – aldrig fra klienten.
     const req: ParsedTaskRequest = { ...clientReq, sources: [] };
     const policy = store.getPolicy();
-    if (task.id === "chat" && knowledge && clientReq.params.useKnowledge === "true" && settings.knowledge.enabled && policy.knowledge) {
+    // Chatten og regnearksfunktionen uden optimized (#80) kan slå op i brugerens egne mapper.
+    const usesKnowledge = task.id === "chat" || (task.id === CELL_ASK_TASK && clientReq.params.optimized !== "on");
+    if (usesKnowledge && knowledge && clientReq.params.useKnowledge === "true" && settings.knowledge.enabled && policy.knowledge) {
       const started = Date.now();
       try {
-        const found = await knowledge.search(retrievalQuery(clientReq), undefined, signal);
+        const found = await knowledge.search(retrievalQuery(clientReq, task.id), undefined, signal);
         req.sources = found.sources;
         emit({ type: "sources", sources: found.refs });
         if (settings.auditLog)

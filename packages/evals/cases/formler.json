@@ -138,5 +138,105 @@
       }
     ],
     "rubric": "Explains it sums D where B is North and C > 1000; correct and concise."
+  },
+  {
+    "id": "cell-ask-land-da",
+    "task": "cell-ask",
+    "lang": "da",
+    "feature": "#80",
+    "context": {
+      "host": "excel",
+      "text": "Aarhus"
+    },
+    "params": {
+      "prompt": "Hvilket land ligger byen i? Svar kun med landets navn.",
+      "optimized": "on"
+    },
+    "checks": [
+      {
+        "type": "regex",
+        "pattern": "^\\s*Danmark\\.?\\s*$",
+        "flags": "i"
+      },
+      {
+        "type": "noPreamble"
+      }
+    ],
+    "note": "Regnearksfunktionen =MIAI.ASK() med optimized = SAND: svaret skal kunne stå alene i en celle.",
+    "rubric": "Kun 'Danmark' – ingen sætning, forklaring eller citationstegn."
+  },
+  {
+    "id": "cell-ask-kategori-da",
+    "task": "cell-ask",
+    "lang": "da",
+    "feature": "#80",
+    "context": {
+      "host": "excel",
+      "text": "Faktura 4471: reparation af gaffeltruck, værksted Nord"
+    },
+    "params": {
+      "prompt": "Kategorisér posten som Drift, Anlæg eller Andet. Svar kun med kategorien.",
+      "optimized": "on"
+    },
+    "checks": [
+      {
+        "type": "regex",
+        "pattern": "^\\s*Drift\\.?\\s*$",
+        "flags": "i"
+      }
+    ],
+    "rubric": "Kun ordet 'Drift'."
+  },
+  {
+    "id": "cell-ask-beloeb-da",
+    "task": "cell-ask",
+    "lang": "da",
+    "feature": "#80",
+    "context": {
+      "host": "excel",
+      "text": "Betalt 1.250,50 kr. til Jysk Kontorservice den 3. marts"
+    },
+    "params": {
+      "prompt": "Træk beløbet ud som et tal uden valuta.",
+      "optimized": "on"
+    },
+    "checks": [
+      {
+        "type": "regex",
+        "pattern": "^\\s*1\\.?250[,.]50?0?\\s*$"
+      }
+    ],
+    "note": "Tallet skal stå alene, så add-in'et kan gøre det til et tal i cellen.",
+    "rubric": "Kun tallet 1250,50 (med eller uden tusindtalsseparator) – ingen 'kr.' og ingen tekst."
+  },
+  {
+    "id": "cell-ask-row-en",
+    "task": "cell-ask",
+    "lang": "en",
+    "feature": "#80",
+    "context": {
+      "host": "excel",
+      "text": "Acme Ltd\tLondon\tOverdue 45 days\t12400\nPayment terms\t30 days"
+    },
+    "params": {
+      "prompt": "Write one short sentence assessing the payment risk of this customer."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "length",
+        "maxWords": 40
+      },
+      {
+        "type": "regex",
+        "pattern": "\\n",
+        "negate": true
+      }
+    ],
+    "note": "Without optimized: a range sent as TSV; the answer must still be a single cell value.",
+    "rubric": "One sentence, mentions the overdue payment, no Markdown, no line breaks."
   }
 ]

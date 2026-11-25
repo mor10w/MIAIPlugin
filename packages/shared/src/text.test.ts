@@ -35,7 +35,7 @@ describe("opgaver", () => {
   it("har unikke id'er og bygger beskeder", () => {
     expect(new Set(TASKS.map((t) => t.id)).size).toBe(TASKS.length);
     for (const t of TASKS) {
-      const req = TaskRequest.parse({ context: { host: t.hosts[0], text: "Hej verden", formula: "=SUM(A1:A3)" }, params: { prompt: "test" } });
+      const req = TaskRequest.parse({ context: { host: t.hosts[0] ?? "excel", text: "Hej verden", formula: "=SUM(A1:A3)" }, params: { prompt: "test" } });
       const msgs = t.buildMessages(req);
       expect(msgs[0].role).toBe("system");
       expect(msgs.at(-1)?.content.length).toBeGreaterThan(0);

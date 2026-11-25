@@ -55,6 +55,7 @@ Host-adaptere: Word, Excel, PowerPoint og Outlook (`hosts/outlook.ts`, Mailbox-A
 - **Backends** (`src/backend`) med samme interface:
   - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin. Ved central udrulning henter den `miai-config.json` fra add-in'ets egen adresse: organisationens låste politik og standardindstillinger (ADR-0015).
   - `BridgeBackend`: kalder `/api/*` på samme origin og læser SSE-strømmen.
+- **Regnearksfunktioner** (`src/cell`, #80, ADR-0018): `=MIAI.ASK()` og `=MIAI.MODELS()` i Excel. `functions.ts` registrerer dem med `CustomFunctions.associate` og kalder opgaven `cell-ask` gennem backend'en; `queue.ts` er køen med loft og Stop, `cache.ts` den vedvarende cache, og `value.ts` gør svaret til en celleværdi. De kræver Excels shared runtime og er kun slået til i `manifest.dev.xml`.
 - **Host-adaptere**:
 
 ```ts

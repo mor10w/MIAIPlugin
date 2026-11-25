@@ -102,6 +102,11 @@ export interface HostAdapter {
    */
   readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
   /**
+   * Excel (#80): laver en dropdown med modellerne i den markerede celle, så =MIAI.ASK() kan pege på
+   * den som model. Listen kommer fra =MIAI.MODELS() på et skjult hjælpeark. Returnerer cellens adresse.
+   */
+  insertModelPicker?(model: string): Promise<string>;
+  /**
    * Hvad er markeret lige nu (#26)? Vises ved chattens skrivefelt, så brugeren ved, hvad modellen får
    * at se. null = intet markeret (så bruges hele dokumentet).
    */

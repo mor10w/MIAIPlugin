@@ -10,6 +10,7 @@ import {
   getTask,
   isUrlAllowed,
   MAX_LOCAL_AUDIT_ENTRIES,
+  mergeCellAudit,
   Endpoint,
   probeEndpoint,
   modelDetails,
@@ -278,7 +279,10 @@ export class DirectBackend implements Backend {
   /** Append til ringbufferen. Skriver intet, hvis audit-loggen er slået fra. */
   private pushAudit(entry: AuditEntry): void {
     if (!this.settingsNow.auditLog) return;
-    const all = [...this.loadAudit(), entry].slice(-MAX_LOCAL_AUDIT_ENTRIES);
+    const log = this.loadAudit();
+    // En kørsel af =MIAI.ASK() over mange celler bliver til én post (#80).
+    const merged = mergeCellAudit(log.at(-1), entry);
+    const all = (merged ? [...log.slice(0, -1), merged] : [...log, entry]).slice(-MAX_LOCAL_AUDIT_ENTRIES);
     store.set(KEY_AUDIT, JSON.stringify(all));
   }
 

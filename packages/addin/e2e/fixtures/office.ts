@@ -17,6 +17,8 @@ export interface FakeOfficeOptions {
   host: HostName;
   /** Højeste understøttede version pr. requirement set, fx { WordApi: "1.4" }. Manglende = ikke understøttet. */
   apiSets?: Record<string, string>;
+  /** Excel med shared runtime: regnearksfunktionerne =MIAI.ASK() og =MIAI.MODELS() kan registreres (#80). */
+  customFunctions?: boolean;
   /** Markeret tekst (Word, PowerPoint). Sammen med `paragraphs` markeres de hele afsnit, teksten ligger i. */
   selection?: string;
   /** Word: hele dokumentets tekst (bruges, når intet er markeret). Standard: markeringen. */
@@ -179,6 +181,38 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
               },
             },
           };
+  }
+
+  // --- Excels regnearksfunktioner (#80) --------------------------------------------------------
+  // Som i shared runtime: CustomFunctions findes i samme side som task pane. Testen kalder de
+  // tilknyttede funktioner med window.__miai.fn("ASK", ...), som Excel ville gøre for en celle.
+  if (o.customFunctions) {
+    const fns: Record<string, (...a: unknown[]) => unknown> = {};
+    class CfError extends Error {
+      constructor(
+        readonly code: string,
+        message?: string,
+      ) {
+        super(message);
+      }
+    }
+    w.CustomFunctions = {
+      associate: (id: string, fn: (...a: unknown[]) => unknown) => {
+        fns[id] = fn;
+      },
+      Error: CfError,
+      ErrorCode: { notAvailable: "#N/A", invalidValue: "#VALUE!" },
+    };
+    const m = w.__miai as Record<string, unknown>;
+    m.functions = () => Object.keys(fns);
+    /** Kalder en funktion og giver enten værdien eller cellens fejl (kode + besked). */
+    m.fn = async (id: string, ...args: unknown[]) => {
+      try {
+        return { value: await fns[id](...args) };
+      } catch (e) {
+        return { error: (e as CfError).code ?? "#VALUE!", message: (e as Error).message };
+      }
+    };
   }
 
   // --- Fælles Office-objekt -------------------------------------------------
@@ -1070,6 +1104,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           }),
         });
       const worksheet = strict("Excel.Worksheet", {
+        isNullObject: false,
+        set visibility(v: string) {
+          record({ kind: "sheetVisibility", sheet, visibility: v });
+        },
         activate() {
           record({ kind: "activate", sheet });
         },
@@ -1251,6 +1289,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           return built.map((b) => b.worksheet);
         },
         getItem: (name: string) => findSheet(name).worksheet,
+        getItemOrNullObject: (name: string) =>
+          built.find((b) => b.name().toLowerCase() === name.toLowerCase())?.worksheet ?? strict("Excel.Worksheet(null)", { isNullObject: true, load() {} }),
         getActiveWorksheet: () => built[0].worksheet,
         add(name: string) {
           if (built.some((b) => b.name().toLowerCase() === name.toLowerCase())) throw new Error(`InvalidArgument: arket ${name} findes allerede`);

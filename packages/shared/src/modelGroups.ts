@@ -23,7 +23,7 @@ export const MODEL_GROUPS = [
     id: "structure",
     label: { da: "Struktur, formler og data", en: "Structure, formulas and data" },
     hint: { da: "Slides, diagrammer, design, formler og dataanalyse", en: "Slides, diagrams, design, formulas and data analysis" },
-    tasks: ["text-to-slides", "diagram", "design-deck", "analyze-data", "explain-formula", "generate-formula"],
+    tasks: ["text-to-slides", "diagram", "design-deck", "analyze-data", "explain-formula", "generate-formula", "cell-ask"],
   },
   {
     id: "agent",
