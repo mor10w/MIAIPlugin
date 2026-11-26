@@ -16,7 +16,7 @@ import {
 import { clearNativeCache, contextFix, fetchNativeModelInfo, MIN_AGENT_CONTEXT, type ModelDetails, type ModelServer } from "./modelInfo.js";
 import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
-import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
+import { doc, instructionsBlock, system, textFormat, withInstructions, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
 import { chosenModel } from "./modelGroups.js";
 import {
@@ -341,7 +341,17 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   // Eksport (tillæg ADR-0012): kun bridgen kan skrive filer – direkte tilstand har ingen eksekverer.
   const agentExport = deps.tools !== undefined && agentExportAllowed(settings, policy) ? "on" : "";
   inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "", agentExport } };
-  const built = task.buildMessages(inputReq);
+  // Faste instruktioner (#78): organisationens (fra politikken) og brugerens for den vært, der
+  // arbejdes i, sættes ind i systembeskeden for alle opgaver. Det sker her og ikke i den enkelte
+  // opgave, så brugerdefinerede opgaver og MIAI.ASK også får dem. Map-trinnet ovenfor får dem ikke:
+  // det laver kun del-resuméer, og den afsluttende kørsel her følger instruktionerne.
+  const standing = instructionsBlock(req.context.host, policy.instructions, settings.instructions);
+  const prompted = task.buildMessages(inputReq);
+  const built = !standing
+    ? prompted
+    : prompted[0]?.role === "system"
+      ? [{ ...prompted[0], content: withInstructions(prompted[0].content, standing) }, ...prompted.slice(1)]
+      : [{ role: "system" as const, content: standing }, ...prompted];
   // Vedhæftninger (#27) lægges på brugerens seneste besked: tekstfiler som data, billeder som billeddele.
   const messages: ApiMessage[] = withAttachments(
     mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built,

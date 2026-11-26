@@ -191,3 +191,126 @@ test("Søgetjeneste og SearXNG-adresse flugter og holder sig inden for kortet", 
   const provider = tp.page.locator(".fui-Dropdown", { has: tp.page.getByRole("combobox", { name: "Søgetjeneste" }) });
   await expectSideBySide(provider, searxng);
 });
+
+const INSTRUCTION = "Formatér tal med tusindtalsseparator.";
+
+for (const mode of ["direct", "bridge"] as const) {
+  test(`faste instruktioner (#78): programmets instruktion sendes i handling, chat, agent og =MIAI.ASK(); et andet programs gør ikke (${mode})`, async ({
+    open,
+  }) => {
+    const tp = await open({
+      host: "Excel",
+      mode,
+      apiSets: { ExcelApi: "1.10" },
+      excel: {
+        sheet: "Ark1",
+        values: [
+          ["Navn", "Beløb"],
+          ["Anna", 1234567],
+        ],
+      },
+      customFunctions: true,
+    });
+    await tp.tab("Indstillinger");
+    await tp.page.getByRole("button", { name: "Forbindelse", exact: true }).click();
+    await tp.section("Faste instruktioner");
+
+    // Programmet, man står i, vises først. Tælleren følger med, mens der skrives.
+    const fields = tp.page.getByRole("textbox", { name: /^Instruktioner i / });
+    await expect(fields).toHaveCount(4);
+    await expect(fields.first()).toHaveAccessibleName("Instruktioner i Excel");
+    await expect(fields.first()).toHaveAttribute("maxlength", "2000");
+    await expect(tp.page.getByText("0 af 2.000 tegn · ca. 0 tokens i hver forespørgsel")).toHaveCount(4);
+    await fields.first().fill(INSTRUCTION);
+    await expect(
+      tp.page.getByText(`${INSTRUCTION.length} af 2.000 tegn · ca. ${Math.ceil(INSTRUCTION.length / 3.5)} tokens i hver forespørgsel`),
+    ).toBeVisible();
+    await tp.page.getByRole("textbox", { name: "Instruktioner i Word" }).fill("Skriv i du-form.");
+    await tp.page.getByRole("button", { name: "Gem" }).click();
+    await expect(tp.page.getByText("Gemt.")).toBeVisible();
+
+    const system = () => {
+      const first = tp.model.lastRequest!.messages[0];
+      expect(first.role).toBe("system");
+      return first.content;
+    };
+    const expectInstruction = () => {
+      expect(system()).toContain(`<user_instructions>\n${INSTRUCTION}\n</user_instructions>`);
+      expect(system()).not.toContain("Skriv i du-form.");
+      // Ingen organisation har sat noget.
+      expect(system()).not.toContain("organization_instructions");
+    };
+
+    // Handling
+    tp.model.reply = () => ({ stream: chunks("Beløbet er 1.234.567.") });
+    await tp.tab("Handlinger");
+    await tp.run("Analyser data");
+    await expect(tp.page.getByText("Beløbet er 1.234.567.")).toBeVisible();
+    expectInstruction();
+
+    // Chat
+    tp.model.reply = () => ({ stream: chunks("Summen er 1.234.567.") });
+    await tp.tab("Chat");
+    await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad er summen?");
+    await tp.page.keyboard.press("Enter");
+    await expect(tp.page.getByText("Summen er 1.234.567.")).toBeVisible();
+    expectInstruction();
+
+    // Agent (en redigering i chatten går til agenten)
+    tp.model.reply = () => ({ json: JSON.stringify({ summary: "Vender dataene.", actions: [] }) });
+    await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Transponer data");
+    await tp.page.keyboard.press("Enter");
+    await expect(tp.page.getByText("Vender dataene.")).toBeVisible();
+    expect(system()).toContain("You are in agent mode");
+    expectInstruction();
+
+    // =MIAI.ASK(), også med optimized = SAND
+    tp.model.reply = () => ({ stream: ["1.234.567"] });
+    const ask = (optimized: boolean) =>
+      tp.page.evaluate(
+        (o) =>
+          (window as unknown as { __miai: { fn: (id: string, ...a: unknown[]) => Promise<unknown> } }).__miai.fn(
+            "ASK",
+            "Skriv beløbet",
+            [["1234567"]],
+            o,
+            null,
+            {},
+          ),
+        optimized,
+      );
+    const before = tp.model.requests.length;
+    await ask(false);
+    expect(tp.model.requests).toHaveLength(before + 1);
+    expect(system()).toContain("ONE spreadsheet cell");
+    expectInstruction();
+    await ask(true);
+    expect(tp.model.requests).toHaveLength(before + 2);
+    expect(tp.model.lastRequest).toMatchObject({ max_tokens: 256 });
+    expectInstruction();
+
+    // Instruktionen er gemt: den står der, når Indstillinger åbnes igen.
+    await tp.tab("Indstillinger");
+    await tp.section("Faste instruktioner");
+    await expect(tp.page.getByRole("textbox", { name: "Instruktioner i Excel" })).toHaveValue(INSTRUCTION);
+  });
+}
+
+test("faste instruktioner på engelsk: samme felter og samme systemprompt", async ({ open }) => {
+  const tp = await open({ host: "Word", selection: "A long and complicated text.", settings: { uiLanguage: "en" } });
+  tp.model.reply = () => ({ stream: chunks("Short text.") });
+  await tp.page.getByRole("tab", { name: "Settings" }).click();
+  await tp.page.getByRole("button", { name: "Standing instructions", exact: true }).click();
+  const word = tp.page.getByRole("textbox", { name: "Instructions in Word" });
+  await word.scrollIntoViewIfNeeded();
+  await word.fill("Use British spelling.");
+  await expect(tp.page.getByText("21 of 2,000 characters · approx. 6 tokens in every request")).toBeVisible();
+  await tp.page.getByRole("button", { name: "Save" }).click();
+  await expect(tp.page.getByText("Saved.")).toBeVisible();
+
+  await tp.page.getByRole("tab", { name: "Actions" }).click();
+  await tp.page.getByRole("button", { name: "Simplify", exact: true }).click();
+  await tp.page.getByRole("button", { name: "Run" }).click();
+  await expect(tp.page.getByText("Short text.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).toContain("<user_instructions>\nUse British spelling.\n</user_instructions>");
+});

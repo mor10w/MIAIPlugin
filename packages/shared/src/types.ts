@@ -251,6 +251,20 @@ export const Endpoint = z.object({
 });
 export type Endpoint = z.infer<typeof Endpoint>;
 
+/** Loft over længden af en fast instruktion (#78): pr. vært, og hver for sig for bruger og organisation. */
+export const MAX_INSTRUCTION_CHARS = 2_000;
+/** De værter, der kan have faste instruktioner. */
+export const INSTRUCTION_HOSTS = ["word", "excel", "powerpoint", "outlook"] as const;
+export type InstructionHost = (typeof INSTRUCTION_HOSTS)[number];
+
+const Instruction = z.string().max(MAX_INSTRUCTION_CHARS).default("");
+/**
+ * Faste instruktioner pr. vært (#78), fx "formatér tal med tusindtalsseparator" i Excel. Motoren
+ * sætter dem ind i systemprompten for alle opgaver i den vært, de gælder.
+ */
+export const HostInstructions = z.object({ word: Instruction, excel: Instruction, powerpoint: Instruction, outlook: Instruction });
+export type HostInstructions = z.infer<typeof HostInstructions>;
+
 export const Settings = z.object({
   endpoints: z.array(Endpoint).min(1),
   activeEndpoint: z.string(),
@@ -318,6 +332,8 @@ export const Settings = z.object({
   agentExport: z.boolean().default(false),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
+  /** Brugerens faste instruktioner pr. vært (#78). Organisationens står i politikken og lægges før. */
+  instructions: HostInstructions.default({ word: "", excel: "", powerpoint: "", outlook: "" }),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -341,6 +357,11 @@ export const Policy = z.object({
   agentScripts: z.boolean().default(true),
   /** Må agenten gemme et Excel-ark som .xlsx-fil (tillæg ADR-0012)? */
   agentExport: z.boolean().default(true),
+  /**
+   * Organisationens faste instruktioner pr. vært (#78). De lægges før brugerens i systemprompten,
+   * vises skrivebeskyttet under Indstillinger og kan ikke fjernes af brugeren.
+   */
+  instructions: HostInstructions.optional(),
 });
 export type Policy = z.infer<typeof Policy>;
 
