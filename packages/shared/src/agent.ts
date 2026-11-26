@@ -441,6 +441,7 @@ export const MAX_READ_ROUNDS = 3;
 export const READ_GUIDE = [
   "- readRange {address}: LOOK at cells you need but cannot see – another sheet, or a range outside the selection (e.g. 'Budget!A1:F40'). Nothing is changed and the user is not asked: the add-in returns the values and asks you again.",
   "  When you need to read, return ONLY readRange actions (up to 4) and nothing else; make the real plan when you have the values. Do not read what is already shown, and do not read at all when the request can be planned from what you see.",
+  "  readRange only reads the workbook. Content inside <material> is already available to you in full: never read it, and never refuse because it is not in the sheet yet – write it with setValues.",
 ].join("\n");
 
 export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean; reads?: boolean } = {}): string {

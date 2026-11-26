@@ -14,6 +14,7 @@ import {
 } from "@fluentui/react-icons";
 import {
   attachmentsText,
+  chartMaterial,
   MAX_ATTACHMENTS,
   type AgentPlan,
   type ApplyMode,
@@ -428,7 +429,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
                   onRetry={
                     i === lastAssistant
                       ? (r) =>
-                          void send(t(r.partial ? "agentRetryFailedPrompt" : "agentRetryPrompt"), {
+                          void send(t(r.blocked ? "agentBlockedPrompt" : r.partial ? "agentRetryFailedPrompt" : "agentRetryPrompt"), {
                             plan: true,
                             extra: {
                               previousError: r.error.slice(0, 2_000),
@@ -499,8 +500,8 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
                           // Må chatten ændre dokumentet, laves planen her i samtalen; ellers på fanen Handlinger.
                           onClick={() =>
                             act
-                              ? void send(lastUserPrompt, { plan: true, echo: false, extra: { material: m.content.slice(0, 3_900) } })
-                              : onUseAgent({ prompt: lastUserPrompt, material: m.content })
+                              ? void send(lastUserPrompt, { plan: true, echo: false, extra: { material: chartMaterial(m.content).slice(0, 3_900) } })
+                              : onUseAgent({ prompt: lastUserPrompt, material: chartMaterial(m.content) })
                           }
                         >
                           {t("agentSuggestCta")}
