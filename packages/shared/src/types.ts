@@ -24,6 +24,11 @@ export const DocContext = z.object({
    * andet ark), hentet af add-in'et uden at ændre noget. Vises for modellen i næste runde.
    */
   observations: z.string().max(40_000).optional(),
+  /**
+   * Excel, formelsporing (#76): den markerede celles præcedenter som en kompakt liste (adresse,
+   * formel, værdi, fejl), sporet af add-in'et i Excels afhængighedsgraf. Data, ikke instruktioner.
+   */
+  trace: z.string().max(20_000).optional(),
   /** Sat af add-in'et, hvis teksten blev afkortet, før den blev sendt (#3). */
   truncated: z.boolean().optional(),
   /** Tekstens oprindelige længde i tegn, når den er afkortet. */

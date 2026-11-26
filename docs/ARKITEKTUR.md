@@ -71,7 +71,7 @@ interface HostAdapter {
 ```
 
 - **Word**: markeringen gemmes som sporet objekt (`trackedObjects`), så resultatet lander det rigtige sted, selvom brugeren klikker andetsteds imens. Grammatik bruger `search` og sporede ændringer.
-- **Excel**: formlen skrives i cellen, og resultatet læses, så fejl som #NAME? meldes. Tidligere formler gemmes, så **Fortryd** virker (Ctrl+Z fortryder ikke altid add-in-ændringer). Oversættelse af områder sker som TSV.
+- **Excel**: formlen skrives i cellen, og resultatet læses, så fejl som #NAME? meldes. Tidligere formler gemmes, så **Fortryd** virker (Ctrl+Z fortryder ikke altid add-in-ændringer). Oversættelse af områder sker som TSV. Formelsporing (#76): add-in'et gennemløber Excels afhængighedsgraf (`getDirectPrecedents`/`getDirectDependents`) med loft over dybde og antal celler og giver modellen en kompakt liste; den rene logik ligger i `hosts/excelTrace.ts`, Office.js-delen i `hosts/excelTraceReader.ts` (ADR-0012).
 - **PowerPoint**: tekst via `get/setSelectedDataAsync`. Slides oprettes med `slides.add`, og layoutets pladsholdere udfyldes; findes de ikke, tilføjes tekstbokse (PowerPointApi 1.4). Plan B ved firmaskabeloner: `.pptx` + `insertSlidesFromBase64`.
 - **Sikkerhed**: modeloutput renses med DOMPurify før visning og indsættelse som HTML.
 

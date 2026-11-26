@@ -214,7 +214,7 @@ Markér hver celle **OK**, **Afvigelse** (med issue-nummer) eller **–** (ikke 
 | F4 Chat om dokumentet, stop-knap | | | | | | |
 | F5 Artikel | | | – | – | – | – |
 | F6 Salgstekst | | | – | – | | |
-| F7 Forklar formel | – | – | | | – | – |
+| F7 Forklar formel og Find fejlkilden (formelsporing, tjekliste i UDVIKLING.md) | – | – | | | – | – |
 | F8 Generér formel, validering og Fortryd | – | – | | | – | – |
 | F9 Disposition | | | – | – | | |
 | F10 Tekst → slides (standard og firmaskabelon) | – | – | – | – | | |

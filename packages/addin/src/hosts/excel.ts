@@ -1,4 +1,16 @@
-import { fitGrid, numberedRows, parseTsv, rangeBox, writesCells, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import {
+  fitGrid,
+  numberedRows,
+  parseTsv,
+  rangeBox,
+  writesCells,
+  type AgentAction,
+  type AgentRead,
+  type ApplyMode,
+  type DocContext,
+  type FormulaResult,
+  type TraceKind,
+} from "@miai/shared";
 import { EXCEL_ADDRESS, splitAddress } from "../excelAddress";
 import { mdToPlain } from "../markdown";
 import type { DocRef } from "../refs";
@@ -6,6 +18,8 @@ import { runExcelScript } from "../script";
 import { canMergeUndo, countOverwrites, markCells, unmarkCells, type CellMark } from "./excelChanges";
 import { FORMAT_PROPS } from "./excelFormats";
 import { buildOverview, colIndex, colName, groups, lastRows, range, toTsv } from "./excelSheet";
+import { EXPLAIN_LIMITS, startCell, TRACE_LIMITS } from "./excelTrace";
+import { traceSupport, traceText } from "./excelTraceReader";
 import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, Overwrite, SelectionInfo, TextFormat } from "./types";
 
 const MAX_ROWS = 200;
@@ -92,15 +106,25 @@ export class ExcelAdapter implements HostAdapter {
       }
 
       const f = topLeft.formulas[0][0];
+      const formula = typeof f === "string" && f.startsWith("=") ? f : undefined;
       const table = toTsv(view.values);
       const excel = opts.structure ? await this.structure(ctx, ws, used, sheetList.items, sheetUsed) : undefined;
+      // Formelsporing (#76): formlens præcedenter som en kompakt liste. Kan Excel ikke spore
+      // (før ExcelApi 1.12), eller fejler sporingen, køres opgaven uden – den der kalder, afgør, om det er nok.
+      const trace =
+        opts.trace && formula && this.traces().includes("precedents")
+          ? await traceText(ctx, "precedents", startCell(sel.address, ws.name), opts.trace === "explain" ? EXPLAIN_LIMITS : TRACE_LIMITS, {
+              whole: opts.trace === "error",
+            }).catch(() => undefined)
+          : undefined;
       return {
         ...(excel ? { excel } : {}),
         host: "excel",
         address: sel.address,
         text: table,
         table,
-        formula: typeof f === "string" && f.startsWith("=") ? f : undefined,
+        formula,
+        ...(trace ? { trace } : {}),
         surroundings,
         isWholeDocument: false,
       };
@@ -432,16 +456,33 @@ export class ExcelAdapter implements HostAdapter {
     });
   }
 
+  /** Formelsporing (#76): hvad denne Excel kan spore – præcedenter fra ExcelApi 1.12, afhængige fra 1.13. */
+  traces(): TraceKind[] {
+    return traceSupport();
+  }
+
   /**
    * Agent i flere trin (#20): værdierne i de områder, agenten har bedt om at se, som TSV med arkets
    * rækkenummer først og en liste over formler. Intet ændres. Tomme rækker i bunden udelades.
+   * En sporing (#76) giver i stedet cellens præcedenter eller afhængige som en kompakt liste.
    */
-  async readForAgent(reads: { address: string }[], dc: DocContext): Promise<string> {
+  async readForAgent(reads: AgentRead[], dc: DocContext): Promise<string> {
     const active = dc.address?.includes("!") ? splitAddress(dc.address).sheet : undefined;
     return Excel.run(async (ctx) => {
       const parts: string[] = [];
       for (const read of reads.slice(0, MAX_READS)) {
         try {
+          if (read.action !== "readRange") {
+            let sheet = active;
+            if (!sheet && !read.address.includes("!")) {
+              const ws = ctx.workbook.worksheets.getActiveWorksheet();
+              ws.load("name");
+              await ctx.sync();
+              sheet = ws.name;
+            }
+            parts.push(await traceText(ctx, read.action === "tracePrecedents" ? "precedents" : "dependents", startCell(read.address, sheet ?? "")));
+            continue;
+          }
           const onSheet = read.address.includes("!");
           const ws = onSheet
             ? ctx.workbook.worksheets.getItem(splitAddress(read.address).sheet)
@@ -470,7 +511,7 @@ export class ExcelAdapter implements HostAdapter {
               .join("\n"),
           );
         } catch (e) {
-          parts.push(`${read.address}: could not be read (${e instanceof Error ? e.message : String(e)})`);
+          parts.push(`${read.address}: could not be ${read.action === "readRange" ? "read" : "traced"} (${e instanceof Error ? e.message : String(e)})`);
         }
       }
       return parts.join("\n\n");

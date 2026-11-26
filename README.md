@@ -14,7 +14,7 @@ MIAI er en tilføjelse til Microsoft **Word, Excel, PowerPoint og Outlook**, der
 | Skriv artikel, salgstekst eller disposition | ✅ | | ✅ | ✅ ² |
 | Lav diagram ud fra tekst | ✅ | | ✅ | |
 | Tekst til slides · design af master og layout | | | ✅ | |
-| Forklar formel · lav formel · analyser data | | ✅ | | |
+| Forklar formel · find fejlkilden · lav formel · analyser data | | ✅ | | |
 | Svar på mail (som udkast, du selv sender) | | | | ✅ |
 | Chat med dokumentet, også med billeder og filer | ✅ | ✅ | ✅ | ✅ |
 | Agent: beskriv ændringen, godkend planen, fortryd | ✅ | ✅ | ✅ | |

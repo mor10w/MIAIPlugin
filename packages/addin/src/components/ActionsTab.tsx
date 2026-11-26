@@ -208,8 +208,17 @@ export function ActionsTab({
   const run = async (extra: Record<string, string> = {}) => {
     if (!task) return;
     setInputError(undefined);
+    // Find fejlkilden (#76) bygger på Excels sporing af præcedenter; uden den forklares hvorfor, i stedet for at køre uden grafen.
+    const traced = task.id === "find-error";
+    if (traced && !adapter.traces?.().includes("precedents")) {
+      reset();
+      setInputError(t("traceUnsupported"));
+      return;
+    }
     try {
       const ctx = await adapter.getContext({
+        // Forklar formel får de nærmeste præcedenter med, hvor Excel kan levere dem; ellers forklares formlen uden.
+        trace: traced ? "error" : task.id === "explain-formula" ? "explain" : undefined,
         // Agenten arbejder på markeringen eller – uden markering – hele dokumentet (#6).
         wholeDocumentFallback: task.input === "selectionOrDocument" || task.id === "agent",
         // Agenten ser afsnittene med typografi, så den kan bevare formateringen.
@@ -220,6 +229,12 @@ export function ActionsTab({
         maxChars: task.chunking === "map-reduce" ? MAX_CHUNKED_CHARS : undefined,
       });
       ctxRef.current = ctx;
+      // En formel, der ikke kunne spores (Excel afviste det), giver en forklaring frem for et svar uden grundlag.
+      if (traced && ctx.formula && !ctx.trace) {
+        reset();
+        setInputError(t("traceFailed"));
+        return;
+      }
       const req = { context: ctx, params: { language: lang === "da" ? "Danish" : "English", ...params, ...extra } };
       if (task.id === "agent") {
         // Agenten kan læse i dokumentet (fx andre ark), før den laver planen (#20). Planen vises først,

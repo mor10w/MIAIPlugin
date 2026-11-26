@@ -155,7 +155,7 @@ npm run test:e2e
 ```
 Kører add-in'ets build i Chromium med Playwright (`packages/addin/e2e/`). Testene kører også i CI (jobbet `e2e`), hvor skærmbilleder og traces gemmes som artefakter ved fejl.
 
-- **Simuleret Office.js** (`e2e/fixtures/office.ts`): Word, Excel og PowerPoint med de API'er, adapterne bruger. Kalder en adapter et API, simuleringen ikke kender, fejler det med "Simuleret Office.js mangler: …" – udvid så simuleringen. Alt, adapterne gør ved dokumentet, registreres og kan efterprøves (`tp.calls()`, `tp.find("picture")`). Den simulerede Excel tæller også trinene i Excels egen fortryd (`window.__miai.undoGroups()`): ét pr. `context.sync()` med ændringer, eller ét pr. `Excel.run` med `mergeUndoGroup` (kræver `apiSets: { ExcelApi: "1.20" }`).
+- **Simuleret Office.js** (`e2e/fixtures/office.ts`): Word, Excel og PowerPoint med de API'er, adapterne bruger. Kalder en adapter et API, simuleringen ikke kender, fejler det med "Simuleret Office.js mangler: …" – udvid så simuleringen. Alt, adapterne gør ved dokumentet, registreres og kan efterprøves (`tp.calls()`, `tp.find("picture")`). Den simulerede Excel tæller også trinene i Excels egen fortryd (`window.__miai.undoGroups()`): ét pr. `context.sync()` med ændringer, eller ét pr. `Excel.run` med `mergeUndoGroup` (kræver `apiSets: { ExcelApi: "1.20" }`). Formelsporing (#76): simuleringen regner ikke formler ud, så formlernes resultater gives med arket (`results: { B5: "#DIV/0!" }`), og præcedenter og afhængige udledes af formlernes cellehenvisninger. Som i Excel fejler et kald uden præcedenter først ved `context.sync()` (`ItemNotFound`), og så er intet fra samme rundtur indlæst. Kaldene registreres som `{ kind: "trace", method, address }`.
 - **Mock-model** (`e2e/fixtures/servers.ts`): OpenAI-kompatibel server med streaming, ikke-streaming og værktøjskald, med eller uden CORS. Alle forespørgsler gemmes (`tp.model.lastRequest`).
 - **Tilstande:** direkte (add-in hostet statisk over HTTPS) og bridge (den rigtige, byggede bridge med midlertidig konfiguration). Alle porte er dynamiske, så en lokal Ollama ikke forstyrrer.
 - Testene fejler også, hvis task pane kaster en uventet JavaScript-fejl.
@@ -352,6 +352,20 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] **Fortryd agent-session** uden at fjerne markeringen først: ingen gule celler tilbage, og formaterne er som før planen
 - [ ] En ny plan, mens den gamle markering står: den gamle markering forsvinder, og Fortryd for den nye plan efterlader ingen gule celler
 - [ ] En plan med både skrivning og slettede rækker (eller sortering) på samme ark: intet markeres, og knappen **Fjern markering** vises ikke
+
+**Excel – formelsporing (#76)** (Excels svar på `getDirectPrecedents` m.fl. er kun kendt fra typerne og dokumentationen; simuleringen udleder afhængighederne af formlernes henvisninger. Lav et testark med en `#DIV/0!`-kæde over to ark, fx `Resultat!B3 =B2+1`, `Resultat!B2 =Beregning!B5*2`, `Beregning!B5 =B3/B4` og `Beregning!B4 =Data!B2-Data!B3` med ens tal i Data):
+- [ ] **Find fejlkilden** på `Resultat!B3`: svaret peger på `Beregning!B5`, og et klik på adressen skifter ark og markerer cellen; intet er ændret i projektmappen, og Ctrl+Z har ikke fået et nyt trin
+- [ ] Adressernes form: notér, hvad `areas.items[].address` indeholder for præcedenter på flere ark, for flere områder på samme ark (skilletegn, mellemrum), for arknavne med mellemrum eller apostrof, og om naboceller slås sammen til ét område (`parseAreas` i `excelTrace.ts` forventer arknavn pr. område og komma eller semikolon imellem)
+- [ ] En formel uden henvisninger blandt præcedenterne (fx `=I DAG()` eller `=5*2`): sporingen fortsætter for de andre celler (Excel svarer `ItemNotFound` ved `context.sync()`, og add-in'et spørger igen i mindre dele); bekræft, at samme `Excel.run` kan bruges videre efter den fejlede rundtur
+- [ ] En celle, der dividerer med en tom celle: den tomme celle står i listen som "(empty)", og formlen udpeges som kilden
+- [ ] Hele kolonner (`=SUM(Data!B:B)`) og store områder (`=SUM(B2:B5000)`): kun den brugte del læses, svaret kommer hurtigt, og fejlceller langt nede i området findes
+- [ ] Navngivne områder, tabelhenvisninger (`Tabel1[Beløb]`), `INDIRECT`/`OFFSET` og henvisninger til en anden projektmappe: notér, hvad Excel oplyser som præcedenter, og om noget står under "Excel could not trace or read" i forespørgslen
+- [ ] En lang kæde (over 25 led, fx en løbende saldo ned gennem en kolonne): svaret siger, at sporingen er beskåret, og nævner den sidste celle; i Microsoft 365 står Excels samlede graf (`getPrecedents`, ExcelApi 1.14) i forespørgslen; notér ventetiden i Excel på web
+- [ ] En cirkulær henvisning: sporingen stopper, og task pane hænger ikke
+- [ ] **Forklar formel** på en formel med henvisninger til et andet ark: forklaringen nævner, hvor tallene kommer fra, med klikbare adresser
+- [ ] Agenten: *"B3 viser #DIV/0! – find fejlen og ret den"* viser "Læser B3…", og planen retter formlen i kildecellen; *"hvad bruger Data!B2?"* giver de afhængige celler (kræver ExcelApi 1.13)
+- [ ] Excel 2019 eller ældre (uden ExcelApi 1.12): **Find fejlkilden** viser forklaringen om, at Excel ikke kan spore, **Forklar formel** virker som før, og agenten læser områder i stedet for at spore
+- [ ] Excel 2021 (ExcelApi 1.12–1.14 uden 1.15): sporing af både præcedenter og afhængige virker; notér, hvilke requirement sets der meldes understøttet på Windows, Mac og web
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
 - [ ] Erstat et tal i et punkt med fed tekst foran: kun tallet skifter, fed og farve bevares

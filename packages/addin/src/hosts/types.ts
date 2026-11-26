@@ -1,5 +1,6 @@
 import type {
   AgentAction,
+  AgentRead,
   ApplyMode,
   DesignPlan,
   DiagramResult,
@@ -9,6 +10,7 @@ import type {
   GrammarResult,
   HostKind,
   SlidesResult,
+  TraceKind,
 } from "@miai/shared";
 import type { DocRef } from "../refs";
 
@@ -99,6 +101,12 @@ export interface ContextOptions {
   structure?: boolean;
   /** Maks. antal tegn tekst (standard MAX_CONTEXT_CHARS; opgaver med map-reduce får mere). */
   maxChars?: number;
+  /**
+   * Excel (#76): spor den markerede formels præcedenter og læg dem i `DocContext.trace`.
+   * "explain" = kun de nærmeste celler (Forklar formel); "error" = hele kæden (Find fejlkilden).
+   * Uden ExcelApi 1.12, eller hvis sporingen fejler, udelades `trace`.
+   */
+  trace?: "explain" | "error";
 }
 
 export interface HostAdapter {
@@ -120,7 +128,12 @@ export interface HostAdapter {
    * Agent i flere trin (#20): læser det, agenten har bedt om (fx celler på et andet ark), uden at
    * ændre noget. Returnerer tekst til modellen. Kun værter, hvor agenten ikke ser hele dokumentet.
    */
-  readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
+  readForAgent?(reads: AgentRead[], ctx: DocContext): Promise<string>;
+  /**
+   * Formelsporing (#76): de retninger, værten kan spore fra en celle – præcedenter (ExcelApi 1.12)
+   * og afhængige (1.13). Tom liste eller ingen metode = værten kan ikke spore.
+   */
+  traces?(): TraceKind[];
   /**
    * Advarsel før overskrivning (#75): læser, hvor mange celler med indhold (og heraf formler) hver
    * handling vil overskrive i dokumentet, som det er nu. Ændrer intet. Ét svar pr. handling, i samme

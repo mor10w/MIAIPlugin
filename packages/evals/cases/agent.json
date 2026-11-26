@@ -601,6 +601,60 @@
     "rubric": "Kun readRange på Budget-arket (fx Budget!A1:B3) og ingen skrivende handlinger endnu; alternativt er opslagsformler acceptable, men opdigtede budgettal er en fejl."
   },
   {
+    "id": "agent-excel-spor-fejl-da",
+    "task": "agent",
+    "lang": "da",
+    "feature": "F13 agent (flere trin)",
+    "note": "#76: fejlen kommer fra celler, agenten ikke kan se (et andet ark). Den skal spore formlen med tracePrecedents, før den retter noget – ikke gætte en rettelse.",
+    "context": {
+      "host": "excel",
+      "text": "Nøgletal\tVærdi\nPris pr. stk.\t#DIV/0!\nMed gebyr\t#DIV/0!",
+      "table": "Nøgletal\tVærdi\nPris pr. stk.\t#DIV/0!\nMed gebyr\t#DIV/0!",
+      "address": "Resultat!A1:B3",
+      "excel": {
+        "tables": [],
+        "columnFormats": [],
+        "activeSheet": "Resultat",
+        "sheets": [
+          {
+            "name": "Resultat",
+            "used": "A1:B3",
+            "headers": ["Nøgletal", "Værdi"]
+          },
+          {
+            "name": "Beregning",
+            "used": "A1:B5",
+            "headers": ["Post", "Beløb"]
+          },
+          {
+            "name": "Data",
+            "used": "A1:B3",
+            "headers": ["Lager", "Stk."]
+          }
+        ]
+      }
+    },
+    "params": {
+      "prompt": "B3 viser #DIV/0!. Find ud af, hvor fejlen kommer fra, og ret den",
+      "agentReads": "on",
+      "agentTrace": "precedents,dependents"
+    },
+    "checks": [
+      {
+        "type": "plan",
+        "min": 1,
+        "max": 2,
+        "include": ["tracePrecedents"],
+        "exclude": ["setValues", "setFormula", "clear", "runScript"]
+      },
+      {
+        "type": "regex",
+        "pattern": "B3"
+      }
+    ],
+    "rubric": "Kun tracePrecedents på B3 (evt. Resultat!B3) og ingen skrivende handlinger endnu; en rettelse uden at kende formlerne på de andre ark er en fejl."
+  },
+  {
     "id": "agent-excel-pivot-fast-da",
     "task": "agent",
     "lang": "da",
