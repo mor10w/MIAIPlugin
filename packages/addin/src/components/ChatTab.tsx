@@ -334,6 +334,13 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
     if (added.length) setAttachments((now) => [...now, ...added].slice(0, MAX_ATTACHMENTS));
   };
 
+  /** Er web-søgning slået til og tilladt lige nu? Spørges ved behov, så en ændring under Indstillinger gælder straks. */
+  const webSearchOn = () =>
+    api.settings().then(
+      (v) => v.settings.webSearch && v.policy.webSearch,
+      () => false,
+    );
+
   const send = async (text = draft, opts: { extra?: Record<string, string>; plan?: boolean; echo?: boolean } = {}) => {
     const prompt = text.trim();
     if (!prompt || running) return;
@@ -367,7 +374,20 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
         (addresses) => setReading(addresses ? addresses.join(", ") : null),
       ).finally(() => setPlanning(false));
       const plan = final.result as AgentPlan | undefined;
-      if (final.status === "done" && plan) setMessages((m) => [...m, { role: "assistant", content: plan.summary, model: final.model, plan, planCtx: ctx }]);
+      if (final.status !== "done" || !plan) return;
+      // Agenten mangler tal eller fakta, som skal findes på nettet. Den kan ikke selv søge, men det
+      // kan chatten: den slår det op, svaret vises med kilder, og agenten laver planen ud fra det.
+      // Kun én gang pr. ønske (en plan med materiale beder ikke chatten igen).
+      const canLookUp = !plan.actions.length && !!plan.needs && !planExtra.material && !planExtra.previousError;
+      if (canLookUp && (await webSearchOn())) {
+        setMessages((m) => [...m, { role: "assistant", content: t("chatLookup", { needs: plan.needs }), model: final.model }]);
+        const found = await start("chat", { context: ctx, params: { prompt, lookup: plan.needs }, history: history.slice(-12) });
+        const data = found.text ? withoutFakePlan(found.text).text : "";
+        if (found.status !== "done" || !data) return;
+        setMessages((m) => [...m, { role: "assistant", content: data, model: found.model, sources: found.sources }]);
+        return makePlan({ ...planExtra, material: chartMaterial(data).slice(0, 3_900) });
+      }
+      setMessages((m) => [...m, { role: "assistant", content: plan.summary, model: final.model, plan, planCtx: ctx }]);
     };
     if (canAct && act && (opts.plan || looksLikeEditRequest(prompt))) return makePlan(extra);
     const ctx = useContext
