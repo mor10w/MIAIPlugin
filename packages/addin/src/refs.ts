@@ -3,7 +3,8 @@ import { EXCEL_ADDRESS } from "./excelAddress";
 
 /**
  * Henvisninger til steder i dokumentet (#22): celler og områder i Excel, slides i PowerPoint og
- * – i agentens plan – afsnit og tekst i Word. De gøres klikbare, så brugeren kan hoppe til stedet.
+ * afsnit i Word (#77) – og i agentens plan også tekst i Word. De gøres klikbare, så brugeren kan
+ * hoppe til stedet.
  */
 export interface DocRef {
   /** Excel: celle eller område, evt. med arknavn ("Salg!C2:C5"). */
@@ -14,6 +15,11 @@ export interface DocRef {
   slide?: number;
   /** Word: afsnitsnummer i hele dokumentet (1 = første). */
   paragraph?: number;
+  /**
+   * Word (#77): begyndelsen af afsnittets tekst, da henvisningen blev lavet. Passer nummeret ikke
+   * længere (dokumentet er ændret), findes afsnittet igen ud fra uddraget – se locateParagraph.
+   */
+  excerpt?: string;
   /** Word: tekst, der står i dokumentet. */
   find?: string;
 }
@@ -22,6 +28,8 @@ export interface RefMatch {
   start: number;
   end: number;
   ref: DocRef;
+  /** Forklaring til knappen (tooltip), når teksten ikke forklarer sig selv – fx "[¶12]". */
+  label?: string;
 }
 
 // Citeret arknavn: en apostrof i navnet skrives som to ("'Bob''s'!A1").
@@ -31,13 +39,47 @@ const CELL = "\\$?[A-Z]{1,3}\\$?[1-9][0-9]{0,6}";
 const EXCEL_RE = new RegExp(`(?<![\\p{L}\\p{N}_$!'.])(${SHEET})?(${CELL})(:${CELL})?(?![\\p{L}\\p{N}_(!]|-\\p{L})`, "gu");
 /** "slide 3" / "dias 3" (dansk og engelsk). */
 const SLIDE_RE = /(?<![\p{L}\p{N}])(?:slides?|dias(?:set)?)\s+(\d{1,3})(?![\p{L}\p{N}])/giu;
+/**
+ * Afsnitsmarkøren fra Word-chatten (#77): "[¶12]" som modellen så den, og "¶12" uden klammer, som
+ * modeller skriver i opremsninger ("[¶12, ¶14]").
+ */
+const PARAGRAPH_RE = /\[¶ ?(\d{1,4})\]|¶ ?(\d{1,4})(?!\d)/g;
+
+/** Så meget af et afsnits tekst følger med en henvisning. */
+const EXCERPT_CHARS = 80;
+const squash = (s: string) => s.replace(/\s+/g, " ").trim();
+/** Begynder afsnittet med uddraget? Et uddrag, der er kortere end grænsen, er hele afsnittet og skal være ens. */
+const hasExcerpt = (text: string, excerpt: string) => (excerpt.length < EXCERPT_CHARS ? squash(text) === excerpt : squash(text).startsWith(excerpt));
+
+/**
+ * Hvilket afsnit i dokumentet, som det er nu, gælder en henvisning til afsnit `n` med uddraget
+ * `excerpt` (#77)? `texts` er afsnittenes tekst nu. Står uddraget stadig i afsnit n, er det dét.
+ * Ellers er afsnit indsat eller slettet siden svaret: så vælges det afsnit med uddraget, der ligger
+ * nærmest n. Findes uddraget ikke (afsnittet er rettet eller slettet), vises stedet, hvor det stod.
+ */
+export function locateParagraph(texts: string[], n: number, excerpt: string): number | undefined {
+  const here = n >= 1 && n <= texts.length ? n : undefined;
+  if (!excerpt || (here && hasExcerpt(texts[n - 1], excerpt))) return here;
+  let best: number | undefined;
+  texts.forEach((t, i) => {
+    if (hasExcerpt(t, excerpt) && (best === undefined || Math.abs(i + 1 - n) < Math.abs(best - n))) best = i + 1;
+  });
+  return best ?? here;
+}
+
+/** Afsnitsmarkører i klammer ("[¶12]", "[¶12, ¶14]") fjernes fra tekst, der sættes ind i dokumentet: de er ikke en del af teksten. */
+export function withoutParagraphMarks(text: string): string {
+  return text.replace(/[ \t]*\[¶ ?\d+(?:\s*[,;–-]\s*¶? ?\d+)*\]/g, "");
+}
 
 /**
  * Finder henvisninger i en tekst. I Excel linkes områder (A1:C5) og adresser med arknavn altid; en
  * enkelt celle (B7) kun, når den ligger inden for arkets brugte område – ellers ville "Q1 2026"
  * eller "A4-papir" blive til links. `used` er arkets brugte område uden arknavn (fx "A1:E30").
+ * I Word linkes afsnitsmarkører (#77), når `paragraphs` – dokumentets afsnit, som modellen så dem –
+ * har et afsnit med det nummer.
  */
-export function findRefs(text: string, host: HostKind, opts: { used?: string } = {}): RefMatch[] {
+export function findRefs(text: string, host: HostKind, opts: { used?: string; paragraphs?: { text: string }[] } = {}): RefMatch[] {
   const out: RefMatch[] = [];
   if (host === "excel") {
     const used = opts.used ? rangeBox(opts.used) : undefined;
@@ -52,6 +94,15 @@ export function findRefs(text: string, host: HostKind, opts: { used?: string } =
     }
   } else if (host === "powerpoint") {
     for (const m of text.matchAll(SLIDE_RE)) out.push({ start: m.index, end: m.index + m[0].length, ref: { slide: Number(m[1]) } });
+  } else if (host === "word" && opts.paragraphs) {
+    for (const m of text.matchAll(PARAGRAPH_RE)) {
+      const n = Number(m[1] ?? m[2]);
+      const p = opts.paragraphs[n - 1];
+      // Et nummer, dokumentet ikke har, er ikke en henvisning (modellen har fundet på det).
+      if (!p) continue;
+      const excerpt = squash(p.text).slice(0, EXCERPT_CHARS);
+      out.push({ start: m.index, end: m.index + m[0].length, ref: { paragraph: n, ...(excerpt ? { excerpt } : {}) } });
+    }
   }
   return out;
 }
@@ -85,6 +136,7 @@ export function linkifyRefs(root: HTMLElement, find: (text: string) => RefMatch[
       b.type = "button";
       b.className = "docref";
       b.dataset.ref = JSON.stringify(m.ref);
+      if (m.label) b.title = m.label;
       b.textContent = text.slice(m.start, m.end);
       frag.append(b);
       at = m.end;

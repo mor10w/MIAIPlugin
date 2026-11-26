@@ -367,6 +367,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     (w.__miai as Record<string, unknown>).editParagraph = (i: number, text: string) => {
       paras[i].text = text;
     };
+    /** Brugeren sletter et afsnit (fx efter et chatsvar, der henviser til afsnit længere nede, #77). */
+    (w.__miai as Record<string, unknown>).removeParagraph = (i: number) => {
+      paras.splice(i, 1);
+    };
 
     /** Erstat [start,end) i et afsnit; markeringer følger Words regel om første tegn. */
     function replaceIn(p: P, start: number, end: number, rep: string) {
