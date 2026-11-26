@@ -81,3 +81,20 @@ describe("looksLikeEditRequest", () => {
     expect(looksLikeEditRequest("")).toBe(false);
   });
 });
+
+describe("omlægning af data (Excel)", () => {
+  it.each([
+    "Transponer data",
+    "Pivoter dataene",
+    "Jeg vill blot have de markerede data vendt så rækker blev til kolonner og kolonner blev til rækker",
+    "Byt om på rækker og kolonner",
+    "Transpose the selected range",
+    "Turn the rows into columns",
+  ])("genkender %s som et ønske om en ændring", (prompt) => {
+    expect(looksLikeEditRequest(prompt)).toBe(true);
+  });
+
+  it.each(["Hvad er en pivottabel?", "Hvor mange rækker og kolonner er der?", "What is a pivot table?"])("lader spørgsmålet %s være", (prompt) => {
+    expect(looksLikeEditRequest(prompt)).toBe(false);
+  });
+});

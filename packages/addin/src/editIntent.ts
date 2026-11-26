@@ -34,6 +34,9 @@ const DA_VERBS = [
   "fremhæv(?:e|er)?",
   "konvertér|konverter(?:e)?",
   "ryd\\s+op",
+  // Omlægning af data (Excel): "transponer data", "pivoter dataene".
+  "transponér|transponer(?:e|et)?",
+  "pivotér|pivoter(?:e|et)?",
 ];
 // Danske vendinger: "gør teksten kortere", "skriv … ind i dokumentet", "lav afsnit 2 om til …", "ret … til …".
 const DA_PHRASES = [
@@ -46,6 +49,9 @@ const DA_PHRASES = [
   "ret\\s+[^?]{0,60}?\\s+til\\s+",
   // "… mangler en konklusion – skriv den"
   "skriv\\s+(?:den|det|dem)(?![\\p{L}])",
+  // "… vendt, så rækker bliver til kolonner", "byt om på rækker og kolonner".
+  "rækker(?:ne)?\\s+[^?]{0,30}?til\\s+kolonner|kolonner(?:ne)?\\s+[^?]{0,30}?til\\s+rækker",
+  "byt(?:te)?\\s+(?:om\\s+på\\s+)?rækker(?:ne)?\\s+og\\s+kolonner",
 ];
 const EN = [
   "add(?:s|ed|ing)?",
@@ -60,6 +66,9 @@ const EN = [
   "format(?:s|ted|ting)?\\s+(?:the|this|that|it|my|our|all|every|as)",
   "sort(?:s|ed|ing)?\\s+(?:the|this|by)",
   "(?:tidy|clean)\\s+up",
+  "transpos(?:e|es|ed|ing)",
+  "pivot\\s+(?:the|this|that|it|my|these)",
+  "rows\\s+(?:in)?to\\s+columns|columns\\s+(?:in)?to\\s+rows",
   "make\\s+[\\p{L}\\s]{0,30}?(?:shorter|longer|simpler|clearer|nicer|prettier|modern|readable|a\\s+(?:heading|bullet|list|table))",
 ];
 

@@ -108,6 +108,7 @@ const da = {
   selectionNone: "Intet markeret – hele dokumentet bruges",
   selectionNonePpt: "Intet markeret – hele præsentationen bruges",
   chatOldPlan: "Plan fra en tidligere samtale – den blev ikke udført.",
+  chatFakePlan: "Intet er ændret i dokumentet: chatten kan ikke selv udføre ændringer. MIAI's agent kan gøre det.",
   chatOldPlanDone: "Plan fra en tidligere samtale – den blev udført.",
   chatHistory: "Husk samtalen pr. dokument",
   chatHistoryHint:
@@ -621,6 +622,7 @@ const en: Dict = {
   selectionNone: "Nothing selected – the whole document is used",
   selectionNonePpt: "Nothing selected – the whole presentation is used",
   chatOldPlan: "Plan from an earlier conversation – it was not carried out.",
+  chatFakePlan: "Nothing has changed in the document: the chat cannot make changes itself. MIAI's agent can do it.",
   chatOldPlanDone: "Plan from an earlier conversation – it was carried out.",
   chatHistory: "Remember the conversation per document",
   chatHistoryHint:

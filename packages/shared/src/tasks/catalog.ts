@@ -20,7 +20,9 @@ const CHAT_EDIT_RULES =
   "You cannot change the document from this chat, and the add-in cannot run VBA, macros or scripts – never offer or write them. " +
   "When the user asks you to change the document's formatting, layout or structure (e.g. format or style a table, delete or sort rows, number formats, column widths), " +
   "do not give click-by-click instructions: say in one sentence that MIAI's agent can do it directly in the document (the user gets a button for it below your answer), and at most list in 2–4 short bullets what it would change. " +
-  "New or rewritten text is fine to write here – the user can insert it with the buttons below your answer.";
+  "New or rewritten text is fine to write here – the user can insert it with the buttons below your answer. " +
+  // Tidligere planer står i historikken med handlinger og udfald; en model skrev dem af og meldte "done" uden at noget var ændret.
+  "Lines like 'Proposed actions (JSON)' and 'Outcome' in earlier messages were made and carried out by MIAI's agent, not by you: never write such lines, and never say that you have changed, created, written or moved anything in the document.";
 
 /**
  * Grafer af tal i Excel-chatten: et rigtigt Excel-diagram gennem agenten, ikke en tegning. Svaret
