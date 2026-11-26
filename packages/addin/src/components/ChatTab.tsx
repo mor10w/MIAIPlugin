@@ -167,6 +167,20 @@ export const drawsChart = (answer: string) => /```mermaid[^\n]*\n(?:\s*%%[^\n]*\
  */
 export const refersToAgent = (answer: string) => /(?<![\p{L}])agent(?:en|ens)?(?![\p{L}])/iu.test(answer);
 
+/**
+ * Har chat-modellen efterlignet en plan? Tidligere planer står i historikken som "Proposed actions
+ * (JSON): …" med et "Outcome", og en model kan skrive det samme af som almindelig tekst – med
+ * "done" ud for handlinger, der aldrig er udført. Teksten fra det sted er opdigtet og fjernes.
+ */
+const FAKE_PLAN = /(?:^|\n)[^\n]*Proposed actions \(JSON\):|(?:^|\n)Outcome:\s*\n\s*-[^\n]*:\s*(?:done|FAILED)/;
+export function withoutFakePlan(answer: string): { text: string; faked: boolean } {
+  const at = answer.search(FAKE_PLAN);
+  if (at < 0) return { text: answer, faked: false };
+  // Linjen lige før er planens "opsummering" – den hører med til efterligningen.
+  const before = answer.slice(0, at).trimEnd();
+  return { text: before.slice(0, Math.max(0, before.lastIndexOf("\n"))).trimEnd(), faked: true };
+}
+
 /** Beskeden, som modellen ser den i historikken: en plan beskrives med sine handlinger og udfaldet. */
 export function historyContent(m: Message): string {
   if (m.attachments?.length) {
@@ -334,7 +348,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
     setLastUserPrompt(prompt);
     // Et ønske om at ændre dokumentet: agenten laver en plan, som vises i samtalen. Intet ændres,
     // før brugeren har godkendt den. Dokumentet hentes altid (planen skal pege på noget konkret).
-    if (canAct && act && (opts.plan || looksLikeEditRequest(prompt))) {
+    const makePlan = async (planExtra: Record<string, string>) => {
       let ctx: DocContext;
       try {
         ctx = await adapter.getContext({ wholeDocumentFallback: true, structure: true, overview: "headers" });
@@ -349,13 +363,13 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
       const final = await planWithReads(
         start,
         adapter,
-        { context: ctx, params: { prompt, language: lang === "da" ? "Danish" : "English", ...extra }, history: history.slice(-12), attachments: sent },
+        { context: ctx, params: { prompt, language: lang === "da" ? "Danish" : "English", ...planExtra }, history: history.slice(-12), attachments: sent },
         (addresses) => setReading(addresses ? addresses.join(", ") : null),
       ).finally(() => setPlanning(false));
       const plan = final.result as AgentPlan | undefined;
       if (final.status === "done" && plan) setMessages((m) => [...m, { role: "assistant", content: plan.summary, model: final.model, plan, planCtx: ctx }]);
-      return;
-    }
+    };
+    if (canAct && act && (opts.plan || looksLikeEditRequest(prompt))) return makePlan(extra);
     const ctx = useContext
       ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
       : { host: adapter.host, text: "", isWholeDocument: false };
@@ -363,7 +377,13 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
     setLastCtx(useContext ? ctx : null);
     const params: Record<string, string> = { prompt, ...(knowledgeOn && useKnowledge ? { useKnowledge: "true" } : {}) };
     const final = await start("chat", { context: ctx, params, history: history.slice(-20), attachments: sent });
-    if (final.text) setMessages((m) => [...m, { role: "assistant", content: final.text, model: final.model, sources: final.sources }]);
+    if (!final.text) return;
+    // Modellen skrev en plan og dens udfald som tekst: intet er ændret. Må chatten ændre dokumentet,
+    // laver agenten den rigtige plan; ellers siges det, og knappen til agenten vises under svaret.
+    const answer = withoutFakePlan(final.text);
+    if (answer.faked && canAct && act) return makePlan({});
+    const content = answer.faked ? [answer.text, t("chatFakePlan")].filter(Boolean).join("\n\n") : final.text;
+    setMessages((m) => [...m, { role: "assistant", content, model: final.model, sources: final.sources }]);
   };
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));

@@ -291,6 +291,66 @@ test("chat: et ønske, ordgenkendelsen ikke fanger, kan stadig udføres i samtal
   expect(last).toContain("<material>");
 });
 
+test("chat: skriver modellen en plan og et udfald som tekst, laver agenten den rigtige plan – intet meldes udført", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark2",
+      values: [
+        ["Dato", "NOVO.B"],
+        ["24.11.2026", 274.65],
+        ["25.11.2026", 274.3],
+      ],
+    },
+  });
+  await tp.tab("Chat");
+  // Sådan står en tidligere plan i historikken – og sådan skrev en lokal model den af som almindeligt svar.
+  const fake =
+    "Jeg vender de markerede data.\n\nOpretter et nyt ark 'Omvendt' med dataene vendt.\n" +
+    'Proposed actions (JSON): [{"action":"addSheet","name":"Omvendt"}]\nOutcome:\n- Nyt ark “Omvendt”: done';
+  const plan = JSON.stringify({
+    summary: "Skriver dataene vendt i et nyt ark.",
+    actions: [
+      { action: "addSheet", name: "Omvendt" },
+      {
+        action: "setValues",
+        address: "Omvendt!A1:C2",
+        values: [
+          ["Dato", "24.11.2026", "25.11.2026"],
+          ["NOVO.B", 274.65, 274.3],
+        ],
+      },
+    ],
+  });
+  let calls = 0;
+  tp.model.reply = () => (calls++ === 0 ? { stream: [fake] } : { json: plan });
+  // Ordgenkendelsen fanger ikke ønsket, så chatten svarer først.
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Kan du vise det på den anden led?");
+  await tp.page.keyboard.press("Enter");
+
+  await expect(tp.page.getByText("Skriver dataene vendt i et nyt ark.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Udfør 2 handlinger" })).toBeVisible();
+  // Det opdigtede udfald vises ikke, og intet er ændret, før brugeren godkender.
+  await expect(tp.page.getByText(/Proposed actions|Outcome/)).toHaveCount(0);
+  expect((await tp.calls()).filter((c) => c.kind === "values")).toHaveLength(0);
+  expect(tp.model.lastRequest!.messages[0].content).toContain("You are in agent mode");
+
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  expect((await tp.calls()).find((c) => c.kind === "values")).toMatchObject({ address: "Omvendt!A1:C2" });
+});
+
+test("chat: 'Transponer data' går direkte til agenten", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { sheet: "Ark2", values: [["Dato"], ["25.11.2026"]] } });
+  await tp.tab("Chat");
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Vender dataene.", actions: [] }) });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Transponer data");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Vender dataene.")).toBeVisible();
+  expect(tp.model.lastRequest!.messages[0].content).toContain("You are in agent mode");
+});
+
 test("Excel-chat: en graf bliver et rigtigt Excel-diagram gennem agenten, ikke en tegning i chatten", async ({ open }) => {
   const tp = await open({
     host: "Excel",
