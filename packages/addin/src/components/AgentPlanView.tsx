@@ -173,6 +173,19 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
   }
 }
 
+/** Årsagen til, at en handling ikke kan udføres, som modellen skal have den (engelsk, som resten af prompten). */
+const PROBLEM_HELP: Partial<Record<string, string>> = {
+  "unsafe-script": "the script uses something the sandbox does not allow (e.g. fetch or another global that does not exist)",
+  "with-script": "runScript must be the ONLY action in a plan; use the fixed actions instead of a script when they can do the job",
+  "scripts-off": "runScript is not available; use only the listed actions",
+  "wrong-host": "the action does not exist in this app",
+  "bad-sheet": "the sheet does not exist (add it with addSheet first) or the name is taken",
+  "bad-address": "the cell address is not valid",
+  "bad-table": "there is no table with that name",
+  "too-large": "too many cells in one action; split it",
+  invalid: "the action is incomplete or contradicts itself",
+};
+
 type Phase = { kind: "review" } | { kind: "running" } | { kind: "done"; outcome: AgentOutcome; ran: number[] } | { kind: "undone" };
 
 /**
@@ -197,7 +210,7 @@ export function AgentPlanView({
   /** Eksport af et ark som .xlsx (tillæg ADR-0012); leveres kun med bridge. */
   exportSheet?: (data: ExportSheetRequest) => Promise<string>;
   /** Et script fejlede: lad modellen rette det med fejlbeskeden. */
-  onRetry?: (retry: { error: string; code: string; partial?: boolean }) => void;
+  onRetry?: (retry: { error: string; code: string; partial?: boolean; blocked?: boolean }) => void;
   /** Planen er udført (eller fortrudt): en kort tekst til samtalens historik, så modellen kender udfaldet. */
   onOutcome?: (log: string) => void;
 }) {
@@ -262,6 +275,22 @@ export function AgentPlanView({
       partial: true,
     };
   })();
+
+  /**
+   * Ingen handling kan udføres (fx et script, sandkassen afviser, sammen med andre handlinger):
+   * uden dette stod brugeren med en liste af grå felter og ingen vej videre. Årsagerne kan sendes
+   * til modellen, som laver en ny plan.
+   */
+  const blocked = phase.kind === "review" && checked.length > 0 && checked.every((c) => c.problem);
+  const blockedRetry = blocked
+    ? {
+        error: `None of the planned actions can be carried out. Make a new plan that avoids these problems:\n${checked
+          .map((c) => `- ${c.action.action}: ${PROBLEM_HELP[c.problem!] ?? c.problem}`)
+          .join("\n")}`,
+        code: JSON.stringify(checked.map((c) => c.action)),
+        blocked: true,
+      }
+    : undefined;
 
   const resultFor = (i: number) => (phase.kind === "done" ? phase.outcome.results[phase.ran.indexOf(i)] : undefined);
   const locked = phase.kind !== "review";
@@ -335,6 +364,11 @@ export function AgentPlanView({
         </>
       )}
 
+      {blocked && (
+        <MessageBar intent="warning">
+          <MessageBarBody>{t("agentBlocked")}</MessageBarBody>
+        </MessageBar>
+      )}
       {checked.length > 0 && <Divider />}
       {phase.kind === "review" || phase.kind === "running" ? (
         checked.length > 0 && (
@@ -342,6 +376,11 @@ export function AgentPlanView({
             <Button appearance="primary" size="small" icon={<Play16Filled />} disabled={count === 0 || phase.kind === "running"} onClick={() => void execute()}>
               {count === 1 ? t("agentExecuteOne") : t("agentExecute", { n: count })}
             </Button>
+            {blockedRetry && onRetry && (
+              <Button size="small" onClick={() => onRetry(blockedRetry)}>
+                {t("agentBlockedRetry")}
+              </Button>
+            )}
             {canTrack && <Switch label={t("agentTrack")} checked={track} disabled={phase.kind === "running"} onChange={(_, d) => setTrack(d.checked)} />}
           </div>
         )

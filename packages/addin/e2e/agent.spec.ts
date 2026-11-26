@@ -356,11 +356,54 @@ test("Excel-chat: tegner modellen alligevel en graf med Mermaid, tilbydes et rig
   await tp.page.keyboard.press("Enter");
   await expect(tp.page.getByText("Vil du have grafen som et rigtigt Excel-diagram?")).toBeVisible();
 
-  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Laver et kurvediagram af kurserne.", actions: [] }) });
+  // Modellen planlægger et script, der henter kurser på nettet, sammen med faste handlinger. Intet
+  // af det kan udføres: før stod brugeren med grå felter og ingen vej videre.
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Henter kurserne fra et API og laver et kurvediagram.",
+      actions: [
+        { action: "runScript", description: "Henter kurser", code: "const r = await fetch('https://example.com/kurser'); return 'ok';" },
+        { action: "addChart", source: "D1:E3", type: "line" },
+      ],
+    }),
+  });
   await tp.page.getByRole("button", { name: "Gør det med agenten" }).click();
-  await expect(tp.page.getByText("Laver et kurvediagram af kurserne.")).toBeVisible();
-  // Agenten får tegningens tal som materiale.
-  expect(tp.model.lastRequest!.messages.at(-1)!.content).toContain("line [274.65, 274.3]");
+  await expect(tp.page.getByText("Henter kurserne fra et API og laver et kurvediagram.")).toBeVisible();
+  // Agenten får tegningens tal som materiale – uden diagramkoden – og ved, at den ikke kan hente noget selv.
+  const first = tp.model.lastRequest!;
+  expect(first.messages.at(-1)!.content).toContain("x (2): 24. nov, 25. nov");
+  expect(first.messages.at(-1)!.content).toContain("series 1 (2): 274.65, 274.3");
+  expect(first.messages.at(-1)!.content).not.toContain("xychart");
+  expect(first.messages[0].content).toContain("no access to the internet, and neither has runScript");
+
+  await expect(tp.page.getByText("Ingen af handlingerne kan udføres. Årsagen står under hver handling.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: /^Udfør/ })).toBeDisabled();
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Skriver kurserne i arket og laver et kurvediagram.",
+      actions: [
+        {
+          action: "setValues",
+          address: "D1",
+          values: [
+            ["Dato", "NOVO-B"],
+            ["24. nov", 274.65],
+            ["25. nov", 274.3],
+          ],
+        },
+        { action: "addChart", source: "D1:E3", type: "line" },
+      ],
+    }),
+  });
+  await tp.page.getByRole("button", { name: "Bed modellen lave en ny plan" }).click();
+  await expect(tp.page.getByRole("button", { name: "Udfør 2 handlinger" })).toBeVisible();
+  // Modellen får årsagerne med, så den nye plan undgår dem.
+  const retry = tp.model.lastRequest!.messages.at(-1)!.content;
+  expect(retry).toContain("None of the planned actions can be carried out");
+  expect(retry).toContain("runScript");
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  expect((await tp.calls()).find((c) => c.kind === "chartAdd")).toMatchObject({ source: "D1:E3" });
 });
 
 test("Word-chat: en Mermaid-graf er stadig en figur, ikke et tilbud om et Excel-diagram", async ({ open }) => {
