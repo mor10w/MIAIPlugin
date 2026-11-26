@@ -70,7 +70,10 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
 
   const ready = found.filter((f) => f.result?.ok);
   const cors = found.filter((f) => f.result && !f.result.ok && f.result.reason === "cors");
-  const other = found.filter((f) => f.result && !f.result.ok && f.result.reason !== "cors");
+  // Lokal netværksadgang (#74): tilladelsen gælder alle lokale adresser, så blokeringen vises én gang.
+  const lna = found.map((f) => (f.result && !f.result.ok ? f.result.lna : undefined)).filter((x) => x !== undefined);
+  const blocked = lna.find((x) => x !== "prompt");
+  const other = found.filter((f) => f.result && !f.result.ok && f.result.reason !== "cors" && f.result.reason !== "blocked");
   const names = (f: Found) => f.tools.map((x) => x.name).join(" / ");
 
   return (
@@ -135,7 +138,19 @@ export function SetupGuide({ onUse }: { onUse: (tool: KnownTool, models: string[
         </div>
       ))}
 
-      {!scanning && ready.length === 0 && cors.length === 0 && <Text>{t("setupNothing")}</Text>}
+      {blocked && (
+        <div className={s.item}>
+          <div className={s.row}>
+            <Badge appearance="tint" color="danger">
+              {t("lnaBadge")}
+            </Badge>
+          </div>
+          <Caption1>{t(blocked === "frame" ? "lnaFrame" : "lnaDenied")}</Caption1>
+        </div>
+      )}
+
+      {!scanning && ready.length === 0 && cors.length === 0 && !blocked && <Text>{t("setupNothing")}</Text>}
+      {!scanning && ready.length === 0 && lna.includes("prompt") && <Caption1>{t("lnaPrompt")}</Caption1>}
       {!scanning && other.length > 0 && (
         <Caption1>
           {t("setupNotFound")}: {other.map(names).join(", ")}

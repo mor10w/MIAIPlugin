@@ -87,6 +87,25 @@ describe("sikkerhed", () => {
     expect((await app.inject({ url: "/api/health", headers: { ...H, origin: "https://evil.example" } })).statusCode).toBe(403);
     expect((await app.inject({ url: "/api/health", headers: { host: H.host } })).statusCode).toBe(403);
   });
+  it("afviser preflight – også med Access-Control-Request-Private-Network (#74)", async () => {
+    // Task pane serveres af bridgen selv og sender aldrig preflight. Et svar med CORS-headere
+    // (herunder Access-Control-Allow-Private-Network) ville kun hjælpe fremmede sider.
+    for (const origin of ["https://evil.example", `https://localhost:${PORT}`]) {
+      const r = await app.inject({
+        method: "OPTIONS",
+        url: "/api/health",
+        headers: {
+          host: H.host,
+          origin,
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "x-miai",
+          "access-control-request-private-network": "true",
+        },
+      });
+      expect(r.statusCode).toBe(403);
+      expect(Object.keys(r.headers).filter((h) => h.startsWith("access-control-"))).toEqual([]);
+    }
+  });
   it("tillader egen origin", async () => {
     const r = await app.inject({ url: "/api/health", headers: { ...H, origin: `https://localhost:${PORT}` } });
     expect(r.json()).toMatchObject({ ok: true, endpoint: { reachable: true } });

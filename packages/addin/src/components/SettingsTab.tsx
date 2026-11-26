@@ -733,7 +733,15 @@ export function SettingsTab({
         {unverified && !unverified.ok && (
           <MessageBar intent="warning">
             <MessageBarBody>
-              {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")}{" "}
+              {t(
+                unverified.reason === "blocked"
+                  ? "lnaTitle"
+                  : unverified.reason === "cors"
+                    ? "saveCors"
+                    : unverified.reason === "absent"
+                      ? "saveAbsent"
+                      : "saveHttp",
+              )}{" "}
               <Caption1>{unverified.message}</Caption1>
             </MessageBarBody>
             <MessageBarActions>

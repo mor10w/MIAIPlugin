@@ -242,6 +242,20 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Bridge-tilstand detekteres automatisk; badge viser "bridge"
 - [ ] `localStorage` bevares mellem genstarter af Word/Excel/PowerPoint (især på Mac)
 
+**Office på nettet: lokal netværksadgang (#74)**
+
+Afprøves i nyeste Chrome og Edge med det hostede add-in (GitHub Pages) mod Ollama med `OLLAMA_ORIGINS`. Koden bygger på specifikationen og er ikke afprøvet i en rigtig browser; notér afvigelser, og ret teksterne `lnaDenied`, `lnaFrame` og `lnaPrompt` (`i18n.ts`) og afsnittet i [BRUG.md](BRUG.md#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge), hvis browserens ordlyd er en anden.
+
+- [ ] Første kald: spørger browseren om lokal netværksadgang, også uden et klik fra brugeren? Notér ordlyden, og hvilken side tilladelsen gemmes for (Office-siden eller add-in'ets adresse)
+- [ ] `await navigator.permissions.query({ name: "loopback-network" })` i konsollen, i add-in'ets ramme: svarer `prompt`, `granted` eller `denied` som forventet? `document.featurePolicy.allowsFeature("loopback-network")`: giver Office på nettet tilladelsen videre til add-in'et?
+- [ ] **Tillad**: status bliver *Forbundet* inden for 15 sekunder (eller efter **Søg igen**), og en opgave kører
+- [ ] **Bloker**: status *Blokeret af browseren*, banner med vejledning, guiden viser blokeringen én gang, og en opgave fejler med samme overskrift (ikke "Kunne ikke forbinde" med CORS-vejledning)
+- [ ] Fortryd via webstedsindstillinger som beskrevet i BRUG.md, genindlæs: forbindelsen virker
+- [ ] Spørgsmålet lukkes eller ignoreres: guiden viser "Intet værktøj fundet" og hjælpeteksten om at vælge Tillad. Kommer spørgsmålet igen ved hvert statustjek (hvert 15. sekund), og forsvinder det, når et kald afbrydes af timeout?
+- [ ] Giver Office på nettet ikke tilladelsen videre: MIAI viser beskeden om, at siden ikke giver add-in'et lov (ikke vejledningen til webstedsindstillinger)
+- [ ] Politikken `LocalNetworkAccessAllowedForUrls` med add-in'ets adresse og derefter med Office-sidens adresse: hvilken af dem fjerner spørgsmålet?
+- [ ] MIAI App (bridge) brugt i Office på nettet: spørger browseren, før task pane hentes fra `https://localhost`, og hvad sker der ved Bloker?
+
 **Funktioner**
 - [ ] Word: ret grammatik → sporede ændringer vises og kan accepteres/afvises
 - [ ] Word: omskriv, oversæt, opsummér (uden markering = hele dokumentet), artikel indsættes som formateret tekst, kommentar
