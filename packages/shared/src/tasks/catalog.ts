@@ -484,7 +484,7 @@ export const TASKS: TaskDefinition[] = [
           // Uden denne regel planlagde modellen et script, der hentede kurser fra et API; det kan ikke udføres.
           "You have no access to the internet, and neither has runScript: never plan to fetch, download or look up anything. Numbers and text inside <material> are data you already have – put them into the document with the listed actions" +
             (excel ? " (in Excel: setValues)" : "") +
-            ". If something needed is in neither the document nor <material>, return an empty actions list and say in the summary that the user can ask the chat to find it first.",
+            ". If something needed is in neither the document nor <material>, return an empty actions list, say in `needs` exactly what must be found (e.g. 'closing prices for NOVO-B.CO and GMAB.CO for the last 30 trading days') and say in the summary that the chat can find it first.",
           "If the request cannot be done with these actions, return an empty actions list and explain why in the summary.",
           `Write summary and reasons in ${req.params.language ?? "Danish"}. Respond with JSON only.`,
         ),
@@ -633,6 +633,11 @@ export const TASKS: TaskDefinition[] = [
               ? "Refer to slides by number ('slide 3') – the user can click it to go to the slide."
               : undefined,
           ctx.host === "outlook" ? undefined : CHAT_EDIT_RULES,
+          // Agent → chat: agenten kan ikke søge på nettet og har bedt om data, før den kan lave sin plan.
+          req.params.lookup &&
+            `MIAI's agent is about to carry out the user's request but lacks this data: ${req.params.lookup}. Your ONLY job in this reply is to supply that data: look it up now with web_search (do not ask the user for it), ` +
+              "and reply with the data itself – exactly ONE Markdown table when it is numbers, complete rather than a sample – followed by one line naming the sources. " +
+              "Do not explain how to change the document, do not mention the agent, and do not draw anything. If the search gives nothing usable, say so in one sentence and give no numbers.",
           contextNote,
           ctx.surroundings && `Workbook overview (computed by the add-in over the full used range):\n${doc(ctx.surroundings)}`,
           req.sources.length ? sourcesBlock(req.sources) : undefined,

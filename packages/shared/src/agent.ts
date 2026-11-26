@@ -300,6 +300,18 @@ export type AgentActionKind = AgentAction["action"];
 export const AgentPlan = z.object({
   summary: z.string().max(1_000).describe("One or two sentences: what the plan does, or why it cannot be done with the available actions"),
   actions: z.array(AgentAction).max(MAX_AGENT_ACTIONS),
+  /**
+   * Agenten kan ikke søge på nettet. Mangler den tal eller fakta, som hverken står i dokumentet
+   * eller i materialet fra chatten, siger den her, hvad der skal findes; chatten kan så slå det op
+   * og give det videre som materiale til en ny plan.
+   */
+  needs: z
+    .string()
+    .max(300)
+    .default("")
+    .describe(
+      "Only with an empty actions list: what must be looked up on the web before the request can be done, as one short search-like phrase. Otherwise empty",
+    ),
 });
 export type AgentPlan = z.infer<typeof AgentPlan>;
 
