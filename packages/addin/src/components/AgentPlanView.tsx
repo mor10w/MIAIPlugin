@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Badge,
   Body1,
@@ -18,8 +18,8 @@ import {
 import { ArrowUndo16Regular, CheckmarkCircle16Regular, ErrorCircle16Regular, Play16Filled } from "@fluentui/react-icons";
 import { ui } from "../theme";
 import { targetOf } from "../refs";
-import { checkPlan, isDestructive, parseBlocks, type AgentAction, type AgentPlan, type DocContext, type ExportSheetRequest } from "@miai/shared";
-import type { AgentOutcome, HostAdapter } from "../hosts/types";
+import { checkPlan, isDestructive, parseBlocks, writesCells, type AgentAction, type AgentPlan, type DocContext, type ExportSheetRequest } from "@miai/shared";
+import type { AgentOutcome, HostAdapter, Overwrite } from "../hosts/types";
 import { useI18n, type T } from "../i18n";
 
 const useStyles = makeStyles({
@@ -173,6 +173,15 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
   }
 }
 
+/** Advarsel før overskrivning (#75): "Overskriver 48 celler, heraf 12 formler"; ryd siger "Rydder …". */
+export function overwriteLabel(a: AgentAction, n: Overwrite, t: T): string {
+  const text =
+    a.action === "clear"
+      ? t(n.cells === 1 ? "agentClearFilledOne" : "agentClearFilled", { n: n.cells })
+      : t(n.cells === 1 ? "agentOverwriteOne" : "agentOverwrite", { n: n.cells });
+  return n.formulas > 0 ? t(n.formulas === 1 ? "agentWithFormulasOne" : "agentWithFormulas", { text, n: n.formulas }) : text;
+}
+
 /** Årsagen til, at en handling ikke kan udføres, som modellen skal have den (engelsk, som resten af prompten). */
 const PROBLEM_HELP: Partial<Record<string, string>> = {
   "unsafe-script": "the script uses something the sandbox does not allow (e.g. fetch or another global that does not exist)",
@@ -224,6 +233,36 @@ export function AgentPlanView({
   const [error, setError] = useState<string>();
   const count = selected.filter(Boolean).length;
 
+  // Advarsel før overskrivning (#75): adapteren læser arket (ændrer intet) og tæller, hvor mange
+  // celler med indhold og formler hver skrivende handling rammer. Udfør venter, til tallene er der,
+  // så ingen overskriver noget uden at have set advarslen. Kan arket ikke læses, vises ingen advarsel.
+  const writers = useMemo(() => checked.flatMap((c, i) => (!c.problem && writesCells(c.action) ? [i] : [])), [checked]);
+  const needsCount = !!adapter.overwrites && writers.length > 0;
+  const [overwrites, setOverwrites] = useState<Record<number, Overwrite>>();
+  const counted = useRef(false);
+  useEffect(() => {
+    if (!needsCount || counted.current) return;
+    counted.current = true;
+    adapter.overwrites!(
+      writers.map((i) => checked[i].action),
+      ctx,
+    ).then(
+      (r) => setOverwrites(Object.fromEntries(writers.flatMap((i, k) => (r[k] ? [[i, r[k]]] : [])))),
+      () => setOverwrites({}),
+    );
+  }, [needsCount, adapter, writers, checked, ctx]);
+  const counting = needsCount && !overwrites;
+
+  // Markering af ændrede celler (#75): fjernes med knappen, ved fortryd, og når planen forsvinder
+  // fra panelet (fx en ny plan), så farven ikke bliver stående uden en knap til at fjerne den.
+  const [marked, setMarked] = useState(false);
+  const [marks] = useState<{ unmark?: () => Promise<void> }>({});
+  useEffect(() => () => void marks.unmark?.().catch(() => {}), [marks]);
+  const unmarked = () => {
+    marks.unmark = undefined;
+    setMarked(false);
+  };
+
   const execute = async () => {
     const ran = checked.flatMap((c, i) => (selected[i] && !c.problem ? [i] : []));
     setError(undefined);
@@ -232,9 +271,12 @@ export function AgentPlanView({
       const outcome = await adapter.applyAgent!(
         ran.map((i) => checked[i].action),
         ctx,
-        { trackChanges: track, scripts, exportSheet },
+        // Markeringen kan også blive fjernet af en senere plan; så skal knappen her væk.
+        { trackChanges: track, scripts, exportSheet, onUnmarked: unmarked },
       );
       setPhase({ kind: "done", outcome, ran });
+      marks.unmark = outcome.unmark;
+      setMarked(!!outcome.unmark);
       onOutcome?.(
         ran
           .map((i, k) => {
@@ -254,8 +296,19 @@ export function AgentPlanView({
     setError(undefined);
     try {
       await phase.outcome.undo();
+      unmarked();
       setPhase({ kind: "undone" });
       onOutcome?.("The user undid all of these changes; the document is as it was before the plan.");
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const unmark = async () => {
+    setError(undefined);
+    try {
+      await marks.unmark?.();
+      unmarked();
     } catch (err) {
       setError((err as Error).message);
     }
@@ -310,6 +363,8 @@ export function AgentPlanView({
               const label = describeAction(c.action, t, ctx);
               // Stedet, handlingen gælder, kan vises i dokumentet før den udføres (#22).
               const target = c.problem ? undefined : targetOf(c.action, ctx);
+              // Hvad handlingen overskriver, vises, indtil den er udført (#75).
+              const overwrite = phase.kind === "review" || phase.kind === "running" ? overwrites?.[i] : undefined;
               return (
                 <li key={i} className={s.item}>
                   <Checkbox
@@ -336,6 +391,11 @@ export function AgentPlanView({
                       {isDestructive(c.action) && (
                         <Badge size="small" appearance="tint" color="warning">
                           {t("agentDestructive")}
+                        </Badge>
+                      )}
+                      {overwrite && (
+                        <Badge size="small" appearance="tint" color="warning">
+                          {overwriteLabel(c.action, overwrite, t)}
                         </Badge>
                       )}
                       {c.problem && (
@@ -373,7 +433,13 @@ export function AgentPlanView({
       {phase.kind === "review" || phase.kind === "running" ? (
         checked.length > 0 && (
           <div className={s.bar}>
-            <Button appearance="primary" size="small" icon={<Play16Filled />} disabled={count === 0 || phase.kind === "running"} onClick={() => void execute()}>
+            <Button
+              appearance="primary"
+              size="small"
+              icon={<Play16Filled />}
+              disabled={count === 0 || phase.kind === "running" || counting}
+              onClick={() => void execute()}
+            >
               {count === 1 ? t("agentExecuteOne") : t("agentExecute", { n: count })}
             </Button>
             {blockedRetry && onRetry && (
@@ -404,9 +470,15 @@ export function AgentPlanView({
                 <Button size="small" icon={<ArrowUndo16Regular />} onClick={() => void undo()}>
                   {t("agentUndo")}
                 </Button>
+                {marked && (
+                  <Button size="small" onClick={() => void unmark()}>
+                    {t("agentUnmark")}
+                  </Button>
+                )}
               </>
             )}
           </div>
+          {marked && <Caption1 className={s.muted}>{t("agentMarked")}</Caption1>}
           <Caption1 className={s.muted}>
             {t(
               phase.outcome.undoKind === "snapshot"
@@ -428,6 +500,7 @@ export function AgentPlanView({
                         : "agentUndoCells",
             )}
           </Caption1>
+          {phase.outcome.nativeUndo && <Caption1 className={s.muted}>{t("agentUndoNative")}</Caption1>}
         </>
       ) : (
         <MessageBar intent="success">

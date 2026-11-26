@@ -45,6 +45,21 @@ export interface AgentOutcome extends ApplyOutcome {
   undoKind: "tracked" | "snapshot" | "cells" | "slides" | "text" | "script";
   /** Kodetilstand: scriptet fejlede (og er rullet tilbage) – fejlen og koden kan sendes til modellen. */
   retry?: { error: string; code: string };
+  /**
+   * Excel (#75): de ændrede celler er markeret med en fyldfarve. Kaldet fjerner markeringen og giver
+   * cellerne deres fyld tilbage. Fortryd fjerner den også.
+   */
+  unmark?: () => Promise<void>;
+  /** Excel (#75): udførelsen er ét trin i Excels egen fortryd (ExcelApi 1.20), så ét Ctrl+Z fjerner det hele. */
+  nativeUndo?: boolean;
+}
+
+/** Excel (#75): hvor meget eksisterende indhold en handling vil overskrive. */
+export interface Overwrite {
+  /** Ikke-tomme celler, der får nyt indhold eller ryddes. */
+  cells: number;
+  /** Heraf celler med en formel. */
+  formulas: number;
 }
 
 export interface DesignOutcome {
@@ -64,6 +79,11 @@ export interface AgentOptions {
   scripts?: boolean;
   /** Excel: eksport af et ark som .xlsx (tillæg ADR-0012); leveres kun med bridge. Svarer med filens sti. */
   exportSheet?: (data: ExportSheetRequest) => Promise<string>;
+  /**
+   * Excel (#75): kaldes, når markeringen af de ændrede celler er fjernet – af `unmark`, af fortryd
+   * eller fordi en ny udførelse har fjernet den – så knappen til at fjerne den kan skjules.
+   */
+  onUnmarked?: () => void;
 }
 
 export interface ContextOptions {
@@ -101,6 +121,12 @@ export interface HostAdapter {
    * ændre noget. Returnerer tekst til modellen. Kun værter, hvor agenten ikke ser hele dokumentet.
    */
   readForAgent?(reads: { address: string }[], ctx: DocContext): Promise<string>;
+  /**
+   * Advarsel før overskrivning (#75): læser, hvor mange celler med indhold (og heraf formler) hver
+   * handling vil overskrive i dokumentet, som det er nu. Ændrer intet. Ét svar pr. handling, i samme
+   * rækkefølge; undefined for handlinger, der ikke overskriver noget.
+   */
+  overwrites?(actions: AgentAction[], ctx: DocContext): Promise<(Overwrite | undefined)[]>;
   /**
    * Excel (#80): laver en dropdown med modellerne i den markerede celle, så =MIAI.ASK() kan pege på
    * den som model. Listen kommer fra =MIAI.MODELS() på et skjult hjælpeark. Returnerer cellens adresse.
