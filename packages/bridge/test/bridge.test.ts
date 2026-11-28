@@ -119,6 +119,35 @@ describe("politik", () => {
     expect(store.policySource).toBe("machine");
     expect(() => store.update(store.getSettings(), { allowedHosts: ["*"], locked: false })).toThrow(/låst/);
   });
+  it("maskinpolitikkens faste instruktioner (#78) sendes før brugerens og kan ikke fjernes via API'et", async () => {
+    const pf = join(dir, "policy.json");
+    writeFileSync(pf, JSON.stringify({ allowedHosts: ["127.0.0.1"], locked: true, instructions: { word: "ORG: Skriv i du-form." } }));
+    const store = new ConfigStore(dir, pf);
+    const locked = await buildServer({ store, port: PORT });
+    const settings = { ...store.getSettings(), instructions: { word: "BRUGER: Skriv kort.", excel: "BRUGER: Kun til Excel." } };
+    expect((await locked.inject({ method: "PUT", url: "/api/settings", headers: H, payload: { settings } })).statusCode).toBe(200);
+
+    const view = (await locked.inject({ url: "/api/settings", headers: H })).json();
+    expect(view.policySource).toBe("machine");
+    expect(view.policy.instructions.word).toBe("ORG: Skriv i du-form.");
+    expect(view.settings.instructions.word).toBe("BRUGER: Skriv kort.");
+
+    // En klient kan ikke gemme en politik uden organisationens instruktion.
+    const without = await locked.inject({ method: "PUT", url: "/api/settings", headers: H, payload: { settings, policy: { allowedHosts: ["127.0.0.1"] } } });
+    expect(without.statusCode).toBe(400);
+    expect(without.json().error).toContain("låst");
+
+    nextReply = ["hej"];
+    await locked.inject({ method: "POST", url: "/api/tasks/simplify", headers: H, payload: { context: { host: "word", text: "x" } } });
+    const system: string = lastBody.messages[0].content;
+    expect(system).toContain("ORG: Skriv i du-form.");
+    expect(system.indexOf("BRUGER: Skriv kort.")).toBeGreaterThan(system.indexOf("ORG: Skriv i du-form."));
+    expect(system).not.toContain("Kun til Excel");
+  });
+  it("for lange instruktioner afvises ved gem", async () => {
+    const settings = { endpoints: [{ id: "mock", name: "Mock", baseUrl: mockUrl }], activeEndpoint: "mock", instructions: { word: "x".repeat(2_001) } };
+    expect((await app.inject({ method: "PUT", url: "/api/settings", headers: H, payload: { settings } })).statusCode).toBe(400);
+  });
   it("ulæselig maskinpolitik lukker ned (fail closed)", () => {
     const pf = join(dir, "bad.json");
     writeFileSync(pf, "{ ikke json");

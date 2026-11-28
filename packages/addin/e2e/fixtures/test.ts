@@ -37,7 +37,9 @@ export interface Taskpane {
   /** Vælger en fane i task pane. */
   tab(name: "Handlinger" | "Egne opgaver" | "Chat" | "Indstillinger"): Promise<void>;
   /** Åbner en sektion under Indstillinger (accordion), hvis den er lukket. */
-  section(name: "Forbindelse" | "Modeller" | "Svar" | "Privatliv og politik" | "Viden fra mine mapper" | "Excel-funktioner" | "Generelt"): Promise<void>;
+  section(
+    name: "Forbindelse" | "Modeller" | "Svar" | "Privatliv og politik" | "Faste instruktioner" | "Viden fra mine mapper" | "Excel-funktioner" | "Generelt",
+  ): Promise<void>;
   /** Vælger en handling og trykker Kør. */
   run(action: string): Promise<void>;
 }

@@ -216,8 +216,37 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 8. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
 9. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
 10. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
+11. **Faste instruktioner** – det, MIAI altid skal følge i et program; se [Faste instruktioner](#faste-instruktioner).
 
 Klik **Gem** – uden dette virker ændringerne ikke.
+
+### Faste instruktioner
+
+Under **Indstillinger → Faste instruktioner** skriver du det, MIAI altid skal følge i et program. Der er ét felt til hver af Word, Excel, PowerPoint og Outlook. Eksempler: *Formatér tal med tusindtalsseparator* i Excel, eller *Skriv kort og i du-form* i Word.
+
+- Instruktionen sendes med i alt, du laver i det program: handlinger, egne opgaver, chat og agent, og i Excel også `=MIAI.ASK()`. En instruktion til Word bruges ikke i Excel.
+- Hvert felt kan rumme 2.000 tegn. Under feltet står antal tegn og et tokenestimat. Så meget fylder instruktionen i modellens kontekst i hver forespørgsel, så hold den kort, især med en lille model og i `=MIAI.ASK()` over mange celler.
+- Instruktionerne ændrer ikke, hvad en opgave leverer (fx en formel eller en plan), og tekst i dokumentet er stadig data for modellen, ikke instruktioner.
+- Svar i celler med `=MIAI.ASK()` er gemt sammen med instruktionen. Ændrer du den, spørges modellen igen, næste gang cellen beregnes.
+- Instruktioner er vejledning til modellen, ikke en teknisk spærring. En lille model følger dem ikke altid.
+
+**For organisationer:** læg instruktioner, der gælder alle, under `instructions` i politikken. Det er `policy.json` for MIAI App og bridge og `policy` i `miai-config.json` for det hostede add-in (se [Central udrulning](#central-udrulning-i-en-organisation-også-office-på-web)):
+
+```json
+{
+  "allowedHosts": ["llm.firma.local"],
+  "locked": true,
+  "instructions": {
+    "word": "Skriv i du-form, og følg firmaets sprogpolitik.",
+    "excel": "Formatér tal med tusindtalsseparator."
+  }
+}
+```
+
+- Nøglerne er `word`, `excel`, `powerpoint` og `outlook`, med højst 2.000 tegn til hver. Skal en instruktion gælde alle programmer, skrives den under hver nøgle.
+- Organisationens instruktioner står før brugerens egne i prompten og har forrang, hvis de to er uenige. Brugeren kan læse dem under Faste instruktioner, men ikke ændre eller fjerne dem.
+- En for lang instruktion gør politikfilen ugyldig. Så låses politikken til standardens hosts, som ved andre fejl i filen.
+- Forslag, som brugerne selv må ændre, kan i stedet lægges som standardindstillinger under `settings.instructions` i `miai-config.json`.
 
 ## Brug en intern server
 
