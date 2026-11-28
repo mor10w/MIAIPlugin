@@ -145,6 +145,10 @@ export function describeAction(a: AgentAction, t: T, ctx?: DocContext): string {
       return t("agentAct_addChart", { type: t(`agentChart_${a.type}` as const), source: a.source }) + (a.title ? ` “${clip(a.title, 40)}”` : "");
     case "readRange":
       return t("agentAct_readRange", { address: a.address });
+    case "tracePrecedents":
+      return t("agentAct_tracePrecedents", { address: a.address });
+    case "traceDependents":
+      return t("agentAct_traceDependents", { address: a.address });
     case "addPivotTable":
       return t("agentAct_addPivotTable", {
         source: a.source,

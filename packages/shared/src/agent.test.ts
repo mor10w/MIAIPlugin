@@ -6,6 +6,7 @@ import {
   cellCount,
   checkPlan,
   readRequests,
+  isAgentRead,
   isDestructive,
   MAX_AGENT_ACTIONS,
   numberedRows,
@@ -13,6 +14,7 @@ import {
   renderExcelStructure,
   renderParagraphs,
   sheetOfAddress,
+  traceKinds,
   writesCells,
 } from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
@@ -508,6 +510,66 @@ describe("agent i PowerPoint og Excel", () => {
     expect(msgs[0].content).toContain("readRange {address}");
     expect(msgs[1].content).toContain("Cells you asked to read (you have these now – do not ask for them again):\n<document>\nBudget!A1:B2:");
     expect(msgs[1].content).toContain("return ONLY actions that fix what failed");
+  });
+
+  it("formelsporing (#76): tracePrecedents og traceDependents er læsninger – kun i de retninger, værten kan, og højst to ad gangen", () => {
+    const excel = {
+      tables: [],
+      columnFormats: [],
+      activeSheet: "Ark1",
+      sheets: [
+        { name: "Ark1", headers: [] },
+        { name: "Budget", headers: [] },
+      ],
+    };
+    const plan = AgentPlan.parse({
+      summary: "s",
+      actions: [
+        { action: "tracePrecedents", address: "Budget!F12", reason: "" },
+        { action: "traceDependents", address: "B2", reason: "" },
+        { action: "readRange", address: "Budget!A1:B3", reason: "" },
+        { action: "tracePrecedents", address: "Findes!A1", reason: "" },
+        { action: "tracePrecedents", address: "ikke en adresse", reason: "" },
+        { action: "tracePrecedents", address: "C3", reason: "" },
+      ],
+    });
+    const ctx = { host: "excel" as const, text: "", excel };
+    const kinds = (traces?: ("precedents" | "dependents")[]) => readRequests(plan, ctx, traces).map((r) => `${r.action} ${r.address}`);
+    // Uden sporing i værten (før ExcelApi 1.12) udføres kun den almindelige læsning.
+    expect(kinds()).toEqual(["readRange Budget!A1:B3"]);
+    // Kun præcedenter (ExcelApi 1.12): afhængige springes over, og den tredje gyldige sporing er én for mange.
+    expect(kinds(["precedents"])).toEqual(["tracePrecedents Budget!F12", "readRange Budget!A1:B3", "tracePrecedents C3"]);
+    expect(kinds(["precedents", "dependents"])).toEqual(["tracePrecedents Budget!F12", "traceDependents B2", "readRange Budget!A1:B3"]);
+    expect(readRequests(plan, { host: "word", text: "" }, ["precedents"])).toEqual([]);
+    expect(plan.actions.map(isAgentRead)).toEqual([true, true, true, true, true, true]);
+    expect(isAgentRead({ action: "clear", address: "A1", reason: "" })).toBe(false);
+    // En sporing, der står tilbage i planen, kan ikke vælges, og den ændrer aldrig noget.
+    expect(checkPlan(plan, ctx).map((c) => c.problem)).toEqual(["invalid", "invalid", "invalid", "bad-sheet", "bad-address", "invalid"]);
+    expect(plan.actions.some(isDestructive)).toBe(false);
+    expect(plan.actions.some(writesCells)).toBe(false);
+    expect(checkPlan(plan, { host: "word", text: "" })[0].problem).toBe("wrong-host");
+
+    // Vejledningen nævner kun det, værten kan – og kun sammen med læsninger.
+    const guide = (traces: ("precedents" | "dependents")[], reads = true) => agentToolGuide("excel", { reads, traces });
+    expect(guide(["precedents", "dependents"])).toContain("- tracePrecedents {address}");
+    expect(guide(["precedents", "dependents"])).toContain("- traceDependents {address}");
+    expect(guide(["precedents", "dependents"])).toContain("at most 2 traces at a time");
+    expect(guide(["precedents"])).not.toContain("traceDependents");
+    expect(guide([])).not.toContain("Tracing is reading");
+    expect(guide(["precedents"], false)).not.toContain("tracePrecedents");
+    expect(agentToolGuide("word", { reads: true, traces: ["precedents"] })).not.toContain("tracePrecedents");
+    expect(traceKinds("precedents,dependents")).toEqual(["precedents", "dependents"]);
+    expect(traceKinds("precedents,andet")).toEqual(["precedents"]);
+    expect(traceKinds(undefined)).toEqual([]);
+
+    const msgs = agent.buildMessages(
+      TaskRequest.parse({
+        context: { host: "excel", text: "", address: "Ark1!B3" },
+        params: { prompt: "Ret fejlen", agentReads: "on", agentTrace: "precedents" },
+      }),
+    );
+    expect(msgs[0].content).toContain("- tracePrecedents {address}");
+    expect(msgs[0].content).not.toContain("- traceDependents {address}");
   });
 
   it("checkPlan (Excel #25): pivottabellens felter og datavalideringens regel", () => {

@@ -119,6 +119,32 @@ describe("executeTask (direkte tilstand)", () => {
     expect(() => validateInput(getTask("explain-formula")!, TaskRequest.parse({ context: { host: "excel" } }))).toThrow(InputError);
   });
 
+  it("formelsporing (#76): Find fejlkilden og Forklar formel får grafen som data, ikke som instruktioner", () => {
+    const trace = "Precedents of Ark1!B3: …\nL0 Ark1!B3: =B2/B1 → #DIV/0! [error; ORIGIN: the error starts in this cell]\nL1 Ark1!B1: (empty)";
+    const context = { host: "excel" as const, address: "Ark1!B3", formula: "=B2/B1", trace };
+    const find = getTask("find-error")!;
+    expect(find.hosts).toEqual(["excel"]);
+    expect(() => validateInput(find, TaskRequest.parse({ context: { host: "excel" } }))).toThrow(InputError);
+    const [sys, user] = find.buildMessages(TaskRequest.parse({ context, params: { language: "Danish", prompt: " Burde være 12 " } }));
+    expect(sys.content).toContain("A cell marked ORIGIN is where the add-in found that the error starts");
+    expect(sys.content).toContain("Write every cell address with its sheet name exactly as in the list");
+    expect(sys.content).toContain("Answer in Danish.");
+    expect(user.content).toContain("Cell: Ark1!B3\n\nFormula: =B2/B1\n\nThe user's note: Burde være 12");
+    expect(user.content).toContain(`The cells the formula is calculated from:\n<document>\n${trace}\n</document>`);
+    // Uden graf (motoren kaldt uden om add-in'et) siger prompten, at kun formlen kendes.
+    const [, bare] = find.buildMessages(TaskRequest.parse({ context: { ...context, trace: undefined } }));
+    expect(bare.content).toContain("The precedents could not be traced");
+
+    const explain = getTask("explain-formula")!;
+    const [esys, euser] = explain.buildMessages(TaskRequest.parse({ context }));
+    expect(esys.content).toContain("Also say where the numbers come from, using the traced cells.");
+    expect(euser.content).toContain(`The cells the formula is calculated from:\n<document>\n${trace}\n</document>`);
+    // Uden graf er prompten som før.
+    const [psys, puser] = explain.buildMessages(TaskRequest.parse({ context: { ...context, trace: undefined } }));
+    expect(psys.content).not.toContain("traced");
+    expect(puser.content).toBe("Cell: Ark1!B3\n\nFormula: =B2/B1");
+  });
+
   it("afbryder ved gentagelsessløjfe og markerer svaret", async () => {
     const ev = await run("chat", { context: { host: "word" }, params: { prompt: "LOOPTEST" } });
     const text = ev

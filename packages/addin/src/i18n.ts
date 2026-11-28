@@ -309,6 +309,11 @@ const da = {
   agentAct_comment: "Kommentar på “{find}”: {text}",
   agentAct_setValues: "Skriv {n} celler fra {address}",
   agentAct_setFormula: "Formel i {address}: {formula}",
+  agentAct_tracePrecedents: "Spor formlen i {address}",
+  agentAct_traceDependents: "Find de celler, der bruger {address}",
+  traceUnsupported:
+    "Denne Excel kan ikke oplyse, hvilke celler en formel regnes ud fra, så MIAI kan ikke spore fejlen. Det kræver Excel 2021 eller nyere eller Microsoft 365 (ExcelApi 1.12). Brug Forklar formel i stedet, eller spørg i chatten med cellen markeret.",
+  traceFailed: "Excel kunne ikke spore, hvilke celler formlen regnes ud fra, så fejlkilden kan ikke findes. Prøv igen, eller brug Forklar formel.",
   agentAct_clear: "Ryd {address}",
   agentAct_deleteRows: "Slet rækkerne {address}",
   agentAct_deleteEmptyRows: "Slet tomme rækker i {target}",
@@ -851,6 +856,12 @@ const en: Dict = {
   agentAct_comment: "Comment on “{find}”: {text}",
   agentAct_setValues: "Write {n} cells from {address}",
   agentAct_setFormula: "Formula in {address}: {formula}",
+  agentAct_tracePrecedents: "Trace the formula in {address}",
+  agentAct_traceDependents: "Find the cells that use {address}",
+  traceUnsupported:
+    "This Excel cannot tell which cells a formula is calculated from, so MIAI cannot trace the error. That requires Excel 2021 or later or Microsoft 365 (ExcelApi 1.12). Use Explain formula instead, or ask in the chat with the cell selected.",
+  traceFailed:
+    "Excel could not trace which cells the formula is calculated from, so the source of the error cannot be found. Try again, or use Explain formula.",
   agentAct_clear: "Clear {address}",
   agentAct_deleteRows: "Delete the rows {address}",
   agentAct_deleteEmptyRows: "Delete empty rows in {target}",

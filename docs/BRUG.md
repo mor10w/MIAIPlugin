@@ -307,7 +307,7 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 | Præsentationsdisposition | ✅ | | ✅ |
 | Tekst til slides | | | ✅ |
 | Lav diagram | ✅ | | ✅ |
-| Forklar formel · Lav formel ud fra beskrivelse | | ✅ | |
+| Forklar formel · Find fejlkilden · Lav formel ud fra beskrivelse | | ✅ | |
 | Analyser data (tabel) | | ✅ | |
 | Chat med dokumentet | ✅ | ✅ | ✅ |
 
@@ -324,7 +324,14 @@ Almindeligt for alle opgaver: markér tekst (hvis det kræves) → klik en opgav
 
 ### Excel
 
-- **Forklar formel** – klik en celle med formel. Forklaringen vises i task pane og kan indsættes **som kommentar** på cellen.
+- **Forklar formel** – klik en celle med formel. Forklaringen vises i task pane og kan indsættes **som kommentar** på cellen. I Excel 2021 og nyere og Microsoft 365 får modellen også de celler med, formlen regnes ud fra (de nærmeste to led, højst 40 celler), så forklaringen kan sige, hvor tallene kommer fra – også når de står på et andet ark.
+- **Find fejlkilden** – klik en celle, der viser en fejl som `#DIV/0!`, `#REF!` eller `#N/A`, eller et resultat, du ikke stoler på, og tryk **Kør**. MIAI sporer formlen tilbage gennem de celler, den regnes ud fra, også på andre ark, og modellen peger på den celle, hvor fejlen opstår, forklarer hvorfor og foreslår en rettelse.
+  - **Sporingen sker i MIAI, ikke i modellen.** MIAI spørger Excel, hvilke celler hver formel bruger, og følger kæden led for led. Modellen får kun en kort liste med adresse, formel, værdi og fejl for hver celle – ikke hele arket – og listen markerer den celle, hvor fejlen starter: den celle, der selv viser en fejl, mens ingen af de celler, dens formel bruger, gør det. Sporingen læser kun; intet ændres i projektmappen.
+  - **Adresserne i svaret kan klikkes** (fx `Beregning!B5`): MIAI skifter til arket og markerer cellen.
+  - **Viser cellen en fejl,** følges kun de celler, der også viser en fejl, og så det, kildens formel bruger. En celle uden fejl kan ikke være der, fejlen kommer fra.
+  - **Viser cellen ingen fejl,** følges alle formler, og modellen gennemgår, hvordan tallet bliver til. Skriv gerne i feltet *Hvad er galt?*, hvad du havde forventet.
+  - **Loft:** højst 200 celler og 25 led. Af et stort område (fx `SUM(B2:B500)`) vises fejlcellerne og de første 12 andre, og resten tælles. Er noget udeladt, får modellen det at vide og skal sige det i svaret; vælg så den sidste celle i kæden og kør igen.
+  - **Krav:** Excel 2021 eller nyere eller Microsoft 365 (ExcelApi 1.12). I ældre Excel forklarer MIAI, at Excel ikke kan oplyse, hvilke celler en formel regnes ud fra; brug **Forklar formel** i stedet. Navngivne områder og tabelhenvisninger følges, i det omfang Excel selv oplyser dem; henvisninger til andre projektmapper følges ikke.
 - **Lav formel ud fra beskrivelse** – skriv fx "summen af kolonne B hvor kolonne A er 'Jylland'". Modellen foreslår en formel (engelske funktionsnavne, moderne funktioner som XLOOKUP/FILTER prioriteres), den skrives i cellen og **valideres** – fejl som `#NAME?` meldes. Klik **Fortryd** for at gendanne den tidligere formel (Ctrl+Z fortryder ikke altid add-in-ændringer).
 - **Oversæt** – markér et område; oversættelsen skrives tilbage i cellerne (antal rækker/kolonner bevares, tal og datoer roterer). Konteksten er max. 200 rækker × 30 kolonner.
 - **Analyser data** – markér en tabel (eller brug hele arket). Modellen beskriver, hvad data viser, angiver nøgletal ud fra kolonnens statistikker, og foreslår konkret: en pivot-tabellayout (rækker/kolonner/værdier), diagramtype med præcist område og evt. formler, der verificerer nøgletallene. Resultatet kan indsættes **som kommentar** på det markerede område.
@@ -433,6 +440,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
      - **Flere ark:** agenten kender alle ark i projektmappen (navn, brugt område og overskrifter) og kan skrive på et andet ark, oprette et nyt ark og omdøbe et ark, fx *"lav et nyt ark med den samlede omsætning"*. Fortryd dækker alle berørte ark. Værdierne ser den kun for markeringen.
    - PowerPoint: erstat tekst, skriv ny tekst i en figur, opret et slide fra præsentationens layouts, slet og flyt slides.
    - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
+   - På samme måde kan agenten **spore en formel**, før den planlægger: hvilke celler en celle regnes ud fra (fx *"B3 viser #DIV/0! – find fejlen og ret den"*), og hvilke celler der bruger en celle (fx *"hvad går i stykker, hvis jeg sletter B2?"*). MIAI følger kæden i Excel, også på tværs af ark, og agenten får en kort liste med adresse, formel, værdi og fejl – højst 200 celler, og højst to sporinger ad gangen. Det ændrer intet og kræver ingen godkendelse. Præcedenter kræver Excel 2021 eller nyere eller Microsoft 365 (ExcelApi 1.12), afhængige ExcelApi 1.13; i ældre Excel får agenten ikke tilbudt sporingen og læser områder i stedet. Samme sporing bruges af **Find fejlkilden** under Handlinger.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført. **Vis i dokumentet** under en handling markerer det sted, den gælder (celler, tabel, afsnit, tekst eller slide), uden at ændre noget.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
    - I Excel står der ved hver handling, der skriver i celler med indhold, hvor meget den overskriver, fx *Overskriver 48 celler, heraf 12 formler* (ved ryd: *Rydder 6 celler med indhold*). MIAI læser arket for at tælle og ændrer intet. Celler, der får præcis det, de har i forvejen, tæller ikke med, og en handling uden advarsel overskriver ikke noget. Tallene gælder arket, som det er, når planen vises.

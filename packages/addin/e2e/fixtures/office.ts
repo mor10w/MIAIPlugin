@@ -53,12 +53,18 @@ export interface FakeOfficeOptions {
     formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
     /** Excel-tabeller, fx [{ name: "Salg", range: "A1:C4" }]. */
     tables?: { name: string; range: string }[];
+    /**
+     * Formlernes resultater (#76), fx { B5: "#DIV/0!", B4: 0 }. Simuleringen regner ikke formler
+     * ud: uden et resultat er en formelcelles værdi selve formlen, som hidtil.
+     */
+    results?: Record<string, string | number>;
     /** Flere ark i projektmappen (#21); arket ovenfor er det aktive. */
     sheets?: {
       sheet: string;
       values?: (string | number)[][];
       formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
       tables?: { name: string; range: string }[];
+      results?: Record<string, string | number>;
     }[];
   };
   displayLanguage?: string;
@@ -751,6 +757,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       values?: (string | number)[][];
       formats?: Record<string, { numberFormat?: string; bold?: boolean; fill?: string }>;
       tables?: { name: string; range: string }[];
+      results?: Record<string, string | number>;
     }
     interface Built {
       name: () => string;
@@ -758,9 +765,160 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       state: () => unknown;
       used: () => unknown;
       tableObjs: () => unknown[];
+      /** Det, der står i cellen (formlen for en formelcelle), og arkets udstrækning [rækker, kolonner] – til formelsporing (#76). */
+      cellAt: (r: number, c: number) => unknown;
+      extent: () => [number, number];
     }
     const built: Built[] = [];
     let tableSeq = 0;
+
+    // --- Formelsporing (#76) --------------------------------------------------
+    // Range.getDirectPrecedents (ExcelApi 1.12), getDirectDependents (1.13), getPrecedents (1.14) og
+    // getDependents (1.15). Afhængighederne udledes af formlernes cellehenvisninger (A1-form med
+    // enkelt-bogstavs kolonner, evt. med arknavn; tekst i anførselstegn springes over).
+    // Som i Excel:
+    //  - svaret er en WorkbookRangeAreas med én RangeAreas pr. ark, hvis `address` rummer arknavnet
+    //    for hvert område ("Data!B2:B13,Data!D4");
+    //  - uden præcedenter eller afhængige kastes ItemNotFound – først ved context.sync(), og så er
+    //    intet af det, der blev bedt om i samme rundtur, indlæst.
+    // Den præcise form af adresserne og opdelingen i områder skal bekræftes i rigtig Excel (UDVIKLING.md).
+    type Box = { sheet: string; r0: number; c0: number; r1: number; c1: number };
+    const ALL_ROWS = 1_048_576;
+    const quoteSheet = (name: string) => (/^[\p{L}\p{N}_.]+$/u.test(name) ? name : `'${name.replace(/'/g, "''")}'`);
+    const boxAddr = (b: Box) => {
+      const colOf = (i: number) => String.fromCharCode(65 + i);
+      const a =
+        b.r0 === 0 && b.r1 === ALL_ROWS - 1
+          ? `${colOf(b.c0)}:${colOf(b.c1)}`
+          : `${colOf(b.c0)}${b.r0 + 1}${b.r0 === b.r1 && b.c0 === b.c1 ? "" : `:${colOf(b.c1)}${b.r1 + 1}`}`;
+      return `${quoteSheet(b.sheet)}!${a}`;
+    };
+    const REF_RE =
+      /(?<![\p{L}\p{N}_.$!'])(?:('(?:[^']|'')+'|[\p{L}\p{N}_.]+)!)?(?:\$?([A-Z])\$?(\d+)(?::\$?([A-Z])\$?(\d+))?|\$?([A-Z]):\$?([A-Z]))(?![\p{L}\p{N}_(!])/gu;
+    const refsOf = (formula: unknown, own: string): Box[] => {
+      if (typeof formula !== "string" || !formula.startsWith("=")) return [];
+      const out: Box[] = [];
+      for (const m of formula.replace(/"[^"]*"/g, '""').matchAll(REF_RE)) {
+        const name = m[1] ? m[1].replace(/^'(.*)'$/, "$1").replace(/''/g, "'") : own;
+        const sheet = built.find((b) => b.name().toLowerCase() === name.toLowerCase())?.name();
+        if (!sheet) continue; // et ark, der ikke findes: i Excel står der #REF! i formlen
+        const n = (x: string) => x.charCodeAt(0) - 65;
+        if (m[6]) out.push({ sheet, r0: 0, r1: ALL_ROWS - 1, c0: Math.min(n(m[6]), n(m[7])), c1: Math.max(n(m[6]), n(m[7])) });
+        else {
+          const [ra, rb] = [Number(m[3]) - 1, Number(m[5] ?? m[3]) - 1];
+          const [ca, cb] = [n(m[2]), n(m[4] ?? m[2])];
+          out.push({ sheet, r0: Math.min(ra, rb), r1: Math.max(ra, rb), c0: Math.min(ca, cb), c1: Math.max(ca, cb) });
+        }
+      }
+      return out;
+    };
+    const sameBox = (a: Box, b: Box) => a.sheet === b.sheet && a.r0 === b.r0 && a.c0 === b.c0 && a.r1 === b.r1 && a.c1 === b.c1;
+    const addBox = (list: Box[], b: Box) => {
+      if (!list.some((x) => sameBox(x, b))) list.push(b);
+    };
+    /** Formelcellerne i et område (beskåret til arkets udstrækning). */
+    const formulaCells = (b: Box): { r: number; c: number; f: string }[] => {
+      const s = built.find((x) => x.name() === b.sheet);
+      if (!s) return [];
+      const [rows, cols] = s.extent();
+      const out: { r: number; c: number; f: string }[] = [];
+      for (let r = b.r0; r <= Math.min(b.r1, rows - 1); r++)
+        for (let c = b.c0; c <= Math.min(b.c1, cols - 1); c++) {
+          const f = s.cellAt(r, c);
+          if (typeof f === "string" && f.startsWith("=")) out.push({ r, c, f });
+        }
+      return out;
+    };
+    const directPrecedents = (b: Box): Box[] => {
+      const out: Box[] = [];
+      for (const cell of formulaCells(b)) for (const ref of refsOf(cell.f, b.sheet)) addBox(out, ref);
+      return out;
+    };
+    /** Formelceller, der henviser til området; celler under hinanden i samme kolonne bliver ét område. */
+    const directDependents = (b: Box): Box[] => {
+      const out: Box[] = [];
+      for (const s of built) {
+        const [rows, cols] = s.extent();
+        for (let c = 0; c < cols; c++) {
+          let run: Box | undefined;
+          for (let r = 0; r <= rows; r++) {
+            const hit =
+              r < rows && refsOf(s.cellAt(r, c), s.name()).some((x) => x.sheet === b.sheet && x.r0 <= b.r1 && b.r0 <= x.r1 && x.c0 <= b.c1 && b.c0 <= x.c1);
+            if (hit && run) run.r1 = r;
+            else if (hit) run = { sheet: s.name(), r0: r, r1: r, c0: c, c1: c };
+            else if (run) {
+              out.push(run);
+              run = undefined;
+            }
+          }
+        }
+      }
+      return out;
+    };
+    /** Hele grafen: alt, der nås fra området gennem de direkte forbindelser. */
+    const closure = (b: Box, step: (x: Box) => Box[]): Box[] => {
+      const out: Box[] = [];
+      const todo = [b];
+      while (todo.length) {
+        for (const x of step(todo.pop()!)) {
+          if (out.some((y) => sameBox(x, y))) continue;
+          out.push(x);
+          todo.push(x);
+        }
+      }
+      return out;
+    };
+    /** Det, der afgøres ved næste context.sync(): fejler ét kald, fejler hele rundturen. */
+    const pendingTrace: { fail?: Error; done: () => void }[] = [];
+    const syncTrace = () => {
+      const batch = pendingTrace.splice(0);
+      const bad = batch.find((p) => p.fail);
+      if (bad) throw bad.fail;
+      for (const p of batch) p.done();
+    };
+    const traceCall = (method: "getDirectPrecedents" | "getDirectDependents" | "getPrecedents" | "getDependents", b: Box): unknown => {
+      const need = { getDirectPrecedents: "1.12", getDirectDependents: "1.13", getPrecedents: "1.14", getDependents: "1.15" }[method];
+      if (!versionAtLeast(o.apiSets?.ExcelApi, need)) throw new Error(`Simuleret Office.js: ${method} kræver ExcelApi ${need}`);
+      record({ kind: "trace", method, address: boxAddr(b) });
+      const boxes =
+        method === "getDirectPrecedents"
+          ? directPrecedents(b)
+          : method === "getDirectDependents"
+            ? directDependents(b)
+            : closure(b, method === "getPrecedents" ? directPrecedents : directDependents);
+      const sheets = [...new Set(boxes.map((x) => x.sheet))];
+      let loaded = false;
+      pendingTrace.push({
+        fail: boxes.length ? undefined : Object.assign(new Error("ItemNotFound: The requested resource doesn't exist."), { code: "ItemNotFound" }),
+        done: () => (loaded = true),
+      });
+      const ready = (what: string) => {
+        if (!loaded) throw new Error(`PropertyNotLoaded: ${what} er ikke indlæst – kald context.sync() først`);
+      };
+      return strict("Excel.WorkbookRangeAreas", {
+        load() {},
+        get addresses() {
+          ready("WorkbookRangeAreas.addresses");
+          return boxes.map(boxAddr);
+        },
+        areas: strict("Excel.RangeAreasCollection", {
+          load() {},
+          get items() {
+            ready("WorkbookRangeAreas.areas.items");
+            return sheets.map((s) =>
+              strict("Excel.RangeAreas", {
+                load() {},
+                address: boxes
+                  .filter((x) => x.sheet === s)
+                  .map(boxAddr)
+                  .join(","),
+              }),
+            );
+          },
+        }),
+      });
+    };
+
     const buildSheet = (def: SheetDef): Built => {
       let sheet = def.sheet;
       const grid: unknown[][] = (def.values ?? [[""]]).map((r) => [...r]);
@@ -831,6 +989,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       /** "B2" eller "B2:D4" → [r0, c0, rows, cols] (kun enkelt-bogstavs kolonner i simuleringen). */
       const parseA = (a: string): [number, number, number, number] => {
         const [from, to = from] = a.replace(/^.*!/, "").toUpperCase().split(":");
+        // Hele kolonner ("B:B", #76): alle arkets rækker.
+        if (/^[A-Z]$/.test(from) && /^[A-Z]$/.test(to)) return [0, from.charCodeAt(0) - 65, ALL_ROWS, to.charCodeAt(0) - from.charCodeAt(0) + 1];
         const f = cellOf(from);
         const t = cellOf(to);
         return [f.r, f.c, t.r - f.r + 1, t.c - f.c + 1];
@@ -840,12 +1000,28 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) setFmt(r0 + r, c0 + c, f);
       }
       const addr = (r0: number, c0: number, rows: number, cols: number) =>
-        `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
+        rows === ALL_ROWS
+          ? `${sheet}!${col(c0)}:${col(c0 + cols - 1)}`
+          : `${sheet}!${col(c0)}${r0 + 1}${rows * cols > 1 ? `:${col(c0 + cols - 1)}${r0 + rows}` : ""}`;
       const width = () => Math.max(1, ...grid.map((r) => r.length));
+      /** Formlernes resultater (#76). En celle, der skrives i, mister sit resultat. */
+      const results = new Map<string, unknown>(
+        Object.entries(def.results ?? {}).map(([a, v]) => {
+          const at = cellOf(a.toUpperCase());
+          return [key(at.r, at.c), v];
+        }),
+      );
       const put = (r: number, c: number, v: unknown) => {
         while (grid.length <= r) grid.push([]);
         grid[r][c] = v;
+        results.delete(key(r, c));
       };
+      /** Cellens værdi: formlens resultat, når det er givet med arket; ellers det, der står i cellen. */
+      const valueAt = (r: number, c: number): unknown => {
+        const v = grid[r]?.[c] ?? "";
+        return typeof v === "string" && v.startsWith("=") && results.has(key(r, c)) ? results.get(key(r, c)) : v;
+      };
+      const EXCEL_ERROR = /^#(?:DIV\/0!|N\/A|NAME\?|NULL!|NUM!|REF!|VALUE!|SPILL!|CALC!)$/;
       const state = () => ({
         values: grid.map((r) => Array.from({ length: width() }, (_, c) => r[c] ?? "")),
         formats: Object.fromEntries(
@@ -873,7 +1049,12 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
 
       function rng(r0: number, c0: number, rows: number, cols: number): unknown {
         // Udfyldt med "" uden for arkets data, som i Excel.
-        const slice = () => Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => grid[r0 + r]?.[c0 + c] ?? ""));
+        const cellsOf = (at: (r: number, c: number) => unknown) => {
+          // En hel kolonne må ikke læses celle for celle (#76): adapteren skal holde sig til den brugte del.
+          if (rows * cols > 100_000) throw new Error(`Simuleret Office.js: ${addr(r0, c0, rows, cols)} er for stort til at blive læst`);
+          return Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => at(r0 + r, c0 + c)));
+        };
+        const slice = () => cellsOf((r, c) => grid[r]?.[c] ?? "");
         const each = (fn: (r: number, c: number) => void) => {
           for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) fn(r0 + r, c0 + c);
         };
@@ -891,6 +1072,22 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           getOffsetRange: (dr: number, dc: number) => rng(r0 + dr, c0 + dc, rows, cols),
           getRow: (i: number) => rng(r0 + i, c0, 1, cols),
           getColumn: (i: number) => rng(r0, c0 + i, rows, 1),
+          // Den brugte del af området (ExcelApi 1.4): det mindste område, der rummer alle celler med indhold.
+          getUsedRangeOrNullObject: (_valuesOnly?: boolean) => {
+            let box: [number, number, number, number] | undefined;
+            for (let r = r0; r < Math.min(r0 + rows, grid.length); r++)
+              for (let c = c0; c < c0 + cols; c++) {
+                const v = grid[r]?.[c];
+                if (v === "" || v === undefined || v === null) continue;
+                box = box ? [Math.min(box[0], r), Math.min(box[1], c), Math.max(box[2], r), Math.max(box[3], c)] : [r, c, r, c];
+              }
+            return box ? rng(box[0], box[1], box[2] - box[0] + 1, box[3] - box[1] + 1) : strict("Excel.Range(null)", { isNullObject: true, load() {} });
+          },
+          // Formelsporing (#76): se traceCall.
+          getDirectPrecedents: () => traceCall("getDirectPrecedents", { sheet, r0, c0, r1: r0 + rows - 1, c1: c0 + cols - 1 }),
+          getDirectDependents: () => traceCall("getDirectDependents", { sheet, r0, c0, r1: r0 + rows - 1, c1: c0 + cols - 1 }),
+          getPrecedents: () => traceCall("getPrecedents", { sheet, r0, c0, r1: r0 + rows - 1, c1: c0 + cols - 1 }),
+          getDependents: () => traceCall("getDependents", { sheet, r0, c0, r1: r0 + rows - 1, c1: c0 + cols - 1 }),
           select() {
             record({ kind: "select", address: addr(r0, c0, rows, cols) });
           },
@@ -990,7 +1187,7 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           },
           worksheet: undefined as unknown,
           get values() {
-            return slice();
+            return cellsOf(valueAt);
           },
           set values(v: unknown[][]) {
             record({ kind: "values", address: addr(r0, c0, rows, cols), values: v });
@@ -1040,7 +1237,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
             else each((r, c) => put(r, c, ""));
           },
           get valueTypes() {
-            return slice().map((r) => r.map((x) => (typeof x === "number" ? "Double" : "String")));
+            // Som Excel.RangeValueType: en fejlværdi er "Error" og en tom celle "Empty".
+            return cellsOf(valueAt).map((r) =>
+              r.map((x) => (typeof x === "number" ? "Double" : x === "" ? "Empty" : typeof x === "string" && EXCEL_ERROR.test(x) ? "Error" : "String")),
+            );
           },
         };
         target.worksheet = worksheet;
@@ -1294,7 +1494,15 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
           },
         }),
       });
-      const self: Built = { name: () => sheet, worksheet, state, used, tableObjs: () => tables.map(tableObj) };
+      const self: Built = {
+        name: () => sheet,
+        worksheet,
+        state,
+        used,
+        tableObjs: () => tables.map(tableObj),
+        cellAt: (r, c) => grid[r]?.[c] ?? "",
+        extent: () => [grid.length, width()],
+      };
       return self;
     };
     /** Brugeren markerer et andet område på det aktive ark (ellers er markeringen hele det brugte område). */
@@ -1303,7 +1511,9 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       selectedRange = address;
       selectionChanged();
     };
-    built.push(buildSheet({ sheet: o.excel?.sheet ?? "Ark1", values: o.excel?.values, formats: o.excel?.formats, tables: o.excel?.tables }));
+    built.push(
+      buildSheet({ sheet: o.excel?.sheet ?? "Ark1", values: o.excel?.values, formats: o.excel?.formats, tables: o.excel?.tables, results: o.excel?.results }),
+    );
     for (const d of o.excel?.sheets ?? []) built.push(buildSheet(d));
     // Det første ark er det aktive (markeringen); __miai.sheet() viser det, __miai.sheets() alle ark.
     (w.__miai as Record<string, unknown>).sheet = () => built[0].state();
@@ -1387,6 +1597,8 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
             strict("Excel.RequestContext", {
               workbook,
               sync: async () => {
+                // Sporing (#76): et kald uden præcedenter eller afhængige fejler her, ikke da det blev lavet.
+                syncTrace();
                 if (!options?.mergeUndoGroup) commit();
               },
             }),

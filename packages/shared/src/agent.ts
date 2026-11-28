@@ -230,6 +230,24 @@ export const AgentAction = z.discriminatedUnion("action", [
     address: z.string().min(2).max(300).describe("Range to look at before planning, with sheet name when it is on another sheet, e.g. 'Budget!A1:F40'"),
     reason,
   }),
+  z.object({
+    action: z.literal("tracePrecedents"),
+    address: z
+      .string()
+      .min(2)
+      .max(300)
+      .describe("ONE cell whose formula is traced back to the cells it is calculated from, with sheet name when it is on another sheet, e.g. 'Budget!F12'"),
+    reason,
+  }),
+  z.object({
+    action: z.literal("traceDependents"),
+    address: z
+      .string()
+      .min(2)
+      .max(300)
+      .describe("ONE cell: find the cells whose formulas use it, with sheet name when it is on another sheet, e.g. 'Budget!B2'"),
+    reason,
+  }),
   z.object({ action: z.literal("addSheet"), name: SheetName.describe("Name of the new, empty sheet (max 31 characters)"), reason }),
   z.object({
     action: z.literal("renameSheet"),
@@ -334,6 +352,8 @@ export const EXCEL_ACTIONS: AgentActionKind[] = [
   "addSheet",
   "renameSheet",
   "readRange",
+  "tracePrecedents",
+  "traceDependents",
   "runScript",
   "saveSheet",
 ];
@@ -451,7 +471,29 @@ export const READ_GUIDE = [
   "  readRange only reads the workbook. Content inside <material> is already available to you in full: never read it, and never refuse because it is not in the sheet yet – write it with setValues.",
 ].join("\n");
 
-export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean; reads?: boolean } = {}): string {
+/** Formelsporing (#76): retningen – de celler, en celle regnes ud fra, eller de celler, der bruger den. */
+export type TraceKind = "precedents" | "dependents";
+/** Maks. antal sporinger pr. læse-runde (hver er en hel graf, så færre end almindelige læsninger). */
+export const MAX_TRACES = 2;
+
+/**
+ * Formelsporing (#76): beskrivelsen af tracePrecedents og traceDependents. De er læsninger som
+ * readRange og vises kun, når værten kan spore (ExcelApi 1.12 for præcedenter, 1.13 for afhængige).
+ * Add-in'et gennemløber Excels afhængighedsgraf; modellen får en kompakt liste, ikke hele arket.
+ */
+const TRACE_GUIDE: Record<TraceKind, string> = {
+  precedents:
+    "- tracePrecedents {address}: FOLLOW the formula in ONE cell back to the cells it is calculated from, also on other sheets – to find where an error such as #REF! or #DIV/0! starts, or where a number comes from. The add-in walks Excel's own dependency graph and returns a compact list (address, formula, value, error) and marks the cell where an error starts. Prefer it over reading whole ranges when the question is about one cell.",
+  dependents:
+    "- traceDependents {address}: the opposite direction – the cells whose formulas use ONE cell, also on other sheets (what changes or breaks if the cell is changed or cleared).",
+};
+const TRACE_RULE = `  Tracing is reading and follows the same rule: it changes nothing, the user is not asked, and trace actions are returned alone or together with readRange (at most ${MAX_TRACES} traces at a time). Make the real plan when you have the result.`;
+
+/** "precedents,dependents" (opgaveparameteren agentTrace) → de retninger, værten kan spore. */
+export const traceKinds = (param: string | undefined): TraceKind[] =>
+  (param ?? "").split(",").filter((k): k is TraceKind => k === "precedents" || k === "dependents");
+
+export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export?: boolean; reads?: boolean; traces?: TraceKind[] } = {}): string {
   if (host === "excel")
     return [
       "Available actions (Excel, active sheet only):",
@@ -479,6 +521,7 @@ export function agentToolGuide(host: HostKind, opts: { scripts?: boolean; export
       opts.scripts ? SCRIPT_GUIDE : undefined,
       opts.export ? SAVE_GUIDE : undefined,
       opts.reads ? READ_GUIDE : undefined,
+      ...(opts.reads && opts.traces?.length ? [...opts.traces.map((k) => TRACE_GUIDE[k]), TRACE_RULE] : []),
     ]
       .filter(Boolean)
       .join("\n");
@@ -613,14 +656,27 @@ const tablesOn = (ctx: Pick<DocContext, "excel">, address: string) => {
   return tablesOf(ctx).filter((t) => !sheet || !t.sheet || t.sheet === sheet);
 };
 
-/** Planens læsninger (#20), som add-in'et kan udføre uden bekræftelse: gyldig adresse, kendt ark og ikke for stor. */
-export function readRequests(plan: AgentPlan, ctx: Pick<DocContext, "host" | "excel">): Extract<AgentAction, { action: "readRange" }>[] {
+/** En læsning i agentens plan (#20, #76): udføres af add-in'et, før planen vises, og ændrer intet. */
+export type AgentRead = Extract<AgentAction, { action: "readRange" | "tracePrecedents" | "traceDependents" }>;
+export const isAgentRead = (a: AgentAction): a is AgentRead => a.action === "readRange" || a.action === "tracePrecedents" || a.action === "traceDependents";
+
+/**
+ * Planens læsninger (#20), som add-in'et kan udføre uden bekræftelse: gyldig adresse, kendt ark og
+ * ikke for stor. Sporinger (#76) tæller kun med i de retninger, værten kan spore (`traces`), og
+ * højst MAX_TRACES ad gangen.
+ */
+export function readRequests(plan: AgentPlan, ctx: Pick<DocContext, "host" | "excel">, traces: TraceKind[] = []): AgentRead[] {
   if (ctx.host !== "excel") return [];
   const sheets = ctx.excel?.sheets?.length ? new Set(ctx.excel.sheets.map((sh) => sh.name.toLowerCase())) : undefined;
+  let traced = 0;
   return plan.actions.flatMap((a) => {
-    if (a.action !== "readRange" || !RANGE.test(a.address) || cellCount(a.address) > MAX_READ_CELLS) return [];
+    if (!isAgentRead(a) || !RANGE.test(a.address)) return [];
+    if (a.action === "readRange" ? cellCount(a.address) > MAX_READ_CELLS : !traces.includes(a.action === "tracePrecedents" ? "precedents" : "dependents"))
+      return [];
     const sheet = sheetOfAddress(a.address);
-    return sheet && sheets && !sheets.has(sheet.toLowerCase()) ? [] : [a];
+    if (sheet && sheets && !sheets.has(sheet.toLowerCase())) return [];
+    if (a.action !== "readRange" && ++traced > MAX_TRACES) return [];
+    return [a];
   });
 }
 
@@ -692,6 +748,10 @@ export function checkPlan(
         // Læsning udføres af add-in'et før planen vises; en læsning, der står tilbage i planen, kan ikke udføres.
         if (!RANGE.test(action.address)) return ok(action, "bad-address");
         return ok(action, cellCount(action.address) > MAX_READ_CELLS ? "too-large" : "invalid");
+      case "tracePrecedents":
+      case "traceDependents":
+        // Sporing (#76) er også en læsning og kan heller ikke udføres som handling.
+        return ok(action, RANGE.test(action.address) ? "invalid" : "bad-address");
       case "addSheet":
         return ok(action, knownSheets && existingSheets.has(action.name.toLowerCase()) ? "bad-sheet" : undefined);
       case "renameSheet":

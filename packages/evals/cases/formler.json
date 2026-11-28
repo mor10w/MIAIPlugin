@@ -140,6 +140,93 @@
     "rubric": "Explains it sums D where B is North and C > 1000; correct and concise."
   },
   {
+    "id": "trace-div0-da",
+    "task": "find-error",
+    "lang": "da",
+    "feature": "#76",
+    "note": "Find fejlkilden: en #DIV/0!-kæde over to ark. Grafen er sporet af add-in'et; svaret skal pege på kilden (Beregning!B5) med arknavn, så adressen bliver klikbar – ikke på de celler, der blot sender fejlen videre.",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Resultat!B3",
+      "formula": "=B2+1",
+      "trace": "Precedents of Resultat!B3: the cells its formula is calculated from, traced by the add-in in Excel's dependency graph. L0 is the cell itself, L1 the cells its formula uses, L2 the cells those use, and so on.\nEach line: address: formula → value, or address: value for a cell without a formula. A reference without a sheet name inside a formula is on the same sheet as that formula's cell.\nL0 Resultat!B3: =B2+1 → #DIV/0! [error]\nL1 Resultat!B2: =Beregning!B5*2 → #DIV/0! [error]\nL2 Beregning!B5: =B3/B4 → #DIV/0! [error; ORIGIN: the error starts in this cell]\nL3 Beregning!B3: 1200\nL3 Beregning!B4: =Data!B2-Data!B3 → 0\nL4 Data!B2: 5\nL4 Data!B3: 5\nOnly cells with an error value were traced further, and the cells used by the ORIGIN formula: a cell without an error is not where the error comes from."
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["Beregning!B5", "Beregning!B4"]
+      },
+      {
+        "type": "length",
+        "maxWords": 220
+      }
+    ],
+    "rubric": "Peger på Beregning!B5 som kilden: formlen =B3/B4 dividerer med Beregning!B4, som er 0, fordi Data!B2 og Data!B3 begge er 5. Viser vejen til Resultat!B3 og foreslår én konkret rettelse (fx HVIS/IF eller IFERROR omkring divisionen, eller at rette tallene i Data). Adresser med arknavn; Resultat!B2 og B3 udpeges ikke som kilden."
+  },
+  {
+    "id": "trace-ref-range-en",
+    "task": "find-error",
+    "lang": "en",
+    "feature": "#76",
+    "note": "Find the source: a #REF! error that starts in a formula with a deleted reference, inside a summed range where only the error cell and the first cells are listed. The answer must point to Model!F25 and must not invent cells that are not in the list.",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Summary!C10",
+      "formula": "=Model!F42*1.25",
+      "trace": "Precedents of Summary!C10: the cells its formula is calculated from, traced by the add-in in Excel's dependency graph. L0 is the cell itself, L1 the cells its formula uses, L2 the cells those use, and so on.\nEach line: address: formula → value, or address: value for a cell without a formula. A reference without a sheet name inside a formula is on the same sheet as that formula's cell.\nL0 Summary!C10: =Model!F42*1.25 → #REF! [error]\nL1 Model!F42: =SUM(F2:F40) → #REF! [error]\nL2 Model!F2:F40: a range of 39 cells; 13 listed below, not listed (none of them has an error): 26 formulas.\nL2 Model!F2: =D2*E2 → 4200\nL2 Model!F3: =D3*E3 → 3150\nL2 Model!F4: =D4*E4 → 980\nL2 Model!F5: =D5*E5 → 1260\nL2 Model!F6: =D6*E6 → 2600\nL2 Model!F7: =D7*E7 → 1890\nL2 Model!F8: =D8*E8 → 720\nL2 Model!F9: =D9*E9 → 1540\nL2 Model!F10: =D10*E10 → 3300\nL2 Model!F11: =D11*E11 → 410\nL2 Model!F12: =D12*E12 → 2975\nL2 Model!F13: =D13*E13 → 660\nL2 Model!F25: =D25*#REF! → #REF! [error; ORIGIN: the error starts in this cell]\nL3 Model!D25: 14\nOnly cells with an error value were traced further, and the cells used by the ORIGIN formula: a cell without an error is not where the error comes from."
+    },
+    "params": {
+      "language": "English"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "en"
+      },
+      {
+        "type": "contains",
+        "values": ["Model!F25"]
+      },
+      {
+        "type": "regex",
+        "pattern": "E25",
+        "flags": "i"
+      }
+    ],
+    "rubric": "Points to Model!F25 as the source: its formula contains #REF!, i.e. a reference to a cell that was deleted (the other rows multiply column D by column E, so the fix is =D25*E25). Shows the path Model!F25 → Model!F42 → Summary!C10. Uses sheet-qualified addresses, does not blame Model!F42 or Summary!C10, and does not claim anything about the 26 cells that are not listed."
+  },
+  {
+    "id": "trace-explain-da",
+    "task": "explain-formula",
+    "lang": "da",
+    "feature": "#76",
+    "note": "Forklar formel med grafen: forklaringen skal sige, hvor tallene kommer fra, med adresser med arknavn.",
+    "context": {
+      "host": "excel",
+      "text": "",
+      "address": "Tilbud!D8",
+      "formula": "=C8*Priser!B4*(1-Rabat)",
+      "trace": "Precedents of Tilbud!D8: the cells its formula is calculated from, traced by the add-in in Excel's dependency graph. L0 is the cell itself, L1 the cells its formula uses, L2 the cells those use, and so on.\nEach line: address: formula → value, or address: value for a cell without a formula. A reference without a sheet name inside a formula is on the same sheet as that formula's cell.\nL0 Tilbud!D8: =C8*Priser!B4*(1-Rabat) → 5400\nL1 Tilbud!C8: 12\nL1 Priser!B4: =Indkøb!C4*1.6 → 500\nL1 Tilbud!B2: 0.1\nL2 Indkøb!C4: 312.5"
+    },
+    "checks": [
+      {
+        "type": "language",
+        "lang": "da"
+      },
+      {
+        "type": "contains",
+        "values": ["Priser!B4", "Indkøb!C4"]
+      }
+    ],
+    "rubric": "Forklarer, at antallet (Tilbud!C8 = 12) ganges med prisen fra Priser!B4 (500, som er indkøbsprisen i Indkøb!C4 gange 1,6) og reduceres med rabatten på 10 % (Tilbud!B2); korrekt dansk, og adresserne står med arknavn."
+  },
+  {
     "id": "cell-ask-land-da",
     "task": "cell-ask",
     "lang": "da",
