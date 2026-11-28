@@ -38,6 +38,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
   - tjekker politikken
   - streamer svaret og filtrerer `<think>`
   - ved JSON-opgaver: sætter `response_format` efter endpointens `structuredOutput`, sender skemaet i prompten, validerer med Zod og prøver én gang mere ved fejl
+  - sætter faste instruktioner (#78) ind i systembeskeden for alle opgaver: organisationens (`Policy.instructions`) før brugerens (`Settings.instructions`) for værten i `req.context.host`. Indpakningen (`instructionsBlock` i `tasks/prompts.ts`) står efter grundreglerne og før alt dokumentindhold
 - **`context.ts`** (#3): token-estimat, svarbudget, opdeling ved afsnit og detektion af afkortning. Motoren bruger dem til:
   - at begrænse `max_tokens` og afvise for lange prompts, når kontekstlængden er kendt (endpointens `contextTokens`, aflæst fra `/v1/models` eller fra værktøjets eget API, se `modelInfo.ts`)
   - at køre map-reduce for opgaver med `chunking: "map-reduce"` (opsummering)

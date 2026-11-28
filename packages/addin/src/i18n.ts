@@ -510,6 +510,15 @@ const da = {
   // Audit-log og brugeropgaver-mappe
   customTasksDir: "Mappe med brugeropgaver",
   customTasksDirHint: "Kun bridge. Tom = <konfig>/tasks (fx ~/.config/miai/tasks). Kopier mappen for at dele opgaver med andre.",
+  // Faste instruktioner (#78)
+  secInstructions: "Faste instruktioner",
+  instructionsIntro:
+    "Det, MIAI altid skal følge i et program, fx »Formatér tal med tusindtalsseparator« i Excel. Instruktionerne sendes med i alle handlinger, i chatten og til agenten i det program.",
+  instructionsFor: "Instruktioner i {app}",
+  instructionsPlaceholder: "Fx: Skriv kort og i et enkelt sprog.",
+  instructionsCount: "{n} af {max} tegn · ca. {tokens} tokens i hver forespørgsel",
+  instructionsOrg: "Fra din organisation i {app}",
+  instructionsOrgHint: "Fastsat af din organisation og kan ikke ændres. Gælder før dine egne · ca. {tokens} tokens i hver forespørgsel",
   viewAudit: "Vis log",
   hideAudit: "Skjul log",
   auditEmpty: "Ingen poster endnu.",
@@ -1033,6 +1042,15 @@ const en: Dict = {
   // Audit log and custom tasks folder
   customTasksDir: "Custom tasks folder",
   customTasksDirHint: "Bridge only. Empty = <config>/tasks (e.g. ~/.config/miai/tasks). Copy the folder to share tasks with others.",
+  // Standing instructions (#78)
+  secInstructions: "Standing instructions",
+  instructionsIntro:
+    "What MIAI should always follow in an app, e.g. “Format numbers with thousand separators” in Excel. The instructions are sent with every action, in the chat and to the agent in that app.",
+  instructionsFor: "Instructions in {app}",
+  instructionsPlaceholder: "E.g.: Write briefly and in plain language.",
+  instructionsCount: "{n} of {max} characters · approx. {tokens} tokens in every request",
+  instructionsOrg: "From your organisation in {app}",
+  instructionsOrgHint: "Set by your organisation and cannot be changed. Applies before your own · approx. {tokens} tokens in every request",
   viewAudit: "View log",
   hideAudit: "Hide log",
   auditEmpty: "No entries yet.",

@@ -1,4 +1,4 @@
-import { CELL_ASK_TASK, chosenModel, type Settings, type TaskEvent } from "@miai/shared";
+import { CELL_ASK_TASK, chosenModel, instructionsBlock, type Settings, type TaskEvent } from "@miai/shared";
 import type { Backend } from "../backend";
 import { makeT, type T } from "../i18n";
 import { CellCache, queryKey } from "./cache";
@@ -74,7 +74,7 @@ export interface CellRuntime {
 
 export function createCellRuntime(backendReady: Backend | Promise<Backend>, cache = new CellCache(), readyTimeoutMs = READY_TIMEOUT_MS): CellRuntime {
   let settingsAt = 0;
-  let settings: { settings: Settings; baseUrl: string } | undefined;
+  let settings: { settings: Settings; baseUrl: string; instructions: string } | undefined;
   let modelsAt = 0;
   let modelList: string[] | undefined;
   let concurrency = 2;
@@ -84,9 +84,10 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
 
   const loadSettings = async (backend: Backend) => {
     if (settings && Date.now() - settingsAt < SETTINGS_TTL_MS) return settings;
-    const s = (await backend.settings()).settings;
+    const { settings: s, policy } = await backend.settings();
     const ep = s.endpoints.find((e) => e.id === s.activeEndpoint) ?? s.endpoints[0];
-    settings = { settings: s, baseUrl: ep?.baseUrl ?? "" };
+    // De faste instruktioner for Excel (#78) afgør også svaret: ændres de, er det en ny forespørgsel.
+    settings = { settings: s, baseUrl: ep?.baseUrl ?? "", instructions: instructionsBlock("excel", policy?.instructions, s.instructions) ?? "" };
     settingsAt = Date.now();
     concurrency = s.cellConcurrency;
     return settings;
@@ -155,7 +156,7 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
       try {
         const notReady = () => new CellError("na", t("cellNotReady"));
         const backend = await within(backendReady, readyTimeoutMs, notReady);
-        const { settings: s, baseUrl } = await within(loadSettings(backend), readyTimeoutMs, notReady);
+        const { settings: s, baseUrl, instructions } = await within(loadSettings(backend), readyTimeoutMs, notReady);
         t = makeT(s.uiLanguage);
 
         const prompt = inputToText(promptArg).trim();
@@ -165,7 +166,7 @@ export function createCellRuntime(backendReady: Backend | Promise<Backend>, cach
         const optimized = optimizedArg === true || optimizedArg === 1 || String(optimizedArg ?? "").toLowerCase() === "true";
         const model = inputToText(modelArg).trim() || undefined;
 
-        const key = await queryKey({ endpoint: baseUrl, model: model ?? chosenModel(s, CELL_ASK_TASK) ?? "", optimized, prompt, input });
+        const key = await queryKey({ endpoint: baseUrl, model: model ?? chosenModel(s, CELL_ASK_TASK) ?? "", optimized, prompt, input, instructions });
         const cached = cache.get(key);
         if (cached !== undefined) return toCellValue(cached);
         // Mens formlen skrives, kaldes modellen ikke.
