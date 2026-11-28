@@ -170,6 +170,7 @@ Tilstanden (direkte eller bridge) vælges automatisk ved start; task pane viser 
 |---|---|
 | 🟢 *Forbundet* | Modellen svarer. Hover viser den aktive endpoint. |
 | 🟡 *Ingen forbindelse til modellen* | Endpointet svarer ikke – typisk CORS. Hover viser fejl + vejledning. |
+| 🟡 *Blokeret af browseren* | Chrome eller Edge har afvist add-in'ets adgang til lokale adresser. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge). |
 | 🔴 *MIAI Bridge svarer ikke* | Bridgen kører ikke. Start MIAI App, eller `npm start`, hvis du kører bridgen fra kildekoden. |
 
 Ved første start er endpointet **Ollama** (`http://127.0.0.1:11434/v1`) og standardmodellen er den første fra `/v1/models`.
@@ -613,12 +614,51 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
    - Kan filen ikke læses, låses politikken til standardens hosts, så en fejl i filen aldrig åbner for mere.
 4. **Tillad CORS fra add-in'ets adresse på inference-serveren**, fx `OLLAMA_ORIGINS=https://miai.firma.local` eller vLLM `--allowed-origins`.
 5. **Udrul i M365 Admin Center** → Indstillinger → Integrated apps → Upload custom apps. Upload `manifest.xml` (Word, Excel, PowerPoint) og `manifest-outlook.xml` (Outlook), og vælg brugere eller grupper. Add-in'et vises så hos brugerne, også i Office på web, uden lokal installation.
+6. **Bruges Office på nettet i Chrome eller Edge**, så tag stilling til browserens krav om lokal netværksadgang. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge).
+
+## Office på nettet: lokal netværksadgang i Chrome og Edge
+
+Chrome (fra version 142) og Edge (fra version 143) kræver en tilladelse, før en side fra internettet må kalde adresser på din egen maskine (fx `http://127.0.0.1:11434`) eller på det lokale netværk (fx `192.168.1.20` eller `llm.firma.local`). Browserne kalder det *Local Network Access*. Det rammer MIAI, når add-in'et er hostet (vej B eller central udrulning) og bruges i Office på nettet: add-in'et ligger på en offentlig adresse og kalder modellen lokalt.
+
+MIAI App i skrivebordsudgaven af Office er ikke berørt; dér hentes task pane fra maskinen selv. Om det hostede add-in bliver spurgt i skrivebordsudgaven (WebView2), er ikke afklaret endnu.
+
+Tilladelsen erstatter ikke CORS: værktøjet skal stadig tillade add-in'ets adresse (se [vej B](#b-hostet-add-in-uden-app)).
+
+### Som bruger
+
+- **Første gang** add-in'et kalder modellen, spørger browseren, om siden må få adgang til apps på enheden eller enheder på dit lokale netværk (ordlyden afhænger af browser og version). Vælg **Tillad**. MIAI viser forbindelsen efter højst 15 sekunder, eller når du trykker **Søg igen** under Indstillinger.
+- **Har du valgt Bloker**, eller er tilladelsen afvist af anden grund, viser MIAI statussen *Blokeret af browseren* og beskeden "Browseren blokerer adgangen til din lokale model." i stedet for den almindelige forbindelsesfejl. Sådan fortryder du:
+  1. Klik på ikonet til venstre for adressen øverst i browseren, og åbn **Webstedsindstillinger** (Edge: **Tilladelser for dette websted**).
+  2. Sæt tilladelsen til lokalt netværk til **Tillad**. Nyere versioner har to tilladelser: én til apps på enheden (maskinen selv, fx Ollama) og én til det lokale netværk.
+  3. Genindlæs siden.
+- **Skriver MIAI, at siden, add-in'et vises i, ikke giver add-in'et lov**, har Office på nettet ikke givet tilladelsen videre til add-in'et. Det kan ikke ændres i browserens indstillinger. Brug skrivebordsudgaven af Office (fx med MIAI App), eller spørg din administrator.
+- Ældre browsere og Office's indbyggede webviews oplyser ikke tilladelsen. Dér viser MIAI den almindelige forbindelsesfejl som hidtil.
+
+### Som administrator
+
+Chrome og Edge har politikker, der fritager udvalgte websteder for kravet, så brugerne ikke bliver spurgt og ikke kan blokere:
+
+| Politik | Fritager kald til | Chrome fra version |
+|---|---|---|
+| `LocalNetworkAccessAllowedForUrls` | både maskinen selv og det lokale netværk | 139 |
+| `LoopbackNetworkAllowedForUrls` | maskinen selv (`127.0.0.1`, `localhost`) | 146 |
+| `LocalNetworkAllowedForUrls` | det lokale netværk | 146 |
+
+- Værdien er en liste med URL-mønstre, fx `https://miai.firma.dk`. Brug ikke `*`: det fritager alle websteder. Edge har politikker med samme navne.
+- De tilsvarende `…BlockedForUrls`-politikker har forrang. Står et websted dér, kan brugeren ikke selv tillade det.
+- `LocalNetworkAccessRestrictionsTemporaryOptOut` slår kravet fra for alle websteder. Den er midlertidig og fjernes igen af browserne, så brug den ikke som løsning.
+- **Hvilken adresse skal på listen?** Ifølge Microsofts dokumentation gælder politikken den side, der står i adresselinjen, og en indlejret ramme skal desuden have tilladelsen givet videre af siden uden om. I Office på nettet er add-in'et en ramme inde i Office-siden. Det er derfor sandsynligvis Office-sidens adresse (den, brugerne ser i adresselinjen), der skal på listen, og det afhænger af Office, om add-in'et får tilladelsen videre.
+- **Add-in og model på det interne net** (central udrulning, fx `https://miai.firma.local` og `https://llm.firma.local`): kald mellem to adresser på det lokale netværk kræver ingen tilladelse, men Office-siden henter selve add-in'et fra det lokale netværk, og det er også omfattet. Blokeres det, indlæses add-in'et slet ikke, og MIAI kan ikke vise en besked. Det samme gælder MIAI App brugt i Office på nettet, hvor task pane hentes fra `https://localhost`.
+- Der skal ikke sættes særlige svar-headere på modelserveren eller i MIAI Bridge. Kravet afgøres af tilladelsen eller politikken, ikke af headeren `Access-Control-Allow-Private-Network` fra den ældre mekanisme (Private Network Access).
+
+Microsoft har ingen vejledning om kravet for Office-add-ins. Punkterne om Office på nettet er udledt af Chromes og Edges generelle regler og er endnu ikke afprøvet i Office på nettet. Afprøv derfor i jeres eget miljø før udrulning; tjeklisten står i [UDVIKLING.md](UDVIKLING.md#fase-0--manuel-testliste).
 
 ## Fejlfinding
 
 | Symptom | Løsning |
 |---|---|
 | Gul badge / "CORS"-fejl i fejlbeskeden | Værktøjet tillader ikke kald fra add-in'ets adresse. Ollama: `OLLAMA_ORIGINS` (se Installation, vej B). LM Studio: "Enable CORS". vLLM: `--allowed-origins`. Alternativt brug bridgen, som kører uden CORS. |
+| Status *Blokeret af browseren* / "Browseren blokerer adgangen til din lokale model." | Chrome eller Edge har afvist add-in'ets adgang til lokale adresser. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge). |
 | "Endpoint er ikke tilladt af politikken." | Endpointet ligger uden for *Tilladte hosts*. Tilføj hosten (fx `llm.firma.local`) og **Gem** – medmindre en maskinpolitik låser feltet. Se [Brug en intern server](#brug-en-intern-server). |
 | Rød badge "MIAI Bridge svarer ikke" | Bridgen kører ikke. Start MIAI App (ikonet skal ligge i menulinjen eller ved uret). Kører du bridgen fra kildekoden: `npm start`, og brug dit personlige manifest (stien vises ved start). |
 | Ingen modeller i udfyldningsfeltet / "Test forbindelse" fejler | Kører værktøjet på den rigtige port? Prøv `curl http://127.0.0.1:11434/v1/models`. |

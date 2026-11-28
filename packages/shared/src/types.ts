@@ -406,14 +406,27 @@ export interface ModelInfo {
   endpoint: string;
 }
 
+/**
+ * Browserens tilladelse til lokal netværksadgang (Local Network Access, #74), når den står i vejen
+ * for add-in'et i direkte tilstand: denied = afvist af brugeren eller en browserpolitik; frame =
+ * siden, add-in'et vises i (fx Office på nettet), giver ikke tilladelsen videre til add-in'et;
+ * prompt = browseren har ikke fået svar endnu, så et kald kan vente på (eller være afvist af) spørgsmålet.
+ */
+export type LocalNetworkAccess = "denied" | "frame" | "prompt";
+
 export interface HealthInfo {
   ok: boolean;
   version: string;
-  endpoint: { id: string; baseUrl: string; reachable: boolean; error?: string };
+  /** blocked: browseren blokerer kaldet (kun direkte tilstand, #74). */
+  endpoint: { id: string; baseUrl: string; reachable: boolean; error?: string; blocked?: Exclude<LocalNetworkAccess, "prompt"> };
 }
 
 /**
  * Resultat af at teste en endpoint (#4). reason: cors = noget svarer, men browseren må ikke læse
- * svaret (CORS mangler); absent = intet svarer; policy = ikke tilladt; http = fejlsvar fra serveren.
+ * svaret (CORS mangler); absent = intet svarer; policy = ikke tilladt; http = fejlsvar fra serveren;
+ * blocked = browseren blokerer kaldet (lokal netværksadgang, #74), så det kan ikke ses, om noget svarer.
+ * lna er sat ved blocked (denied/frame) og ved absent, når browseren endnu ikke har fået svar (prompt).
  */
-export type ProbeResult = { ok: true; models: string[] } | { ok: false; reason: "cors" | "absent" | "policy" | "http" | "protocol"; message: string };
+export type ProbeResult =
+  | { ok: true; models: string[] }
+  | { ok: false; reason: "cors" | "absent" | "policy" | "http" | "protocol" | "blocked"; message: string; lna?: LocalNetworkAccess };

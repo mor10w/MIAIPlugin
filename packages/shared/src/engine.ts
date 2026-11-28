@@ -23,6 +23,7 @@ import {
   agentExportAllowed,
   agentScriptsAllowed,
   type Endpoint,
+  type LocalNetworkAccess,
   type ParsedTaskRequest,
   type Policy,
   type ProbeResult,
@@ -469,15 +470,28 @@ function tryParse(schema: z.ZodType, text: string): { ok: true; data: unknown } 
   }
 }
 
+/** Motorens besked, når browseren blokerer kaldet (#74). Vejledningen står i add-in'ets tekster (da/en). */
+export function localNetworkMessage(baseUrl: string): string {
+  return `Browseren blokerer add-in'ets adgang til ${baseUrl} (lokal netværksadgang).`;
+}
+
 /**
  * Tester en endpoint uden at gemme den (#4): svarer /v1/models, og hvilke modeller findes?
  * `reachableWithoutCors` bruges i browseren til at skelne "CORS mangler" fra "intet kører":
  * et kald med mode "no-cors" lykkes (opakt svar), når noget lytter på porten.
+ * `localNetworkAccess` bruges også kun i browseren (#74): har browseren afvist lokal netværksadgang,
+ * fejler alle kald til adressen (også no-cors) på samme måde som en lukket port, så tilladelsen
+ * spørges først. Uden svar fra den (undefined) er resultatet som før.
  */
 export async function probeEndpoint(
   ep: Endpoint,
   policy: Policy,
-  opts: { signal?: AbortSignal; client?: ClientOptions; reachableWithoutCors?: (url: string) => Promise<boolean> } = {},
+  opts: {
+    signal?: AbortSignal;
+    client?: ClientOptions;
+    reachableWithoutCors?: (url: string) => Promise<boolean>;
+    localNetworkAccess?: (url: string) => Promise<LocalNetworkAccess | undefined>;
+  } = {},
 ): Promise<ProbeResult> {
   if (!isUrlAllowed(ep.baseUrl, policy)) return { ok: false, reason: "policy", message: `${ep.baseUrl} er ikke tilladt af politikken.` };
   // Kort timeout: en lukket port svarer straks, men en filtreret kan hænge.
@@ -488,10 +502,12 @@ export async function probeEndpoint(
     if (!(err instanceof UpstreamError)) throw err;
     if (err.code === "UPSTREAM_UNREACHABLE" || err.code === "UPSTREAM_TIMEOUT") {
       const url = ep.baseUrl.replace(/\/+$/, "") + "/models";
+      const lna = await opts.localNetworkAccess?.(url).catch(() => undefined);
+      if (lna === "denied" || lna === "frame") return { ok: false, reason: "blocked", lna, message: localNetworkMessage(ep.baseUrl) };
       if (opts.reachableWithoutCors && (await opts.reachableWithoutCors(url).catch(() => false))) {
         return { ok: false, reason: "cors", message: err.message };
       }
-      return { ok: false, reason: "absent", message: err.message };
+      return { ok: false, reason: "absent", message: err.message, ...(lna ? { lna } : {}) };
     }
     return { ok: false, reason: err.code === "UPSTREAM_HTTP" ? "http" : "protocol", message: err.message };
   }
