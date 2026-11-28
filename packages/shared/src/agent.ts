@@ -353,6 +353,13 @@ export const isDestructive = (a: AgentAction) =>
   (a.action === "replace" && !a.replace) ||
   (a.action === "setText" && !a.text.trim());
 
+/**
+ * Handlinger, der erstatter indholdet i celler (#75). For dem tæller Excel-adapteren, hvor mange
+ * celler med indhold og hvor mange formler de rammer, og planen viser det før udførelsen.
+ */
+export type CellWrite = Extract<AgentAction, { action: "setValues" | "setFormula" | "clear" }>;
+export const writesCells = (a: AgentAction): a is CellWrite => a.action === "setValues" || a.action === "setFormula" || a.action === "clear";
+
 /** PowerPoint-strukturen til prompten: slides med layout og figurer som "2.1 [body] …". */
 export function renderSlides(slides: NonNullable<DocContext["slides"]>, layouts?: string[]): string {
   const lines = slides.flatMap((sl, i) => [

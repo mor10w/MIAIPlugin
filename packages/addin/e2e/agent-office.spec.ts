@@ -663,6 +663,338 @@ test("agentens plan (#22): 'Vis i dokumentet' markerer handlingens mål i Excel 
   expect(await sheet(tp.page)).toEqual(before);
 });
 
+// --- Advarsel før overskrivning, markering af ændrede celler og ét fortryd (#75) ---------------
+
+/** Fyldfarven, de ændrede celler markeres med (MARK_COLOR i excelChanges.ts). */
+const MARK = "#FFF2CC";
+const undoGroups = (page: import("@playwright/test").Page) =>
+  page.evaluate(() => (window as unknown as { __miai: { undoGroups: () => number } }).__miai.undoGroups());
+/** Cellerne på et ark, der har markeringens fyldfarve. */
+const markedCells = (s: Sheet) =>
+  Object.entries(s.formats)
+    .filter(([, f]) => f.fill === MARK)
+    .map(([cell]) => cell)
+    .sort();
+
+test("Excel (#75): planen viser, hvor mange celler og formler hver handling overskriver, uden at ændre arket", async ({ open }) => {
+  const tp = await open({
+    host: "Excel",
+    apiSets: { ExcelApi: "1.10" },
+    excel: {
+      sheet: "Ark1",
+      values: [
+        ["Post", "Beløb", "Moms"],
+        ["Husleje", 8000, "=B2*0.25"],
+        ["El", 1200, "=B3*0.25"],
+        ["I alt", "=SUM(B2:B3)", "=SUM(C2:C3)"],
+      ],
+      formats: { "A1:C1": { bold: true }, "B2:C4": { numberFormat: "#,##0 kr" } },
+      sheets: [
+        {
+          sheet: "Noter",
+          values: [
+            ["Emne", "Tekst"],
+            ["Status", "=1+1"],
+          ],
+        },
+      ],
+    },
+  });
+  const before = await sheets(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Retter overskrifter og tal.",
+      actions: [
+        // B1 og B2 får nyt indhold; A1, C1 og A2 er uændrede, og null rører ikke C2.
+        {
+          action: "setValues",
+          address: "A1",
+          values: [
+            ["Post", "Udgift", "Moms"],
+            ["Husleje", 8500, null],
+          ],
+          reason: "",
+        },
+        { action: "setFormula", address: "C4", formula: "=SUM(C2:C3)*1", reason: "" },
+        { action: "clear", address: "B2:C4", reason: "" },
+        // Tomme celler, et nyt ark og et talformat overskriver intet.
+        { action: "setValues", address: "E1", values: [["Note"]], reason: "" },
+        { action: "addSheet", name: "Ny", reason: "" },
+        { action: "setValues", address: "Ny!A1", values: [["a"]], reason: "" },
+        { action: "setNumberFormat", address: "B2:B4", format: "#,##0.00", reason: "" },
+        // Et andet ark tælles i det ark.
+        {
+          action: "setValues",
+          address: "Noter!A1",
+          values: [
+            ["Emne", "Indhold"],
+            ["Tilstand", 2],
+          ],
+          reason: "",
+        },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Foreslåede handlinger")).toBeVisible();
+  await expect(tp.page.getByText("Overskriver 2 celler", { exact: true })).toBeVisible();
+  await expect(tp.page.getByText("Overskriver 1 celle, heraf 1 formel", { exact: true })).toBeVisible();
+  await expect(tp.page.getByText("Rydder 6 celler med indhold, heraf 4 formler", { exact: true })).toBeVisible();
+  await expect(tp.page.getByText("Overskriver 3 celler, heraf 1 formel", { exact: true })).toBeVisible();
+  // Kun de fire handlinger, der rammer indhold, har en advarsel.
+  await expect(tp.page.getByText(/^(Overskriver|Rydder) \d+ celler?/)).toHaveCount(4);
+  // Tællingen har kun læst: arkene er urørte, og Excels fortryd har ingen nye trin.
+  expect(await sheets(tp.page)).toEqual(before);
+  expect(await undoGroups(tp.page)).toBe(0);
+
+  // Efter udførelsen er der ikke længere noget, der "vil blive" overskrevet.
+  await tp.page.getByRole("button", { name: "Udfør 8 handlinger" }).click();
+  await expect(tp.page.getByText("8 af 8 handlinger udført.")).toBeVisible();
+  await expect(tp.page.getByText(/^(Overskriver|Rydder) \d+ celler?/)).toHaveCount(0);
+});
+
+const POSTER = {
+  sheet: "Ark1",
+  values: [
+    ["Post", "Beløb"],
+    ["Husleje", 8000],
+    ["El", 1200],
+  ],
+  formats: { "A1:B1": { bold: true, fill: "#FFFF00" }, "B2:B3": { numberFormat: "#,##0 kr" } },
+  tables: [{ name: "Poster", range: "A1:B3" }],
+  sheets: [
+    {
+      sheet: "Noter",
+      values: [
+        ["Emne", "Tekst"],
+        ["Status", "Kladde"],
+      ],
+      formats: { "A1:B1": { bold: true }, B2: { fill: "#C6EFCE" } },
+    },
+  ],
+};
+const POSTER_PLAN = {
+  summary: "Tilføjer vand, en total og et oversigtsark.",
+  actions: [
+    { action: "appendRows", table: "Poster", values: [["Vand", 400]], reason: "Ny post" },
+    // A1:B2 har både celler med fyld (overskriften) og uden.
+    {
+      action: "setValues",
+      address: "A1",
+      values: [
+        ["Udgift", "Kr"],
+        ["Husleje", 8100],
+      ],
+      reason: "Nye overskrifter",
+    },
+    { action: "setValues", address: "A6", values: [["I alt"]], reason: "Etiket" },
+    { action: "setFormula", address: "B6", formula: "=SUM(B2:B4)", reason: "Sum" },
+    { action: "setValues", address: "Noter!B2", values: [["Endelig"]], reason: "Status" },
+    { action: "addSheet", name: "Oversigt", reason: "Opsummering" },
+    { action: "setValues", address: "Oversigt!A1", values: [["Nøgletal"]], reason: "Etiket" },
+    { action: "renameSheet", sheet: "Noter", name: "Bemærkninger", reason: "Tydeligere navn" },
+  ],
+};
+const runOptions = async (tp: { calls: () => Promise<{ kind: string; options?: unknown }[]> }) =>
+  (await tp.calls()).filter((c) => c.kind === "run").map((c) => c.options);
+
+test("Excel med ExcelApi 1.20 (#75): udførelsen er ét trin i Excels fortryd; de ændrede celler markeres, og 'Fjern markering' giver dem deres format tilbage", async ({
+  open,
+}) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.20" }, excel: POSTER });
+  const before = await sheets(tp.page);
+  tp.model.reply = () => ({ json: JSON.stringify(POSTER_PLAN) });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 8 handlinger" }).click();
+  await expect(tp.page.getByText("8 af 8 handlinger udført.")).toBeVisible();
+
+  // Hele udførelsen – nyt ark, begge arks celler, omdøbning og markering – er kørt i én Excel.run
+  // med mergeUndoGroup, så Excels fortryd har fået præcis ét trin.
+  expect(await runOptions(tp)).toEqual([{ mergeUndoGroup: true }]);
+  expect(await undoGroups(tp.page)).toBe(1);
+  await expect(tp.page.getByText(/ét Ctrl\+Z i Excel/)).toBeVisible();
+
+  // De ændrede celler er markeret: de skrevne celler, den nye tabelrække og cellerne på de andre ark.
+  const marked = await sheets(tp.page);
+  expect(Object.keys(marked)).toEqual(["Ark1", "Bemærkninger", "Oversigt"]);
+  expect(markedCells(marked.Ark1)).toEqual(["A1", "A2", "A4", "A6", "B1", "B2", "B4", "B6"]);
+  expect(markedCells(marked["Bemærkninger"])).toEqual(["B2"]);
+  expect(markedCells(marked.Oversigt)).toEqual(["A1"]);
+  // Kun fyldet er rørt: fed og talformat står, og urørte celler har intet fyld.
+  expect(marked.Ark1.formats.A1).toEqual({ bold: true, fill: MARK });
+  expect(marked.Ark1.formats.B2).toEqual({ numberFormat: "#,##0 kr", fill: MARK });
+  expect(marked.Ark1.formats.B3).toEqual({ numberFormat: "#,##0 kr" });
+  await expect(tp.page.getByText(/De ændrede celler er markeret/)).toBeVisible();
+
+  await tp.page.getByRole("button", { name: "Fjern markering" }).click();
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(0);
+  const cleared = await sheets(tp.page);
+  // Celler med fyld har deres egen farve igen, og celler uden fyld har intet – resten er uændret.
+  expect(cleared.Ark1.formats).toEqual({
+    A1: { bold: true, fill: "#FFFF00" },
+    B1: { bold: true, fill: "#FFFF00" },
+    B2: { numberFormat: "#,##0 kr" },
+    B3: { numberFormat: "#,##0 kr" },
+    B4: { numberFormat: "#,##0 kr" },
+  });
+  expect(cleared["Bemærkninger"].formats).toEqual({ A1: { bold: true }, B1: { bold: true }, B2: { fill: "#C6EFCE" } });
+  expect(cleared.Oversigt.formats).toEqual({});
+  // Værdierne er dem, planen skrev.
+  expect(cleared.Ark1.values).toEqual(marked.Ark1.values);
+  expect(cleared.Ark1.values[5]).toEqual(["I alt", "=SUM(B2:B4)"]);
+  expect(cleared["Bemærkninger"].values[1]).toEqual(["Status", "Endelig"]);
+
+  // MIAI's egen Fortryd virker stadig.
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheets(tp.page);
+  expect(Object.keys(undone)).toEqual(["Ark1", "Noter"]);
+  expect(undone.Ark1.values.filter((r) => r.some((v) => v !== ""))).toEqual(before.Ark1.values);
+  expect(undone.Ark1.formats).toEqual(before.Ark1.formats);
+  expect(undone.Ark1.tables).toEqual(before.Ark1.tables);
+  expect(undone.Noter).toEqual(before.Noter);
+});
+
+test("Excel uden ExcelApi 1.20 (#75): udførelsen kører som før, og MIAI's Fortryd gendanner alt og fjerner markeringen", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: POSTER });
+  const before = await sheets(tp.page);
+  tp.model.reply = () => ({ json: JSON.stringify(POSTER_PLAN) });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 8 handlinger" }).click();
+  await expect(tp.page.getByText("8 af 8 handlinger udført.")).toBeVisible();
+
+  // mergeUndoGroup bruges ikke (simuleringen ville afvise det), og Excels fortryd har flere trin som hidtil.
+  expect(await runOptions(tp)).toEqual([]);
+  expect(await undoGroups(tp.page)).toBeGreaterThan(1);
+  await expect(tp.page.getByText(/ét Ctrl\+Z i Excel/)).toHaveCount(0);
+  // Markeringen er den samme som med 1.20.
+  const marked = await sheets(tp.page);
+  expect(markedCells(marked.Ark1)).toEqual(["A1", "A2", "A4", "A6", "B1", "B2", "B4", "B6"]);
+  expect(markedCells(marked["Bemærkninger"])).toEqual(["B2"]);
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toBeVisible();
+
+  // Fortryd uden at fjerne markeringen først: arkene er som før planen, også fyldet.
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(0);
+  const undone = await sheets(tp.page);
+  expect(Object.keys(undone)).toEqual(["Ark1", "Noter"]);
+  expect(undone.Ark1.values.filter((r) => r.some((v) => v !== ""))).toEqual(before.Ark1.values);
+  expect(undone.Ark1.formats).toEqual(before.Ark1.formats);
+  expect(undone.Ark1.tables).toEqual(before.Ark1.tables);
+  expect(undone.Noter).toEqual(before.Noter);
+});
+
+test("Excel (#75): en ny plan fjerner den gamle markering, så Fortryd ikke gemmer markeringsfarven som cellernes format", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { ...POSTER, tables: [], sheets: [] } });
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Ny overskrift.", actions: [{ action: "setValues", address: "A1:A2", values: [["Udgift"], ["Leje"]], reason: "" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  expect(markedCells(await sheet(tp.page))).toEqual(["A1", "A2"]);
+
+  // En ny plan på de samme celler: den første plan forsvinder fra panelet, og dens markering med.
+  tp.model.reply = () => ({
+    json: JSON.stringify({ summary: "Retter igen.", actions: [{ action: "setValues", address: "A1:A2", values: [["Omkostning"], ["Husleje"]], reason: "" }] }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Retter igen.")).toBeVisible();
+  await expect.poll(async () => markedCells(await sheet(tp.page))).toEqual([]);
+  const between = await sheet(tp.page);
+  expect(between.formats.A1).toEqual({ bold: true, fill: "#FFFF00" });
+  expect(between.formats.A2).toBeUndefined();
+
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  expect(markedCells(await sheet(tp.page))).toEqual(["A1", "A2"]);
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  // Tilbage til arket efter den første plan – uden markeringsfarve.
+  expect(await sheet(tp.page)).toEqual(between);
+});
+
+test("Excel-chat (#75): en ny plan i samtalen fjerner den forrige plans markering og dens knap", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.10" }, excel: { ...POSTER, tables: [], sheets: [] } });
+  await tp.tab("Chat");
+  const ask = async (text: string, value: string) => {
+    tp.model.reply = () => ({
+      json: JSON.stringify({ summary: `Skriver ${value}.`, actions: [{ action: "setValues", address: "A1", values: [[value]], reason: "" }] }),
+    });
+    await tp.page.getByPlaceholder("Spørg om dit dokument…").fill(text);
+    await tp.page.keyboard.press("Enter");
+    await expect(tp.page.getByText(`Skriver ${value}.`)).toBeVisible();
+    await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  };
+  await ask("Ret overskriften i A1 til Udgift", "Udgift");
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(1);
+  expect(markedCells(await sheet(tp.page))).toEqual(["A1"]);
+
+  // Begge planer står i samtalen. Den nye udførelse fjerner først den gamle markering, så dens
+  // farve ikke gemmes til fortryd, og den gamle plans knap forsvinder.
+  await ask("Ret den til Omkostning", "Omkostning");
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toHaveCount(2);
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(1);
+  expect(markedCells(await sheet(tp.page))).toEqual(["A1"]);
+
+  // Fortryd af den nye plan giver A1 sit eget fyld tilbage – ikke markeringsfarven.
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).last().click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  const undone = await sheet(tp.page);
+  expect(undone.values[0][0]).toBe("Udgift");
+  expect(undone.formats.A1).toEqual({ bold: true, fill: "#FFFF00" });
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(0);
+});
+
+test("Excel (#75): flytter planen celler (slettede rækker), markeres intet, og Fortryd virker som før", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.20" }, excel: { ...POSTER, tables: [], sheets: [] } });
+  const before = await sheet(tp.page);
+  tp.model.reply = () => ({
+    json: JSON.stringify({
+      summary: "Retter og sletter.",
+      actions: [
+        { action: "setValues", address: "B3", values: [[1300]], reason: "" },
+        { action: "deleteRows", address: "A2:B2", reason: "" },
+      ],
+    }),
+  });
+  await tp.run("Agent: redigér dokumentet");
+  await expect(tp.page.getByText("Overskriver 1 celle", { exact: true })).toBeVisible();
+  await tp.page.getByRole("button", { name: "Udfør 2 handlinger" }).click();
+  await expect(tp.page.getByText("2 af 2 handlinger udført.")).toBeVisible();
+  const after = await sheet(tp.page);
+  expect(after.values).toEqual([
+    ["Post", "Beløb"],
+    ["El", 1300],
+  ]);
+  expect(markedCells(after)).toEqual([]);
+  await expect(tp.page.getByRole("button", { name: "Fjern markering" })).toHaveCount(0);
+  // Også sletningen er med i det ene trin i Excels fortryd.
+  expect(await undoGroups(tp.page)).toBe(1);
+
+  await tp.page.getByRole("button", { name: "Fortryd agent-session" }).click();
+  await expect(tp.page.getByText("Agent-sessionen er fortrudt.")).toBeVisible();
+  expect(await sheet(tp.page)).toEqual(before);
+});
+
+test("Excel, kodetilstand med ExcelApi 1.20 (#75): scriptet er ét trin i Excels fortryd", async ({ open }) => {
+  const tp = await open({ host: "Excel", apiSets: { ExcelApi: "1.20" }, excel: SALG, settings: { agentScripts: true } });
+  // To context.sync() med ændringer: uden mergeUndoGroup ville det være to trin.
+  const code = `const sheet = context.workbook.worksheets.getActiveWorksheet();
+sheet.getRange("E1").values = [["I alt"]];
+await context.sync();
+sheet.getRange("E2").values = [[760]];
+await context.sync();`;
+  tp.model.reply = () => ({ json: JSON.stringify({ summary: "Sum.", actions: [{ action: "runScript", description: "Summen i E2", code, reason: "" }] }) });
+  await tp.run("Agent: redigér dokumentet");
+  await tp.page.getByRole("button", { name: "Udfør 1 handling" }).click();
+  await expect(tp.page.getByText("1 af 1 handlinger udført.")).toBeVisible();
+  expect((await sheet(tp.page)).values[1][4]).toBe(760);
+  expect(await runOptions(tp)).toEqual([{ mergeUndoGroup: true }]);
+  expect(await undoGroups(tp.page)).toBe(1);
+});
+
 type Deck = {
   id: string;
   layout: string;

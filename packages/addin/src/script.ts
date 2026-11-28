@@ -1,4 +1,5 @@
 import { checkScript, isBannedKey, MAX_SCRIPT_ITERATIONS, type AgentAction, type ScriptHost } from "@miai/shared";
+import { runAsOneUndo } from "./hosts/excelChanges";
 import { FORMAT_PROPS } from "./hosts/excelFormats";
 import type { AgentOutcome } from "./hosts/types";
 
@@ -192,8 +193,9 @@ export function runExcelScript(a: RunScript, sheetName: string): Promise<AgentOu
       const snap = await snapshotSheet(sheetName);
       return () => restoreSheet(snap);
     },
+    // Med ExcelApi 1.20 er hele scriptet ét trin i Excels egen fortryd (#75).
     (fn) =>
-      Excel.run(async (ctx) => {
+      runAsOneUndo(async (ctx) => {
         const r = await fn(ctx, Excel);
         await ctx.sync();
         return r;

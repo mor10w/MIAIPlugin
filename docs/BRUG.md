@@ -430,6 +430,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
    - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført. **Vis i dokumentet** under en handling markerer det sted, den gælder (celler, tabel, afsnit, tekst eller slide), uden at ændre noget.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
+   - I Excel står der ved hver handling, der skriver i celler med indhold, hvor meget den overskriver, fx *Overskriver 48 celler, heraf 12 formler* (ved ryd: *Rydder 6 celler med indhold*). MIAI læser arket for at tælle og ændrer intet. Celler, der får præcis det, de har i forvejen, tæller ikke med, og en handling uden advarsel overskriver ikke noget. Tallene gælder arket, som det er, når planen vises.
    - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
    - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.
 3. **Udfør.** Hver handling får ✓ eller en forklaring. Fejler nogle af handlingerne, kan du trykke **Bed modellen rette det, der fejlede**: fejlene sendes til modellen, som foreslår en rettelse. Det, der lykkedes, er udført og gentages ikke.
@@ -448,6 +449,11 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - Tomme celler, der fyldes ud lige under eller ved siden af data, får naboens format. En ny total-række får altså kolonnens valuta- eller procentformat.
 - Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
 - *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
+
+**De ændrede celler markeres i Excel.** Efter udførelsen får de celler, agenten har skrevet i eller ryddet, og nye tabelrækker en lys gul fyldfarve, så du kan se, hvad der er ændret.
+- **Fjern markering** giver cellerne deres eget fyld tilbage; resten af formateringen har markeringen aldrig rørt. **Fortryd agent-session** fjerner også markeringen, og det samme gør en ny plan.
+- Markeringen er en rigtig fyldfarve i arket. Fjern den, før du gemmer og lukker panelet, for ellers bliver farven stående i filen.
+- Har planen slettet rækker eller sorteret på arket, markeres intet dér, fordi cellerne har flyttet sig. Markeringen kræver Excel 2021 eller Microsoft 365 (ExcelApi 1.9).
 
 **Kodetilstand (avanceret, i Excel, Word og PowerPoint).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
 - **Før kørslen:** du ser, hvad scriptet gør, og kan se koden.
@@ -473,6 +479,8 @@ Hele sessionen kan fortrydes med **Fortryd agent-session**:
 - I Word med sporede ændringer (standard, Word 2021/Microsoft 365) afvises agentens ændringer og kommentarer, og resten af dokumentet røres ikke.
 - I ældre Word eller uden sporede ændringer gendannes indholdet fra lige før. Det fjerner også ændringer, du selv har lavet siden.
 - I Excel gendannes de berørte celler med deres formatering, og tilføjede tabelrækker fjernes.
+  - I nyere Excel (Microsoft 365: Windows version 2509, Mac 16.100 eller senere; ikke LTSC-udgaverne) er hele udførelsen desuden ét trin i Excels egen fortryd, så ét **Ctrl+Z** fjerner det hele. Panelet siger det under planen, når det gælder. Brug enten Ctrl+Z eller **Fortryd agent-session**, ikke begge efter hinanden.
+  - I ældre Excel er det som hidtil: Ctrl+Z fortryder ikke nødvendigvis agentens ændringer samlet, så brug **Fortryd agent-session**.
 - I PowerPoint (Microsoft 365) lægges de berørte slides tilbage med al formatering, nye slides slettes, og flyttede flyttes tilbage. Ældre PowerPoint kan kun gendanne teksten, og derfor sletter og flytter agenten ikke slides dér.
 
 Fra **chatten** kan du sende et ændringsønske videre med **Gør det med agenten**. Agenten bruger chatsvaret, du lige har set, som indhold i stedet for at skrive en ny tekst.

@@ -13,6 +13,7 @@ import {
   renderExcelStructure,
   renderParagraphs,
   sheetOfAddress,
+  writesCells,
 } from "./agent.js";
 import { minimalEdit, occurrences, parseBlocks, parseInline } from "./agentText.js";
 import { TaskRequest } from "./types.js";
@@ -109,6 +110,15 @@ describe("agent-plan (#6)", () => {
     expect(isDestructive({ action: "delete", find: "x", reason: "" })).toBe(true);
     expect(isDestructive({ action: "replace", find: "x", replace: "", reason: "" })).toBe(true);
     expect(isDestructive({ action: "replace", find: "x", replace: "y", reason: "" })).toBe(false);
+  });
+
+  it("writesCells (#75): kun handlinger, der erstatter celleindhold", () => {
+    expect(writesCells({ action: "setValues", address: "A1", values: [[1]], reason: "" })).toBe(true);
+    expect(writesCells({ action: "setFormula", address: "B2", formula: "=A1", reason: "" })).toBe(true);
+    expect(writesCells({ action: "clear", address: "A1:B2", reason: "" })).toBe(true);
+    expect(writesCells({ action: "setNumberFormat", address: "A1:B2", format: "0%", reason: "" })).toBe(false);
+    expect(writesCells({ action: "appendRows", table: "Salg", values: [[1]], reason: "" })).toBe(false);
+    expect(writesCells({ action: "deleteRows", address: "A2:B2", reason: "" })).toBe(false);
   });
 
   it("prompten indeholder kun værtens værktøjer, dokumentet i <document> og reglen mod instruktioner i dokumentet", () => {

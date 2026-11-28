@@ -155,7 +155,7 @@ npm run test:e2e
 ```
 Kører add-in'ets build i Chromium med Playwright (`packages/addin/e2e/`). Testene kører også i CI (jobbet `e2e`), hvor skærmbilleder og traces gemmes som artefakter ved fejl.
 
-- **Simuleret Office.js** (`e2e/fixtures/office.ts`): Word, Excel og PowerPoint med de API'er, adapterne bruger. Kalder en adapter et API, simuleringen ikke kender, fejler det med "Simuleret Office.js mangler: …" – udvid så simuleringen. Alt, adapterne gør ved dokumentet, registreres og kan efterprøves (`tp.calls()`, `tp.find("picture")`).
+- **Simuleret Office.js** (`e2e/fixtures/office.ts`): Word, Excel og PowerPoint med de API'er, adapterne bruger. Kalder en adapter et API, simuleringen ikke kender, fejler det med "Simuleret Office.js mangler: …" – udvid så simuleringen. Alt, adapterne gør ved dokumentet, registreres og kan efterprøves (`tp.calls()`, `tp.find("picture")`). Den simulerede Excel tæller også trinene i Excels egen fortryd (`window.__miai.undoGroups()`): ét pr. `context.sync()` med ændringer, eller ét pr. `Excel.run` med `mergeUndoGroup` (kræver `apiSets: { ExcelApi: "1.20" }`).
 - **Mock-model** (`e2e/fixtures/servers.ts`): OpenAI-kompatibel server med streaming, ikke-streaming og værktøjskald, med eller uden CORS. Alle forespørgsler gemmes (`tp.model.lastRequest`).
 - **Tilstande:** direkte (add-in hostet statisk over HTTPS) og bridge (den rigtige, byggede bridge med midlertidig konfiguration). Alle porte er dynamiske, så en lokal Ollama ikke forstyrrer.
 - Testene fejler også, hvis task pane kaster en uventet JavaScript-fejl.
@@ -352,6 +352,20 @@ Afprøves i nyeste Chrome og Edge med det hostede add-in (GitHub Pages) mod Olla
 - [ ] Kodetilstand i Word: "Skriv 'Fortroligt' i sidehovedet" kører; et script, der fejler midtvejs, efterlader brødteksten som før; Fortryd gendanner brødteksten med formatering, billeder og tabeller
 - [ ] Kodetilstand i PowerPoint (Microsoft 365): et script, der tilføjer en figur eller sletter slides, kan fortrydes, og alle slides er tilbage med billeder, noter og animationer; i PowerPoint 2019 afvises scriptet med en forklaring
 - [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres
+
+**Agent i Excel – overskrivning, markering og ét fortryd (#75)** (kan kun bekræftes i rigtig Excel; simuleringen tæller kun trin i fortryd-stakken):
+- [ ] Advarsel: en plan, der skriver oven i data og formler, viser "Overskriver N celler, heraf M formler" (og "Rydder …" ved ryd) med de rigtige tal; en plan, der kun skriver i tomme celler, viser ingen advarsel; arket er urørt, og Ctrl+Z har intet nyt trin, før der trykkes Udfør
+- [ ] Ét fortryd (Microsoft 365, Windows 2509 / Mac 16.100 eller senere): efter en plan med flere handlinger (værdier, formel, ny tabelrække, nyt ark, omdøbning) fjerner **ét** Ctrl+Z det hele inklusive markeringen, og Ctrl+Y laver det om igen; panelet viser linjen om Ctrl+Z
+- [ ] Samme i kodetilstand: et script med flere `context.sync()` er ét Ctrl+Z
+- [ ] Uden ExcelApi 1.20 (Excel 2021/2024 LTSC, Excel 2019, ældre Microsoft 365): planen udføres uden fejl, linjen om Ctrl+Z vises ikke, og **Fortryd agent-session** gendanner alt som før
+- [ ] Excel på web: notér, om ExcelApi 1.20 meldes understøttet, og om ét Ctrl+Z virker
+- [ ] Ctrl+Z efter udførelsen og derefter **Fortryd agent-session**: notér, hvad der sker (BRUG.md fraråder kombinationen; især slettede rækker kan blive sat ind to gange)
+- [ ] Markering: de ændrede celler og nye tabelrækker bliver lysegule; **Fjern markering** giver celler med fyld deres farve tilbage, og celler uden fyld står igen uden fyld med synlige gitterlinjer (ikke hvide); fed, talformat og kanter er urørte
+- [ ] Markering i en Excel-tabel med stribede rækker: efter **Fjern markering** vises tabeltypografiens striber igen
+- [ ] Markering på celler med mønsterfyld eller temafarve: farven er den samme efter **Fjern markering** (gradueringer gendannes ikke; notér det, hvis det ses)
+- [ ] **Fortryd agent-session** uden at fjerne markeringen først: ingen gule celler tilbage, og formaterne er som før planen
+- [ ] En ny plan, mens den gamle markering står: den gamle markering forsvinder, og Fortryd for den nye plan efterlader ingen gule celler
+- [ ] En plan med både skrivning og slettede rækker (eller sortering) på samme ark: intet markeres, og knappen **Fjern markering** vises ikke
 
 **Agent i PowerPoint – formatering** (præsentation med firmaskabelon, fed ord i en punktliste, farvet tekst):
 - [ ] Erstat et tal i et punkt med fed tekst foran: kun tallet skifter, fed og farve bevares
