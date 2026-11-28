@@ -3,6 +3,6 @@
  * tasks/. Denne fil samler den offentlige del, så addin og bridge importerer som før.
  */
 export * from "./tasks/definition.js";
-export { doc, hostName, SYSTEM_BASE, sourcesBlock, system } from "./tasks/prompts.js";
+export { doc, hostName, instructionsBlock, SYSTEM_BASE, sourcesBlock, system, withInstructions } from "./tasks/prompts.js";
 export * from "./tasks/results.js";
 export { getTask, TASKS, tasksForHost, textFormat } from "./tasks/catalog.js";

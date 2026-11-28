@@ -99,6 +99,11 @@ export interface ContextOptions {
   overview?: "headers" | "stats";
   /** Word: medtag afsnittene med typografi, liste og tabel (agent-tilstand, kræver WordApi 1.3). */
   structure?: boolean;
+  /**
+   * Word: medtag afsnittene, når hele dokumentet er konteksten, så chatten kan henvise til dem med
+   * en markør (#77, kræver WordApi 1.3). Markørerne tæller med i tegngrænsen.
+   */
+  numbered?: boolean;
   /** Maks. antal tegn tekst (standard MAX_CONTEXT_CHARS; opgaver med map-reduce får mere). */
   maxChars?: number;
   /**

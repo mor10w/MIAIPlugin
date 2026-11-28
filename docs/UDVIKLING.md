@@ -242,6 +242,20 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Bridge-tilstand detekteres automatisk; badge viser "bridge"
 - [ ] `localStorage` bevares mellem genstarter af Word/Excel/PowerPoint (især på Mac)
 
+**Office på nettet: lokal netværksadgang (#74)**
+
+Afprøves i nyeste Chrome og Edge med det hostede add-in (GitHub Pages) mod Ollama med `OLLAMA_ORIGINS`. Koden bygger på specifikationen og er ikke afprøvet i en rigtig browser; notér afvigelser, og ret teksterne `lnaDenied`, `lnaFrame` og `lnaPrompt` (`i18n.ts`) og afsnittet i [BRUG.md](BRUG.md#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge), hvis browserens ordlyd er en anden.
+
+- [ ] Første kald: spørger browseren om lokal netværksadgang, også uden et klik fra brugeren? Notér ordlyden, og hvilken side tilladelsen gemmes for (Office-siden eller add-in'ets adresse)
+- [ ] `await navigator.permissions.query({ name: "loopback-network" })` i konsollen, i add-in'ets ramme: svarer `prompt`, `granted` eller `denied` som forventet? `document.featurePolicy.allowsFeature("loopback-network")`: giver Office på nettet tilladelsen videre til add-in'et?
+- [ ] **Tillad**: status bliver *Forbundet* inden for 15 sekunder (eller efter **Søg igen**), og en opgave kører
+- [ ] **Bloker**: status *Blokeret af browseren*, banner med vejledning, guiden viser blokeringen én gang, og en opgave fejler med samme overskrift (ikke "Kunne ikke forbinde" med CORS-vejledning)
+- [ ] Fortryd via webstedsindstillinger som beskrevet i BRUG.md, genindlæs: forbindelsen virker
+- [ ] Spørgsmålet lukkes eller ignoreres: guiden viser "Intet værktøj fundet" og hjælpeteksten om at vælge Tillad. Kommer spørgsmålet igen ved hvert statustjek (hvert 15. sekund), og forsvinder det, når et kald afbrydes af timeout?
+- [ ] Giver Office på nettet ikke tilladelsen videre: MIAI viser beskeden om, at siden ikke giver add-in'et lov (ikke vejledningen til webstedsindstillinger)
+- [ ] Politikken `LocalNetworkAccessAllowedForUrls` med add-in'ets adresse og derefter med Office-sidens adresse: hvilken af dem fjerner spørgsmålet?
+- [ ] MIAI App (bridge) brugt i Office på nettet: spørger browseren, før task pane hentes fra `https://localhost`, og hvad sker der ved Bloker?
+
 **Funktioner**
 - [ ] Word: ret grammatik → sporede ændringer vises og kan accepteres/afvises
 - [ ] Word: omskriv, oversæt, opsummér (uden markering = hele dokumentet), artikel indsættes som formateret tekst, kommentar
@@ -335,6 +349,7 @@ Skal afprøves i Office desktop. Trin for trin, med testdata og resultatskabelon
 - [ ] Flere trin: bed om noget, der kræver data fra et andet ark ("tilføj budgettet fra Budget-arket"): "Læser Budget!…" vises, og planen bruger de rigtige tal; intet er ændret, før planen udføres
 - [ ] En handling, der fejler (fx sortering efter en kolonne, der ikke findes): "Bed modellen rette det, der fejlede" giver en ny plan kun for det fejlede
 - [ ] Klikbare henvisninger: en celleadresse i et chatsvar markerer cellerne (også på et andet ark); "Vis i dokumentet" i planen markerer målet i Excel, Word og PowerPoint uden at ændre noget
+- [ ] Henvisninger til afsnit i Word (#77): spørg i **Chat** om et længere dokument uden markering (med overskrifter, en tabel og tomme afsnit): svaret henviser med `[¶12]`, og et klik markerer det rigtige afsnit (også i en tabel); slet et afsnit længere oppe, og klik igen: det samme afsnit markeres
 - [ ] Kodetilstand i Word: "Skriv 'Fortroligt' i sidehovedet" kører; et script, der fejler midtvejs, efterlader brødteksten som før; Fortryd gendanner brødteksten med formatering, billeder og tabeller
 - [ ] Kodetilstand i PowerPoint (Microsoft 365): et script, der tilføjer en figur eller sletter slides, kan fortrydes, og alle slides er tilbage med billeder, noter og animationer; i PowerPoint 2019 afvises scriptet med en forklaring
 - [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres

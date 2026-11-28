@@ -256,6 +256,20 @@ export const Endpoint = z.object({
 });
 export type Endpoint = z.infer<typeof Endpoint>;
 
+/** Loft over længden af en fast instruktion (#78): pr. vært, og hver for sig for bruger og organisation. */
+export const MAX_INSTRUCTION_CHARS = 2_000;
+/** De værter, der kan have faste instruktioner. */
+export const INSTRUCTION_HOSTS = ["word", "excel", "powerpoint", "outlook"] as const;
+export type InstructionHost = (typeof INSTRUCTION_HOSTS)[number];
+
+const Instruction = z.string().max(MAX_INSTRUCTION_CHARS).default("");
+/**
+ * Faste instruktioner pr. vært (#78), fx "formatér tal med tusindtalsseparator" i Excel. Motoren
+ * sætter dem ind i systemprompten for alle opgaver i den vært, de gælder.
+ */
+export const HostInstructions = z.object({ word: Instruction, excel: Instruction, powerpoint: Instruction, outlook: Instruction });
+export type HostInstructions = z.infer<typeof HostInstructions>;
+
 export const Settings = z.object({
   endpoints: z.array(Endpoint).min(1),
   activeEndpoint: z.string(),
@@ -323,6 +337,8 @@ export const Settings = z.object({
   agentExport: z.boolean().default(false),
   /** Mappe med brugerdefinerede opgaver (F14). Kun bridge kan læse mapper; tom = <config>/tasks. */
   customTasksDir: z.string().max(1024).default(""),
+  /** Brugerens faste instruktioner pr. vært (#78). Organisationens står i politikken og lægges før. */
+  instructions: HostInstructions.default({ word: "", excel: "", powerpoint: "", outlook: "" }),
 });
 export type Settings = z.infer<typeof Settings>;
 
@@ -346,6 +362,11 @@ export const Policy = z.object({
   agentScripts: z.boolean().default(true),
   /** Må agenten gemme et Excel-ark som .xlsx-fil (tillæg ADR-0012)? */
   agentExport: z.boolean().default(true),
+  /**
+   * Organisationens faste instruktioner pr. vært (#78). De lægges før brugerens i systemprompten,
+   * vises skrivebeskyttet under Indstillinger og kan ikke fjernes af brugeren.
+   */
+  instructions: HostInstructions.optional(),
 });
 export type Policy = z.infer<typeof Policy>;
 
@@ -390,14 +411,27 @@ export interface ModelInfo {
   endpoint: string;
 }
 
+/**
+ * Browserens tilladelse til lokal netværksadgang (Local Network Access, #74), når den står i vejen
+ * for add-in'et i direkte tilstand: denied = afvist af brugeren eller en browserpolitik; frame =
+ * siden, add-in'et vises i (fx Office på nettet), giver ikke tilladelsen videre til add-in'et;
+ * prompt = browseren har ikke fået svar endnu, så et kald kan vente på (eller være afvist af) spørgsmålet.
+ */
+export type LocalNetworkAccess = "denied" | "frame" | "prompt";
+
 export interface HealthInfo {
   ok: boolean;
   version: string;
-  endpoint: { id: string; baseUrl: string; reachable: boolean; error?: string };
+  /** blocked: browseren blokerer kaldet (kun direkte tilstand, #74). */
+  endpoint: { id: string; baseUrl: string; reachable: boolean; error?: string; blocked?: Exclude<LocalNetworkAccess, "prompt"> };
 }
 
 /**
  * Resultat af at teste en endpoint (#4). reason: cors = noget svarer, men browseren må ikke læse
- * svaret (CORS mangler); absent = intet svarer; policy = ikke tilladt; http = fejlsvar fra serveren.
+ * svaret (CORS mangler); absent = intet svarer; policy = ikke tilladt; http = fejlsvar fra serveren;
+ * blocked = browseren blokerer kaldet (lokal netværksadgang, #74), så det kan ikke ses, om noget svarer.
+ * lna er sat ved blocked (denied/frame) og ved absent, når browseren endnu ikke har fået svar (prompt).
  */
-export type ProbeResult = { ok: true; models: string[] } | { ok: false; reason: "cors" | "absent" | "policy" | "http" | "protocol"; message: string };
+export type ProbeResult =
+  | { ok: true; models: string[] }
+  | { ok: false; reason: "cors" | "absent" | "policy" | "http" | "protocol" | "blocked"; message: string; lna?: LocalNetworkAccess };

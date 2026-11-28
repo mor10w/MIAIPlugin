@@ -1,8 +1,8 @@
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { executeTask, InputError, validateInput } from "./engine.js";
+import { executeTask, InputError, probeEndpoint, validateInput } from "./engine.js";
 import { getTask } from "./tasks.js";
-import { Policy, Settings, TaskRequest, type TaskEvent } from "./types.js";
+import { Endpoint, Policy, Settings, TaskRequest, type TaskEvent } from "./types.js";
 
 // Simulerer et inference-værktøj, som add-in'et kalder direkte (som Ollama med CORS).
 let server: Server;
@@ -253,5 +253,43 @@ describe("executeTask (direkte tilstand)", () => {
       tools: { specs: [], run: async () => (calls.push("x"), "resultat") },
     });
     expect(calls).toHaveLength(0); // eksekvereren må aldrig kaldes
+  });
+});
+
+describe("probeEndpoint: lokal netværksadgang (#74)", () => {
+  // Intet lytter på port 9, så kaldet fejler som en lukket port – ligesom et kald, browseren har blokeret.
+  const dead = Endpoint.parse({ id: "d", name: "Død", baseUrl: "http://127.0.0.1:9/v1" });
+  const policy = Policy.parse({});
+
+  it("afvist tilladelse giver blocked – og der prøves ikke med no-cors", async () => {
+    for (const lna of ["denied", "frame"] as const) {
+      let noCors = 0;
+      const r = await probeEndpoint(dead, policy, { localNetworkAccess: async () => lna, reachableWithoutCors: async () => (noCors++, true) });
+      expect(r).toMatchObject({ ok: false, reason: "blocked", lna });
+      expect(!r.ok && r.message).toContain("http://127.0.0.1:9/v1");
+      expect(noCors).toBe(0);
+    }
+  });
+
+  it("uden svar fra tilladelsen er resultatet som før: cors, når noget lytter, ellers absent", async () => {
+    const unknown = async () => undefined;
+    expect(await probeEndpoint(dead, policy, { localNetworkAccess: unknown, reachableWithoutCors: async () => true })).toMatchObject({ reason: "cors" });
+    const absent = await probeEndpoint(dead, policy, { localNetworkAccess: unknown, reachableWithoutCors: async () => false });
+    expect(absent).toMatchObject({ ok: false, reason: "absent" });
+    expect(absent).not.toHaveProperty("lna");
+    expect(await probeEndpoint(dead, policy)).toMatchObject({ ok: false, reason: "absent" });
+  });
+
+  it("ubesvaret tilladelse følger med et absent, og en fejl i opslaget ignoreres", async () => {
+    expect(await probeEndpoint(dead, policy, { localNetworkAccess: async () => "prompt" })).toMatchObject({ reason: "absent", lna: "prompt" });
+    const failing = () => Promise.reject(new Error("ingen Permissions API"));
+    expect(await probeEndpoint(dead, policy, { localNetworkAccess: failing })).toMatchObject({ ok: false, reason: "absent" });
+  });
+
+  it("en endpoint, der svarer, spørger aldrig om tilladelsen", async () => {
+    let asked = 0;
+    const r = await probeEndpoint(Endpoint.parse({ id: "x", name: "X", baseUrl: base }), policy, { localNetworkAccess: async () => (asked++, "denied") });
+    expect(r).toEqual({ ok: true, models: ["gemma3:4b"] });
+    expect(asked).toBe(0);
   });
 });

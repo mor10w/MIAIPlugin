@@ -49,6 +49,8 @@ export interface CellQuery {
   optimized: boolean;
   prompt: string;
   input: string;
+  /** De faste instruktioner for Excel (#78), som de sendes til modellen. Tom = ingen. */
+  instructions?: string;
 }
 
 const hex = (bytes: Uint8Array) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -70,7 +72,17 @@ function cyrb(str: string, seed: number): string {
 /** Nøglen for en forespørgsel: de første 128 bit af SHA-256 over alle felter. */
 export async function queryKey(q: CellQuery): Promise<string> {
   // Længderne med, så felterne ikke kan flyde sammen ("a" + "bc" ≠ "ab" + "c").
-  const text = ["v1", q.endpoint, q.model, q.optimized ? "1" : "0", q.prompt.length, q.prompt, q.input].join("\u0000");
+  // Instruktionerne kun, når der er nogen – så svar, der er gemt uden, stadig findes.
+  const text = [
+    "v1",
+    q.endpoint,
+    q.model,
+    q.optimized ? "1" : "0",
+    q.prompt.length,
+    q.prompt,
+    q.input,
+    ...(q.instructions ? [q.input.length, q.instructions] : []),
+  ].join("\u0000");
   const subtle = globalThis.crypto?.subtle;
   if (subtle) return hex(new Uint8Array(await subtle.digest("SHA-256", new TextEncoder().encode(text))).slice(0, 16));
   return cyrb(text, 1) + cyrb(text, 2);

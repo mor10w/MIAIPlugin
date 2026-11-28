@@ -15,6 +15,7 @@ import {
 import {
   attachmentsText,
   chartMaterial,
+  citableParagraphs,
   MAX_ATTACHMENTS,
   type AgentPlan,
   type ApplyMode,
@@ -41,7 +42,8 @@ import { useAgentOptions } from "../useAgentOptions";
 import { planWithReads } from "../agentRun";
 import { ACCEPT, AttachmentError, IMAGE_TYPES, toAttachment } from "../attach";
 import { ui } from "../theme";
-import { useDocRefs } from "../useDocRefs";
+import { paragraphRefs, useDocRefs } from "../useDocRefs";
+import { withoutParagraphMarks } from "../refs";
 import { AgentPlanView } from "./AgentPlanView";
 
 /** Chat → agent: brugerens ønske og chatsvaret, som agenten skal bruge som indhold. */
@@ -147,6 +149,11 @@ type Message = ChatMessage & {
   attachments?: Attachment[];
   /** Hentet fra en tidligere samtale om dokumentet (#26): svaret var en plan, som ikke længere kan udføres herfra. */
   planned?: boolean;
+  /**
+   * Word (#77): dokumentets afsnit, som modellen så dem – det, svarets henvisninger ([¶12]) peger på.
+   * Gemmes ikke med samtalen (det er dokumentets indhold), så svar fra en tidligere samtale har ingen links.
+   */
+  paragraphs?: DocContext["paragraphs"];
 };
 
 /**
@@ -270,7 +277,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
   const agentOpts = useAgentOptions(`${messages.length}:${shown}`);
   /** Sidst sendte kontekst – vises i footeren, så brugeren ser hvad modellen har set. */
   const [lastCtx, setLastCtx] = useState<DocContext | null>(null);
-  // Henvisninger til celler og slides i svarene kan klikkes (#22).
+  // Henvisninger til celler og slides i svarene kan klikkes (#22); afsnit i Word følger det enkelte svar (#77).
   const docRefs = useDocRefs(adapter, lastCtx);
   // Søgning i egne mapper (F15): kun når bridgen har et aktivt vidensindeks.
   const [knowledgeOn, setKnowledgeOn] = useState(false);
@@ -371,7 +378,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
     };
     if (canAct && act && (opts.plan || looksLikeEditRequest(prompt))) return makePlan(extra);
     const ctx = useContext
-      ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats" }).catch(() => ctxRef.current)
+      ? await adapter.getContext({ wholeDocumentFallback: true, overview: "stats", numbered: true }).catch(() => ctxRef.current)
       : { host: adapter.host, text: "", isWholeDocument: false };
     ctxRef.current = ctx;
     setLastCtx(useContext ? ctx : null);
@@ -383,7 +390,8 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
     const answer = withoutFakePlan(final.text);
     if (answer.faked && canAct && act) return makePlan({});
     const content = answer.faked ? [answer.text, t("chatFakePlan")].filter(Boolean).join("\n\n") : final.text;
-    setMessages((m) => [...m, { role: "assistant", content, model: final.model, sources: final.sources }]);
+    const paragraphs = citableParagraphs(ctx);
+    setMessages((m) => [...m, { role: "assistant", content, model: final.model, sources: final.sources, ...(paragraphs ? { paragraphs } : {}) }]);
   };
 
   const modes: ApplyMode[] = (["insertAfter", "replace", "comment"] as ApplyMode[]).filter((m) => adapter.supports(m));
@@ -463,7 +471,7 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
               ) : (
                 <Markdown
                   text={m.content}
-                  refs={docRefs}
+                  refs={docRefs ?? paragraphRefs(adapter, m.paragraphs, (n) => t("refParagraph", { n }))}
                   onDiagramError={(err) =>
                     setDiagramErrors((d) => {
                       if ((d[i] ?? null) === err) return d;
@@ -497,7 +505,9 @@ export function ChatTab({ adapter, onUseAgent, active = true }: { adapter: HostA
                     label={t("applyLabel")}
                     modes={modesFor(m.content, i)}
                     apply={(mode) => {
-                      return mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(m.content, "markdown", mode, ctxRef.current);
+                      // Afsnitsmarkører (#77) er henvisninger i samtalen, ikke tekst til dokumentet.
+                      const text = m.paragraphs ? withoutParagraphMarks(m.content) : m.content;
+                      return mode === "image" ? adapter.applyImage!(m.content, ctxRef.current) : adapter.applyText(text, "markdown", mode, ctxRef.current);
                     }}
                     copyText={m.content}
                   />

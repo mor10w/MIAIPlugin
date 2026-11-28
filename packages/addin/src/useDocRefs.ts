@@ -21,3 +21,16 @@ export function useDocRefs(adapter: HostAdapter, ctx: DocContext | null | undefi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adapter, used]);
 }
+
+/**
+ * Klikbare henvisninger til afsnit i et chatsvar i Word (#77). `paragraphs` er dokumentets afsnit,
+ * som modellen så dem, da svaret blev skrevet: numrene i et ældre svar gælder dokumentet dengang,
+ * så hvert svar har sine egne. `label` er knappens forklaring (tooltip) for et afsnitsnummer.
+ */
+export function paragraphRefs(adapter: HostAdapter, paragraphs: DocContext["paragraphs"], label: (n: number) => string): DocRefs | undefined {
+  if (adapter.host !== "word" || !adapter.goTo || !paragraphs?.length) return undefined;
+  return {
+    find: (text) => findRefs(text, "word", { paragraphs }).map((m) => ({ ...m, label: label(m.ref.paragraph!) })),
+    onClick: (ref) => void adapter.goTo!(ref).catch(() => {}),
+  };
+}
