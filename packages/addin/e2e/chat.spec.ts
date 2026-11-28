@@ -159,6 +159,133 @@ test("Excel: celleadresser i svaret kan klikkes og markerer området – ikke i 
   await expect.poll(selected).toEqual(["Ark1!B2:B3", "Budget!B2"]);
 });
 
+/** Det, den simulerede Word har markeret (paragraph.select()), i rækkefølge. */
+const selectedParagraphs = (tp: { page: import("@playwright/test").Page }) =>
+  tp.page.evaluate(() =>
+    (window as unknown as { __miai: { calls: { kind: string; paragraph?: number; text?: string }[] } }).__miai.calls
+      .filter((c) => c.kind === "select")
+      .map((c) => ({ paragraph: c.paragraph, text: c.text })),
+  );
+
+test("Word: henvisninger til afsnit i svaret kan klikkes og markerer afsnittet – også efter at et tidligere afsnit er slettet (#77)", async ({ open }) => {
+  // 50 afsnit: en overskrift, et tomt afsnit, brødtekst og en tabel på to rækker (afsnit 45–48).
+  const cells: Record<number, { text: string; cell: [number, number] }> = {
+    45: { text: "Plan", cell: [1, 1] },
+    46: { text: "Pris", cell: [1, 2] },
+    47: { text: "Basis", cell: [2, 1] },
+    48: { text: "499 kr", cell: [2, 2] },
+  };
+  const text = (n: number) => cells[n]?.text ?? (n === 1 ? "Kontrakt om levering" : n === 5 ? "" : `Punkt ${n}: leverandøren skal opfylde krav nummer ${n}.`);
+  const tp = await open({
+    host: "Word",
+    apiSets: { WordApi: "1.4" },
+    paragraphs: Array.from({ length: 50 }, (_, i) => ({
+      text: text(i + 1),
+      ...(i === 0 ? { style: "Heading1" } : {}),
+      ...(cells[i + 1] ? { cell: cells[i + 1].cell } : {}),
+    })),
+  });
+  tp.model.reply = () => ({
+    stream: chunks(
+      "Fristen står i [¶12], og prisen i [¶37] og i tabellen [¶47]. Se også ¶40, men [¶99] findes ikke.\n\n- [¶7]: Uklart\n\nMarkøren `[¶12]` i kode er ikke et link:\n\n```\n[¶13]\n```",
+    ),
+  });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvor står fristen og prisen?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Fristen står i")).toBeVisible();
+
+  // Modellen ser dokumentet med en markør foran hvert afsnit (tomme afsnit udeladt, en tabelrække på
+  // én linje) og bedes henvise med markøren.
+  const system = tp.model.lastRequest!.messages[0].content as string;
+  expect(system).toContain(`<document>\n[¶1] Kontrakt om levering\n[¶2] ${text(2)}\n`);
+  expect(system).toContain(`[¶4] ${text(4)}\n[¶6] ${text(6)}\n`);
+  expect(system).toContain(`[¶44] ${text(44)}\n[¶45] Plan | Pris\n[¶47] Basis | 499 kr\n[¶49] ${text(49)}\n[¶50] ${text(50)}\n</document>`);
+  expect(system).toContain("cite the paragraph by its marker, e.g. [¶12]");
+
+  // Fem henvisninger: ikke nummeret, dokumentet ikke har, og ikke markørerne i kode. Linjen med kolon er der stadig.
+  const refs = tp.page.locator("button.docref");
+  await expect(refs).toHaveText(["[¶12]", "[¶37]", "[¶47]", "¶40", "[¶7]"]);
+  await expect(tp.page.getByText("[¶99] findes ikke")).toBeVisible();
+  await expect(tp.page.getByText(": Uklart")).toBeVisible();
+  await expect(refs.first()).toHaveAttribute("title", "Vis afsnit 12 i dokumentet");
+
+  await refs.nth(0).click();
+  await expect.poll(() => selectedParagraphs(tp)).toEqual([{ paragraph: 12, text: text(12) }]);
+
+  // Brugeren sletter afsnit 3: afsnit 37 er nu nummer 36 og findes på sin tekst.
+  await tp.page.evaluate(() => (window as unknown as { __miai: { removeParagraph: (i: number) => void } }).__miai.removeParagraph(2));
+  await refs.nth(1).click();
+  await expect.poll(async () => (await selectedParagraphs(tp)).at(-1)).toEqual({ paragraph: 36, text: text(37) });
+  // Det gælder også tabelrækken og afsnittet lige efter det slettede.
+  await refs.nth(2).click();
+  await expect.poll(async () => (await selectedParagraphs(tp)).at(-1)).toEqual({ paragraph: 46, text: "Basis" });
+  await refs.nth(4).click();
+  await expect.poll(async () => (await selectedParagraphs(tp)).at(-1)).toEqual({ paragraph: 6, text: text(7) });
+  expect(await selectedParagraphs(tp)).toHaveLength(4);
+});
+
+test("Word: afsnitsmarkører sættes ikke ind i dokumentet, og en markering nummereres ikke (#77)", async ({ open }) => {
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, document: "Tilbud\nPrisen er 499 kr. pr. måned.\nBindingen er 12 måneder." });
+  tp.model.reply = () => ({ stream: chunks("Prisen er 499 kr. pr. måned [¶2].") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad koster det?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.locator("button.docref")).toHaveText(["[¶2]"]);
+  expect(tp.model.lastRequest!.messages[0].content).toContain(
+    "<document>\n[¶1] Tilbud\n[¶2] Prisen er 499 kr. pr. måned.\n[¶3] Bindingen er 12 måneder.\n</document>",
+  );
+
+  await tp.page.getByRole("button", { name: "Indsæt efter" }).click();
+  await expect.poll(async () => (await tp.find<{ html: string }>("insertHtml"))?.html).toContain("Prisen er 499 kr. pr. måned.");
+  expect((await tp.find<{ html: string }>("insertHtml"))!.html).not.toContain("¶");
+
+  // Med en markering får modellen kun den markerede tekst, uden numre – og et nummer i svaret er ikke et link.
+  await tp.page.evaluate(() => (window as unknown as { __miai: { selectText: (t: string) => void } }).__miai.selectText("Bindingen er 12 måneder."));
+  tp.model.reply = () => ({ stream: chunks("Bindingen står i [¶3].") });
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvor lang er bindingen?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Bindingen står i [¶3].")).toBeVisible();
+  const system = tp.model.lastRequest!.messages[0].content as string;
+  expect(system).toContain("The user's current selection:\n<document>\nBindingen er 12 måneder.\n</document>");
+  expect(system).not.toContain("¶");
+  await expect(tp.page.locator("button.docref")).toHaveCount(1);
+});
+
+test("Word: markørerne tæller med i grænsen for konteksten, og brugeren får at vide, at dokumentet er afkortet (#77)", async ({ open }) => {
+  // 1.150 afsnit a 19 tegn: teksten (23.000 tegn) er under grænsen på 24.000, men ikke med en markør pr. afsnit.
+  const line = (n: number) => `Afsnit nummer ${String(n).padStart(4, "0")}.`;
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, paragraphs: Array.from({ length: 1_150 }, (_, i) => ({ text: line(i + 1) })) });
+  tp.model.reply = () => ({ stream: chunks("Dokumentet er en lang liste.") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad handler dokumentet om?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Dokumentet er en lang liste.")).toBeVisible();
+
+  const system = tp.model.lastRequest!.messages[0].content as string;
+  const sent = /<document>\n([\s\S]*)\n<\/document>/.exec(system)![1];
+  expect(sent.length).toBeLessThanOrEqual(24_000 + "\n[… afkortet]".length);
+  expect(sent.length).toBeGreaterThan(23_000);
+  expect(sent.endsWith("\n[… afkortet]")).toBe(true);
+  expect(sent).toContain(`[¶800] ${line(800)}`);
+  expect(sent).not.toContain(line(1_150));
+  await expect(tp.page.getByText(/Kun de første .* af 22\D?999 tegn blev sendt til modellen\./)).toBeVisible();
+});
+
+test("Word: et dokument med et afsnit, der er for langt til at sendes som afsnit, sendes som tekst uden numre (#77)", async ({ open }) => {
+  const long = "Løbende tekst uden linjeskift. ".repeat(700).trim();
+  const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" }, paragraphs: [{ text: "Referat" }, { text: long }] });
+  tp.model.reply = () => ({ stream: chunks("Det er et referat.") });
+  await tp.tab("Chat");
+  await tp.page.getByPlaceholder("Spørg om dit dokument…").fill("Hvad er det for et dokument?");
+  await tp.page.keyboard.press("Enter");
+  await expect(tp.page.getByText("Det er et referat.")).toBeVisible();
+  const system = tp.model.lastRequest!.messages[0].content as string;
+  expect(long.length).toBeGreaterThan(20_000);
+  expect(system).toContain(`The user's current document:\n<document>\nReferat\n${long}\n</document>`);
+  expect(system).not.toContain("¶");
+});
+
 test("Word: en Markdown-tabel i chatsvaret indsættes som en rigtig tabel (#24)", async ({ open }) => {
   const tp = await open({ host: "Word", apiSets: { WordApi: "1.4" } });
   tp.model.reply = () => ({ stream: chunks("Her er priserne:\n\n| Plan | Pris |\n|---|---|\n| Basis | 499 kr |\n| Plus | 799 kr |\n") });

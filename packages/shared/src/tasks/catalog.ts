@@ -3,6 +3,7 @@ import type { ChatMessage, DocContext, HostKind } from "../types.js";
 import { DiagramResult } from "../diagram.js";
 import { DesignPlan, DESIGN_GUIDE } from "../design.js";
 import { AgentPlan, agentToolGuide, MAX_AGENT_ACTIONS, numberedRows, renderExcelStructure, renderParagraphs, renderSlides } from "../agent.js";
+import { citableParagraphs, renderCitableParagraphs } from "../paragraphRefs.js";
 import { CELL_ASK_OPTIMIZED_TOKENS, CELL_ASK_TASK, isExcelRange, type TaskDefinition, type TextFormat } from "./definition.js";
 import { doc, EXCEL_SCOPE_RULES, LANG_OPTIONS, ONLY_RESULT, sourcesBlock, system, TONE_OPTIONS, user } from "./prompts.js";
 import { FormulaResult, GrammarResult, SlidesResult } from "./results.js";
@@ -609,9 +610,13 @@ export const TASKS: TaskDefinition[] = [
     buildMessages: (req) => {
       const ctx = req.context;
       const content = ctx.host === "excel" ? ctx.table || ctx.text : ctx.text;
-      const contextNote = content
-        ? `The user's current ${ctx.isWholeDocument ? "document" : "selection"}${ctx.address ? ` (${ctx.address})` : ""}:\n${doc(content)}`
-        : "The user has no selection.";
+      // Word (#77): hele dokumentet vises med en markør foran hvert afsnit, så svaret kan henvise til afsnit.
+      const paragraphs = citableParagraphs(ctx);
+      const contextNote = paragraphs
+        ? `The user's current document, one paragraph per line, each starting with its marker (a table row is one line with " | " between the cells):\n${doc(renderCitableParagraphs(paragraphs) + (ctx.truncated ? "\n[… afkortet]" : ""))}`
+        : content
+          ? `The user's current ${ctx.isWholeDocument ? "document" : "selection"}${ctx.address ? ` (${ctx.address})` : ""}:\n${doc(content)}`
+          : "The user has no selection.";
       return [
         system(
           req,
@@ -631,7 +636,9 @@ export const TASKS: TaskDefinition[] = [
             ? "Refer to cells by their addresses (B7, C2:C5, or Budget!B2 on another sheet) – the user can click an address to jump to it."
             : ctx.host === "powerpoint"
               ? "Refer to slides by number ('slide 3') – the user can click it to go to the slide."
-              : undefined,
+              : paragraphs
+                ? "When you point to a place in the document, cite the paragraph by its marker, e.g. [¶12] – the user can click it to jump to the paragraph. The markers are not part of the document's text: never put them in text you write for the document."
+                : undefined,
           ctx.host === "outlook" ? undefined : CHAT_EDIT_RULES,
           contextNote,
           ctx.surroundings && `Workbook overview (computed by the add-in over the full used range):\n${doc(ctx.surroundings)}`,

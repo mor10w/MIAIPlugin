@@ -349,6 +349,7 @@ Afprøves i nyeste Chrome og Edge med det hostede add-in (GitHub Pages) mod Olla
 - [ ] Flere trin: bed om noget, der kræver data fra et andet ark ("tilføj budgettet fra Budget-arket"): "Læser Budget!…" vises, og planen bruger de rigtige tal; intet er ændret, før planen udføres
 - [ ] En handling, der fejler (fx sortering efter en kolonne, der ikke findes): "Bed modellen rette det, der fejlede" giver en ny plan kun for det fejlede
 - [ ] Klikbare henvisninger: en celleadresse i et chatsvar markerer cellerne (også på et andet ark); "Vis i dokumentet" i planen markerer målet i Excel, Word og PowerPoint uden at ændre noget
+- [ ] Henvisninger til afsnit i Word (#77): spørg i **Chat** om et længere dokument uden markering (med overskrifter, en tabel og tomme afsnit): svaret henviser med `[¶12]`, og et klik markerer det rigtige afsnit (også i en tabel); slet et afsnit længere oppe, og klik igen: det samme afsnit markeres
 - [ ] Kodetilstand i Word: "Skriv 'Fortroligt' i sidehovedet" kører; et script, der fejler midtvejs, efterlader brødteksten som før; Fortryd gendanner brødteksten med formatering, billeder og tabeller
 - [ ] Kodetilstand i PowerPoint (Microsoft 365): et script, der tilføjer en figur eller sletter slides, kan fortrydes, og alle slides er tilbage med billeder, noter og animationer; i PowerPoint 2019 afvises scriptet med en forklaring
 - [ ] Politik `agentScripts: false` (bridge-politik eller `miai-config.json`): kontakten er slået fra og kan ikke ændres

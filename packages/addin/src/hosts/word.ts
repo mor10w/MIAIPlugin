@@ -1,10 +1,11 @@
 import { runWordScript } from "../script";
 import { selectedText, wordCount } from "./selection";
 import type { SelectionInfo } from "./types";
-import type { DocRef } from "../refs";
+import { locateParagraph, type DocRef } from "../refs";
 import {
   minimalEdit,
   occurrences,
+  paragraphMark,
   parseBlocks,
   type AgentAction,
   type ApplyMode,
@@ -48,6 +49,9 @@ const STYLE: Record<WordStyle, string> = {
 /** Agent-sessionens afsnit: som modellen så dem, ændret før start (stale) og slettet undervejs (gone). */
 /** Række og kolonne hentes for højst så mange afsnit i tabeller (hvert koster et opslag i Word). */
 const MAX_TABLE_PARAGRAPHS = 1_500;
+/** DocContext' grænser for afsnit: antal og tegn pr. afsnit. */
+const MAX_PARAGRAPHS = 5_000;
+const MAX_PARAGRAPH_CHARS = 20_000;
 /** Tabeltypografi til nye tabeller, når dokumentet ikke har en tabel at følge. */
 const DEFAULT_TABLE_STYLE = "GridTable4_Accent1";
 
@@ -94,16 +98,33 @@ export class WordAdapter implements HostAdapter {
       ctx.trackedObjects.add(target);
       await ctx.sync();
       this.range = target;
-      const paragraphs = opts.structure && has("1.3") ? await this.structure(ctx, target, opts.maxChars) : undefined;
-      return { host: "word", ...truncate(text, opts.maxChars), isWholeDocument, ...(paragraphs ? { paragraphs } : {}) };
+      const plain: DocContext = { host: "word", ...truncate(text, opts.maxChars), isWholeDocument };
+      if (!has("1.3")) return plain;
+      if (opts.structure) return { ...plain, paragraphs: (await this.structure(ctx, target, opts.maxChars)).paragraphs };
+      // Chatten (#77) kan henvise til afsnit, når hele dokumentet er konteksten (for en markering giver
+      // Word de hele afsnit, også den tekst, der ikke er markeret).
+      if (!opts.numbered || !isWholeDocument) return plain;
+      const s = await this.structure(ctx, target, opts.maxChars, true);
+      // Uden for DocContext' grænser sendes dokumentet som tekst uden numre, som før.
+      if (s.paragraphs.length > MAX_PARAGRAPHS || s.paragraphs.some((p) => p.text.length > MAX_PARAGRAPH_CHARS)) return plain;
+      // Markørerne fylder: nåede afsnittene ikke alle med, afkortes teksten samme sted, så brugeren får
+      // at vide, at modellen ikke så hele dokumentet.
+      const cut = s.cut ? { text: `${text.slice(0, s.chars)}\n[… afkortet]`, truncated: true, originalChars: text.length } : {};
+      return { ...plain, ...cut, paragraphs: s.paragraphs };
     });
   }
 
   /**
    * Afsnittene i området med typografi, liste og tabel – så agenten kan se (og bevare)
-   * dokumentets struktur. Afkortes ved samme tegngrænse som teksten.
+   * dokumentets struktur. Afkortes ved samme tegngrænse som teksten. Med `marks` tæller chattens
+   * afsnitsmarkører (#77) med i grænsen; `chars` er så meget af teksten, afsnittene dækker.
    */
-  private async structure(ctx: Word.RequestContext, target: Word.Range, maxChars = MAX_CONTEXT_CHARS): Promise<NonNullable<DocContext["paragraphs"]>> {
+  private async structure(
+    ctx: Word.RequestContext,
+    target: Word.Range,
+    maxChars = MAX_CONTEXT_CHARS,
+    marks = false,
+  ): Promise<{ paragraphs: NonNullable<DocContext["paragraphs"]>; cut: boolean; chars: number }> {
     const paras = target.paragraphs;
     paras.load("items/text,items/style,items/styleBuiltIn,items/isListItem,items/tableNestingLevel");
     await ctx.sync();
@@ -112,12 +133,15 @@ export class WordAdapter implements HostAdapter {
     for (const c of cells) c?.load("rowIndex,cellIndex");
     if (cells.some(Boolean)) await ctx.sync();
     const out: NonNullable<DocContext["paragraphs"]> = [];
+    let used = 0;
     let chars = 0;
     let table = 0;
-    paras.items.every((p, i) => {
-      chars += p.text.length + 1;
-      if (chars > maxChars) return false;
+    const cut = !paras.items.every((p, i) => {
       const inTable = p.tableNestingLevel > 0;
+      // Tomme afsnit uden for tabeller vises ikke for chatten og får derfor ingen markør.
+      used += p.text.length + 1 + (marks && (inTable || p.text.trim()) ? paragraphMark(i + 1).length + 1 : 0);
+      if (used > maxChars) return false;
+      chars += p.text.length + 1;
       // Tabeller nummereres i dokumentets rækkefølge: en ny tabel begynder efter et afsnit uden for en tabel.
       if (inTable && !(paras.items[i - 1]?.tableNestingLevel > 0)) table++;
       const c = cells[i];
@@ -131,7 +155,7 @@ export class WordAdapter implements HostAdapter {
       });
       return true;
     });
-    return out;
+    return { paragraphs: out, cut, chars };
   }
 
   private run<T>(fn: (ctx: Word.RequestContext, range: Word.Range) => Promise<T>): Promise<T> {
@@ -247,15 +271,20 @@ export class WordAdapter implements HostAdapter {
     return words ? { kind: "text", words } : null;
   }
 
-  /** Markerer afsnittet eller teksten i dokumentet (#22). Ændrer intet. */
+  /**
+   * Markerer afsnittet eller teksten i dokumentet (#22). Ændrer intet. Har henvisningen et uddrag af
+   * afsnittet (#77), findes afsnittet igen ud fra det, når nummeret ikke længere passer.
+   */
   async goTo(ref: DocRef): Promise<void> {
     await Word.run(async (ctx) => {
       const scope = ctx.document.body.getRange();
       if (ref.paragraph) {
         const paras = scope.paragraphs;
-        paras.load("items");
+        paras.load("items/text");
         await ctx.sync();
-        paras.items[ref.paragraph - 1]?.select();
+        const texts = paras.items.map((p) => p.text);
+        const n = locateParagraph(texts, ref.paragraph, ref.excerpt ?? "");
+        if (n) paras.items[n - 1].select();
       } else if (ref.find) {
         const hits = await this.find(ctx, scope, ref.find.slice(0, 255));
         hits[0]?.select();

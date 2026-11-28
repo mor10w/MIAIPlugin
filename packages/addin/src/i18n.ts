@@ -356,6 +356,7 @@ const da = {
   agentAct_saveSheetNamed: "Gem arket “{sheet}” som {fileName}",
   agentShowCode: "Vis koden",
   agentShowTarget: "Vis i dokumentet",
+  refParagraph: "Vis afsnit {n} i dokumentet",
   agentRetryScript: "Bed modellen rette scriptet",
   agentUndoScript:
     "Fortryd gendanner arkets celler og formater og fjerner nye ark, tabeller, diagrammer og pivottabeller. Betinget formatering, datavalidering og ændringer på andre ark gendannes ikke.",
@@ -897,6 +898,7 @@ const en: Dict = {
   agentAct_saveSheetNamed: "Save sheet “{sheet}” as {fileName}",
   agentShowCode: "Show the code",
   agentShowTarget: "Show in the document",
+  refParagraph: "Show paragraph {n} in the document",
   agentRetryScript: "Ask the model to fix the script",
   agentUndoScript:
     "Undo restores the sheet's cells and formats and removes new sheets, tables, charts and pivot tables. Conditional formatting, data validation and changes on other sheets are not restored.",
