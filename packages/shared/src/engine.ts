@@ -16,13 +16,14 @@ import {
 import { clearNativeCache, contextFix, fetchNativeModelInfo, MIN_AGENT_CONTEXT, type ModelDetails, type ModelServer } from "./modelInfo.js";
 import { isUrlAllowed } from "./policy.js";
 import { chunkChars, estimateMessages, looksTruncated, outputBudget, splitIntoChunks } from "./context.js";
-import { doc, system, textFormat, type TaskDefinition } from "./tasks.js";
+import { doc, instructionsBlock, system, textFormat, withInstructions, type TaskDefinition } from "./tasks.js";
 import { ThinkFilter } from "./think.js";
 import { chosenModel } from "./modelGroups.js";
 import {
   agentExportAllowed,
   agentScriptsAllowed,
   type Endpoint,
+  type LocalNetworkAccess,
   type ParsedTaskRequest,
   type Policy,
   type ProbeResult,
@@ -341,7 +342,17 @@ export async function executeTask(task: TaskDefinition, req: ParsedTaskRequest, 
   // Eksport (tillæg ADR-0012): kun bridgen kan skrive filer – direkte tilstand har ingen eksekverer.
   const agentExport = deps.tools !== undefined && agentExportAllowed(settings, policy) ? "on" : "";
   inputReq = { ...inputReq, params: { ...inputReq.params, agentScripts: agentScriptsAllowed(settings, policy) ? "on" : "", agentExport } };
-  const built = task.buildMessages(inputReq);
+  // Faste instruktioner (#78): organisationens (fra politikken) og brugerens for den vært, der
+  // arbejdes i, sættes ind i systembeskeden for alle opgaver. Det sker her og ikke i den enkelte
+  // opgave, så brugerdefinerede opgaver og MIAI.ASK også får dem. Map-trinnet ovenfor får dem ikke:
+  // det laver kun del-resuméer, og den afsluttende kørsel her følger instruktionerne.
+  const standing = instructionsBlock(req.context.host, policy.instructions, settings.instructions);
+  const prompted = task.buildMessages(inputReq);
+  const built = !standing
+    ? prompted
+    : prompted[0]?.role === "system"
+      ? [{ ...prompted[0], content: withInstructions(prompted[0].content, standing) }, ...prompted.slice(1)]
+      : [{ role: "system" as const, content: standing }, ...prompted];
   // Vedhæftninger (#27) lægges på brugerens seneste besked: tekstfiler som data, billeder som billeddele.
   const messages: ApiMessage[] = withAttachments(
     mapReduce ? [{ ...built[0], content: `${built[0].content}\n${REDUCE_NOTE}` }, ...built.slice(1)] : built,
@@ -459,15 +470,28 @@ function tryParse(schema: z.ZodType, text: string): { ok: true; data: unknown } 
   }
 }
 
+/** Motorens besked, når browseren blokerer kaldet (#74). Vejledningen står i add-in'ets tekster (da/en). */
+export function localNetworkMessage(baseUrl: string): string {
+  return `Browseren blokerer add-in'ets adgang til ${baseUrl} (lokal netværksadgang).`;
+}
+
 /**
  * Tester en endpoint uden at gemme den (#4): svarer /v1/models, og hvilke modeller findes?
  * `reachableWithoutCors` bruges i browseren til at skelne "CORS mangler" fra "intet kører":
  * et kald med mode "no-cors" lykkes (opakt svar), når noget lytter på porten.
+ * `localNetworkAccess` bruges også kun i browseren (#74): har browseren afvist lokal netværksadgang,
+ * fejler alle kald til adressen (også no-cors) på samme måde som en lukket port, så tilladelsen
+ * spørges først. Uden svar fra den (undefined) er resultatet som før.
  */
 export async function probeEndpoint(
   ep: Endpoint,
   policy: Policy,
-  opts: { signal?: AbortSignal; client?: ClientOptions; reachableWithoutCors?: (url: string) => Promise<boolean> } = {},
+  opts: {
+    signal?: AbortSignal;
+    client?: ClientOptions;
+    reachableWithoutCors?: (url: string) => Promise<boolean>;
+    localNetworkAccess?: (url: string) => Promise<LocalNetworkAccess | undefined>;
+  } = {},
 ): Promise<ProbeResult> {
   if (!isUrlAllowed(ep.baseUrl, policy)) return { ok: false, reason: "policy", message: `${ep.baseUrl} er ikke tilladt af politikken.` };
   // Kort timeout: en lukket port svarer straks, men en filtreret kan hænge.
@@ -478,10 +502,12 @@ export async function probeEndpoint(
     if (!(err instanceof UpstreamError)) throw err;
     if (err.code === "UPSTREAM_UNREACHABLE" || err.code === "UPSTREAM_TIMEOUT") {
       const url = ep.baseUrl.replace(/\/+$/, "") + "/models";
+      const lna = await opts.localNetworkAccess?.(url).catch(() => undefined);
+      if (lna === "denied" || lna === "frame") return { ok: false, reason: "blocked", lna, message: localNetworkMessage(ep.baseUrl) };
       if (opts.reachableWithoutCors && (await opts.reachableWithoutCors(url).catch(() => false))) {
         return { ok: false, reason: "cors", message: err.message };
       }
-      return { ok: false, reason: "absent", message: err.message };
+      return { ok: false, reason: "absent", message: err.message, ...(lna ? { lna } : {}) };
     }
     return { ok: false, reason: err.code === "UPSTREAM_HTTP" ? "http" : "protocol", message: err.message };
   }

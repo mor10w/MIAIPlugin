@@ -45,6 +45,7 @@ import {
   Delete20Regular,
   Globe20Regular,
   History20Regular,
+  Notepad20Regular,
   PlugConnected20Regular,
   Save20Regular,
   Search20Regular,
@@ -62,6 +63,7 @@ import type { HostAdapter } from "../hosts";
 import { ModelContext } from "./ModelContext";
 import { TaskModels } from "./TaskModels";
 import { KnowledgeSection } from "./KnowledgeSection";
+import { InstructionsSection } from "./InstructionsSection";
 
 /** Kendte værktøjer (fælles liste i shared, #4) + "Andet" til alt andet. */
 const PRESETS: KnownTool[] = [...KNOWN_TOOLS, { id: "custom", name: "Andet / Other", baseUrl: "http://127.0.0.1:8000/v1", structuredOutput: "none" }];
@@ -681,6 +683,16 @@ export function SettingsTab({
           </AccordionPanel>
         </AccordionItem>
 
+        {/* --- Faste instruktioner pr. program (#78) --------------------------------------- */}
+        <AccordionItem value="instructions" className={s.section}>
+          <AccordionHeader icon={<Notepad20Regular />} size="large">
+            {t("secInstructions")}
+          </AccordionHeader>
+          <AccordionPanel className={s.panel}>
+            <InstructionsSection settings={settings} setSettings={setSettings} policy={policy} host={adapter?.host} />
+          </AccordionPanel>
+        </AccordionItem>
+
         {/* --- Viden fra mine mapper (F15) ------------------------------------------------ */}
         <AccordionItem value="knowledge" className={s.section}>
           <AccordionHeader icon={<BookSearch20Regular />} size="large">
@@ -733,7 +745,15 @@ export function SettingsTab({
         {unverified && !unverified.ok && (
           <MessageBar intent="warning">
             <MessageBarBody>
-              {t(unverified.reason === "cors" ? "saveCors" : unverified.reason === "absent" ? "saveAbsent" : "saveHttp")}{" "}
+              {t(
+                unverified.reason === "blocked"
+                  ? "lnaTitle"
+                  : unverified.reason === "cors"
+                    ? "saveCors"
+                    : unverified.reason === "absent"
+                      ? "saveAbsent"
+                      : "saveHttp",
+              )}{" "}
               <Caption1>{unverified.message}</Caption1>
             </MessageBarBody>
             <MessageBarActions>

@@ -85,6 +85,9 @@ export async function buildServer({
   //  * Host-headeren skal være localhost/127.0.0.1 (beskytter mod DNS rebinding).
   //  * API-kald skal have headeren X-MIAI og, hvis Origin er sat, vores egen origin.
   //    Fremmede websider kan derfor ikke bruge bridgen (custom header ⇒ CORS-preflight, som vi afviser).
+  //  * Preflight besvares heller ikke med Access-Control-Allow-Private-Network (#74): task pane serveres
+  //    herfra og sender aldrig preflight, så headeren ville kun åbne for fremmede sider. Browserens
+  //    krav om lokal netværksadgang (Local Network Access) afgøres af en tilladelse, ikke af headeren.
   const allowedHosts = new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
   const allowedOrigins = new Set([...allowedHosts].map((h) => `https://${h}`));
 

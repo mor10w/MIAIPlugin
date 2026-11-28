@@ -38,6 +38,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
   - tjekker politikken
   - streamer svaret og filtrerer `<think>`
   - ved JSON-opgaver: sætter `response_format` efter endpointens `structuredOutput`, sender skemaet i prompten, validerer med Zod og prøver én gang mere ved fejl
+  - sætter faste instruktioner (#78) ind i systembeskeden for alle opgaver: organisationens (`Policy.instructions`) før brugerens (`Settings.instructions`) for værten i `req.context.host`. Indpakningen (`instructionsBlock` i `tasks/prompts.ts`) står efter grundreglerne og før alt dokumentindhold
 - **`context.ts`** (#3): token-estimat, svarbudget, opdeling ved afsnit og detektion af afkortning. Motoren bruger dem til:
   - at begrænse `max_tokens` og afvise for lange prompts, når kontekstlængden er kendt (endpointens `contextTokens`, aflæst fra `/v1/models` eller fra værktøjets eget API, se `modelInfo.ts`)
   - at køre map-reduce for opgaver med `chunking: "map-reduce"` (opsummering)
@@ -53,7 +54,7 @@ Ren TypeScript uden Node-afhængigheder, så den kører i Office-webviewet og i 
 Host-adaptere: Word, Excel, PowerPoint og Outlook (`hosts/outlook.ts`, Mailbox-API'et i læse- og skrivetilstand, eget MailApp-manifest – ADR-0015).
 - Task pane (React 19 + Fluent UI v9) med fanerne Handlinger, Opgaver, Chat og Indstillinger.
 - **Backends** (`src/backend`) med samme interface:
-  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin. Ved central udrulning henter den `miai-config.json` fra add-in'ets egen adresse: organisationens låste politik og standardindstillinger (ADR-0015).
+  - `DirectBackend`: kører `executeTask` i webviewet. Indstillinger og politik gemmes i `localStorage` med fallback til hukommelse; brugerdefinerede opgaver (F14) og audit-loggen (ringbuffer, maks. 200 poster) ligeså. Ved forbindelsesfejl vises præcis CORS-vejledning for add-in'ets origin; har browseren afvist lokal netværksadgang (Chrome og Edge, `localNetwork.ts`), vises det i stedet. Ved central udrulning henter den `miai-config.json` fra add-in'ets egen adresse: organisationens låste politik og standardindstillinger (ADR-0015).
   - `BridgeBackend`: kalder `/api/*` på samme origin og læser SSE-strømmen.
 - **Regnearksfunktioner** (`src/cell`, #80, ADR-0018): `=MIAI.ASK()` og `=MIAI.MODELS()` i Excel. `functions.ts` registrerer dem med `CustomFunctions.associate` og kalder opgaven `cell-ask` gennem backend'en; `queue.ts` er køen med loft og Stop, `cache.ts` den vedvarende cache, og `value.ts` gør svaret til en celleværdi. De kræver Excels shared runtime, som manifesterne til Word, Excel og PowerPoint slår til i Excel (bridge, dev og hostet).
 - **Host-adaptere**:

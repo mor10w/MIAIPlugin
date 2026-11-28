@@ -9,6 +9,7 @@ import {
   executeTask,
   getTask,
   isUrlAllowed,
+  localNetworkMessage,
   MAX_LOCAL_AUDIT_ENTRIES,
   mergeCellAudit,
   Endpoint,
@@ -21,6 +22,7 @@ import {
   TaskRequest,
   toTaskDefinition,
   toTaskView,
+  UpstreamError,
   UserTaskFile as UserTaskSchema,
   validateInput,
   AuditEntry as AuditSchema,
@@ -37,6 +39,7 @@ import {
   OrgConfig,
   ORG_CONFIG_FILE,
 } from "@miai/shared";
+import { localNetworkAccess } from "./localNetwork";
 import type { Backend, UserTaskInfo } from "./types";
 
 const VERSION = "0.1.0";
@@ -154,7 +157,9 @@ export class DirectBackend implements Backend {
       await cachedModels(ep, timeout(3_000), this.client);
       return { ok: true, version: VERSION, endpoint: { id: ep.id, baseUrl: ep.baseUrl, reachable: true } };
     } catch (err) {
-      return { ok: true, version: VERSION, endpoint: { id: ep.id, baseUrl: ep.baseUrl, reachable: false, error: (err as Error).message } };
+      const blocked = await blockedByBrowser(ep, err);
+      const error = blocked ? localNetworkMessage(ep.baseUrl) : (err as Error).message;
+      return { ok: true, version: VERSION, endpoint: { id: ep.id, baseUrl: ep.baseUrl, reachable: false, error, ...(blocked ? { blocked } : {}) } };
     }
   }
 
@@ -230,6 +235,7 @@ export class DirectBackend implements Backend {
     return probeEndpoint(Endpoint.parse(endpoint), this.policyNow, {
       signal: timeout(6_000),
       client: this.client,
+      localNetworkAccess,
       // Et no-cors-kald lykkes (opakt svar), når noget lytter – så mangler kun CORS-opsætningen.
       reachableWithoutCors: async (url) => {
         await fetch(url, { mode: "no-cors", signal: timeout(3_000) });
@@ -312,13 +318,25 @@ export class DirectBackend implements Backend {
       }
     } catch (err) {
       if (!signal.aborted) {
-        const e = errorEvent(err);
+        const blocked = await blockedByBrowser(ep, err);
+        // Blokeret af browseren (#74): egen kode, så fejlen ikke forklares som manglende CORS. Vejledningen står i banneret.
+        const e: TaskEvent = blocked ? { type: "error", message: localNetworkMessage(ep.baseUrl), code: "LNA_BLOCKED" } : errorEvent(err);
         onEvent(e);
         if (settings.auditLog && e.type === "error")
           this.pushAudit({ ts: new Date().toISOString(), kind: "task", task: id, host: epHost(ep.baseUrl), status: "error", code: e.code });
       } else throw err;
     }
   }
+}
+
+/**
+ * Lokal netværksadgang (#74): en forbindelsesfejl kan skyldes, at browseren har blokeret kaldet.
+ * Der spørges kun efter en fejl, så en virkende forbindelse aldrig påvirkes.
+ */
+async function blockedByBrowser(ep: Endpoint, err: unknown): Promise<"denied" | "frame" | undefined> {
+  if (!(err instanceof UpstreamError) || err.code !== "UPSTREAM_UNREACHABLE") return undefined;
+  const lna = await localNetworkAccess(ep.baseUrl).catch(() => undefined);
+  return lna === "denied" || lna === "frame" ? lna : undefined;
 }
 
 /** Host inkl. port ud fra basis-URL'en – uden at bryde kørslen ved ulæselig URL. */

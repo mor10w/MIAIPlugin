@@ -12,8 +12,17 @@ describe("cachenøglen", () => {
     const base = await queryKey(q);
     expect(base).toMatch(/^[0-9a-f]{32}$/);
     expect(await queryKey({ ...q })).toBe(base);
-    for (const other of [{ endpoint: "http://127.0.0.1:1234/v1" }, { model: "qwen3:32b" }, { optimized: true }, { prompt: "Opsummér" }, { input: "Hej." }])
+    for (const other of [
+      { endpoint: "http://127.0.0.1:1234/v1" },
+      { model: "qwen3:32b" },
+      { optimized: true },
+      { prompt: "Opsummér" },
+      { input: "Hej." },
+      { instructions: "Svar på engelsk." },
+    ])
       expect(await queryKey({ ...q, ...other })).not.toBe(base);
+    // Uden faste instruktioner (#78) er nøglen som før, så gemte svar stadig findes.
+    expect(await queryKey({ ...q, instructions: "" })).toBe(base);
   });
   it("felterne kan ikke flyde sammen", async () => {
     expect(await queryKey({ ...q, prompt: "ab", input: "c" })).not.toBe(await queryKey({ ...q, prompt: "a", input: "bc" }));
