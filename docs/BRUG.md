@@ -170,6 +170,7 @@ Tilstanden (direkte eller bridge) vælges automatisk ved start; task pane viser 
 |---|---|
 | 🟢 *Forbundet* | Modellen svarer. Hover viser den aktive endpoint. |
 | 🟡 *Ingen forbindelse til modellen* | Endpointet svarer ikke – typisk CORS. Hover viser fejl + vejledning. |
+| 🟡 *Blokeret af browseren* | Chrome eller Edge har afvist add-in'ets adgang til lokale adresser. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge). |
 | 🔴 *MIAI Bridge svarer ikke* | Bridgen kører ikke. Start MIAI App, eller `npm start`, hvis du kører bridgen fra kildekoden. |
 
 Ved første start er endpointet **Ollama** (`http://127.0.0.1:11434/v1`) og standardmodellen er den første fra `/v1/models`.
@@ -216,8 +217,37 @@ Fanen **Indstillinger** (indstillinger gemmes per maskine; i bridge-tilstand af 
 8. **Audit-log** – metadata (host, model, tokens) uden indhold; giver mest mening med bridge. Slås til/fra i fanen, og **Vis log** viser de seneste poster (bridge: `audit.log` i konfigurationsmappen, maks. 1 MB med rotation til `.old`; direkte tilstand: de seneste 200 i add-in'et).
 9. **Tilladte hosts** – politikken, én host pr. linje. Standard tillader kun loopback; `*.domæne`-wildcards kan bruges. I bridge-tilstand med maskinpolitik er feltet låst: *Politikken er fastsat af din organisation.*
 10. **Mappe med brugeropgaver** (kun bridge) – mappen med opgaver fra [Brugerdefinerede opgaver](#brugerdefinerede-opgaver); tom = `<konfig>/tasks`.
+11. **Faste instruktioner** – det, MIAI altid skal følge i et program; se [Faste instruktioner](#faste-instruktioner).
 
 Klik **Gem** – uden dette virker ændringerne ikke.
+
+### Faste instruktioner
+
+Under **Indstillinger → Faste instruktioner** skriver du det, MIAI altid skal følge i et program. Der er ét felt til hver af Word, Excel, PowerPoint og Outlook. Eksempler: *Formatér tal med tusindtalsseparator* i Excel, eller *Skriv kort og i du-form* i Word.
+
+- Instruktionen sendes med i alt, du laver i det program: handlinger, egne opgaver, chat og agent, og i Excel også `=MIAI.ASK()`. En instruktion til Word bruges ikke i Excel.
+- Hvert felt kan rumme 2.000 tegn. Under feltet står antal tegn og et tokenestimat. Så meget fylder instruktionen i modellens kontekst i hver forespørgsel, så hold den kort, især med en lille model og i `=MIAI.ASK()` over mange celler.
+- Instruktionerne ændrer ikke, hvad en opgave leverer (fx en formel eller en plan), og tekst i dokumentet er stadig data for modellen, ikke instruktioner.
+- Svar i celler med `=MIAI.ASK()` er gemt sammen med instruktionen. Ændrer du den, spørges modellen igen, næste gang cellen beregnes.
+- Instruktioner er vejledning til modellen, ikke en teknisk spærring. En lille model følger dem ikke altid.
+
+**For organisationer:** læg instruktioner, der gælder alle, under `instructions` i politikken. Det er `policy.json` for MIAI App og bridge og `policy` i `miai-config.json` for det hostede add-in (se [Central udrulning](#central-udrulning-i-en-organisation-også-office-på-web)):
+
+```json
+{
+  "allowedHosts": ["llm.firma.local"],
+  "locked": true,
+  "instructions": {
+    "word": "Skriv i du-form, og følg firmaets sprogpolitik.",
+    "excel": "Formatér tal med tusindtalsseparator."
+  }
+}
+```
+
+- Nøglerne er `word`, `excel`, `powerpoint` og `outlook`, med højst 2.000 tegn til hver. Skal en instruktion gælde alle programmer, skrives den under hver nøgle.
+- Organisationens instruktioner står før brugerens egne i prompten og har forrang, hvis de to er uenige. Brugeren kan læse dem under Faste instruktioner, men ikke ændre eller fjerne dem.
+- En for lang instruktion gør politikfilen ugyldig. Så låses politikken til standardens hosts, som ved andre fejl i filen.
+- Forslag, som brugerne selv må ændre, kan i stedet lægges som standardindstillinger under `settings.instructions` i `miai-config.json`.
 
 ## Brug en intern server
 
@@ -405,6 +435,7 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
    - I Excel kan agenten først **læse** det, den mangler at se, fx et andet ark eller et område uden for markeringen. Det ændrer intet og kræver ingen godkendelse; du ser "Læser Budget!A1:F40…", mens det sker. Den kan læse højst tre gange, før den skal lave planen.
 2. **Bekræft.** Fjern fluebenet ved de handlinger, du ikke vil have udført. **Vis i dokumentet** under en handling markerer det sted, den gælder (celler, tabel, afsnit, tekst eller slide), uden at ændre noget.
    - Handlinger, der sletter indhold, er markeret *Fjerner indhold*.
+   - I Excel står der ved hver handling, der skriver i celler med indhold, hvor meget den overskriver, fx *Overskriver 48 celler, heraf 12 formler* (ved ryd: *Rydder 6 celler med indhold*). MIAI læser arket for at tælle og ændrer intet. Celler, der får præcis det, de har i forvejen, tæller ikke med, og en handling uden advarsel overskriver ikke noget. Tallene gælder arket, som det er, når planen vises.
    - Handlinger, der ikke kan udføres, er fravalgt med årsagen. Det gælder fx tekst, modellen har citeret forkert, så den ikke findes i dokumentet.
    - I Word udføres ændringerne som standard **som sporede ændringer**, så du også kan gennemgå dem i Word.
 3. **Udfør.** Hver handling får ✓ eller en forklaring. Fejler nogle af handlingerne, kan du trykke **Bed modellen rette det, der fejlede**: fejlene sendes til modellen, som foreslår en rettelse. Det, der lykkedes, er udført og gentages ikke.
@@ -423,6 +454,11 @@ Spørg om dit dokument eller få hjælp til Office. **Brug markering/dokument so
 - Tomme celler, der fyldes ud lige under eller ved siden af data, får naboens format. En ny total-række får altså kolonnens valuta- eller procentformat.
 - Agenten kan se arkets Excel-tabeller og tilføjer rækker *i* tabellen, så de får tabellens formatering og beregnede kolonner. Slettes rækker i en tabel, krymper tabellen; data under den rykker op.
 - *"Gør tabellen pæn"* giver tabellen en af Excels indbyggede tabeltypografier, som følger projektmappens tema. Et almindeligt område bliver til en Excel-tabel med filterknapper og stribede rækker. Agenten vælger aldrig selv farver eller skrifttyper.
+
+**De ændrede celler markeres i Excel.** Efter udførelsen får de celler, agenten har skrevet i eller ryddet, og nye tabelrækker en lys gul fyldfarve, så du kan se, hvad der er ændret.
+- **Fjern markering** giver cellerne deres eget fyld tilbage; resten af formateringen har markeringen aldrig rørt. **Fortryd agent-session** fjerner også markeringen, og det samme gør en ny plan.
+- Markeringen er en rigtig fyldfarve i arket. Fjern den, før du gemmer og lukker panelet, for ellers bliver farven stående i filen.
+- Har planen slettet rækker eller sorteret på arket, markeres intet dér, fordi cellerne har flyttet sig. Markeringen kræver Excel 2021 eller Microsoft 365 (ExcelApi 1.9).
 
 **Kodetilstand (avanceret, i Excel, Word og PowerPoint).** Under *Indstillinger* kan du lade agenten skrive og køre Office.js-kode. Det er til det, de faste handlinger ikke kan, fx navngivne områder, sortering på flere kolonner og filtre i pivottabeller.
 - **Før kørslen:** du ser, hvad scriptet gør, og kan se koden.
@@ -448,6 +484,8 @@ Hele sessionen kan fortrydes med **Fortryd agent-session**:
 - I Word med sporede ændringer (standard, Word 2021/Microsoft 365) afvises agentens ændringer og kommentarer, og resten af dokumentet røres ikke.
 - I ældre Word eller uden sporede ændringer gendannes indholdet fra lige før. Det fjerner også ændringer, du selv har lavet siden.
 - I Excel gendannes de berørte celler med deres formatering, og tilføjede tabelrækker fjernes.
+  - I nyere Excel (Microsoft 365: Windows version 2509, Mac 16.100 eller senere; ikke LTSC-udgaverne) er hele udførelsen desuden ét trin i Excels egen fortryd, så ét **Ctrl+Z** fjerner det hele. Panelet siger det under planen, når det gælder. Brug enten Ctrl+Z eller **Fortryd agent-session**, ikke begge efter hinanden.
+  - I ældre Excel er det som hidtil: Ctrl+Z fortryder ikke nødvendigvis agentens ændringer samlet, så brug **Fortryd agent-session**.
 - I PowerPoint (Microsoft 365) lægges de berørte slides tilbage med al formatering, nye slides slettes, og flyttede flyttes tilbage. Ældre PowerPoint kan kun gendanne teksten, og derfor sletter og flytter agenten ikke slides dér.
 
 Fra **chatten** kan du sende et ændringsønske videre med **Gør det med agenten**. Agenten bruger chatsvaret, du lige har set, som indhold i stedet for at skrive en ny tekst.
@@ -589,12 +627,51 @@ Til organisationer, der vil styre MIAI centralt og holde data i huset ([ADR-0015
    - Kan filen ikke læses, låses politikken til standardens hosts, så en fejl i filen aldrig åbner for mere.
 4. **Tillad CORS fra add-in'ets adresse på inference-serveren**, fx `OLLAMA_ORIGINS=https://miai.firma.local` eller vLLM `--allowed-origins`.
 5. **Udrul i M365 Admin Center** → Indstillinger → Integrated apps → Upload custom apps. Upload `manifest.xml` (Word, Excel, PowerPoint) og `manifest-outlook.xml` (Outlook), og vælg brugere eller grupper. Add-in'et vises så hos brugerne, også i Office på web, uden lokal installation.
+6. **Bruges Office på nettet i Chrome eller Edge**, så tag stilling til browserens krav om lokal netværksadgang. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge).
+
+## Office på nettet: lokal netværksadgang i Chrome og Edge
+
+Chrome (fra version 142) og Edge (fra version 143) kræver en tilladelse, før en side fra internettet må kalde adresser på din egen maskine (fx `http://127.0.0.1:11434`) eller på det lokale netværk (fx `192.168.1.20` eller `llm.firma.local`). Browserne kalder det *Local Network Access*. Det rammer MIAI, når add-in'et er hostet (vej B eller central udrulning) og bruges i Office på nettet: add-in'et ligger på en offentlig adresse og kalder modellen lokalt.
+
+MIAI App i skrivebordsudgaven af Office er ikke berørt; dér hentes task pane fra maskinen selv. Om det hostede add-in bliver spurgt i skrivebordsudgaven (WebView2), er ikke afklaret endnu.
+
+Tilladelsen erstatter ikke CORS: værktøjet skal stadig tillade add-in'ets adresse (se [vej B](#b-hostet-add-in-uden-app)).
+
+### Som bruger
+
+- **Første gang** add-in'et kalder modellen, spørger browseren, om siden må få adgang til apps på enheden eller enheder på dit lokale netværk (ordlyden afhænger af browser og version). Vælg **Tillad**. MIAI viser forbindelsen efter højst 15 sekunder, eller når du trykker **Søg igen** under Indstillinger.
+- **Har du valgt Bloker**, eller er tilladelsen afvist af anden grund, viser MIAI statussen *Blokeret af browseren* og beskeden "Browseren blokerer adgangen til din lokale model." i stedet for den almindelige forbindelsesfejl. Sådan fortryder du:
+  1. Klik på ikonet til venstre for adressen øverst i browseren, og åbn **Webstedsindstillinger** (Edge: **Tilladelser for dette websted**).
+  2. Sæt tilladelsen til lokalt netværk til **Tillad**. Nyere versioner har to tilladelser: én til apps på enheden (maskinen selv, fx Ollama) og én til det lokale netværk.
+  3. Genindlæs siden.
+- **Skriver MIAI, at siden, add-in'et vises i, ikke giver add-in'et lov**, har Office på nettet ikke givet tilladelsen videre til add-in'et. Det kan ikke ændres i browserens indstillinger. Brug skrivebordsudgaven af Office (fx med MIAI App), eller spørg din administrator.
+- Ældre browsere og Office's indbyggede webviews oplyser ikke tilladelsen. Dér viser MIAI den almindelige forbindelsesfejl som hidtil.
+
+### Som administrator
+
+Chrome og Edge har politikker, der fritager udvalgte websteder for kravet, så brugerne ikke bliver spurgt og ikke kan blokere:
+
+| Politik | Fritager kald til | Chrome fra version |
+|---|---|---|
+| `LocalNetworkAccessAllowedForUrls` | både maskinen selv og det lokale netværk | 139 |
+| `LoopbackNetworkAllowedForUrls` | maskinen selv (`127.0.0.1`, `localhost`) | 146 |
+| `LocalNetworkAllowedForUrls` | det lokale netværk | 146 |
+
+- Værdien er en liste med URL-mønstre, fx `https://miai.firma.dk`. Brug ikke `*`: det fritager alle websteder. Edge har politikker med samme navne.
+- De tilsvarende `…BlockedForUrls`-politikker har forrang. Står et websted dér, kan brugeren ikke selv tillade det.
+- `LocalNetworkAccessRestrictionsTemporaryOptOut` slår kravet fra for alle websteder. Den er midlertidig og fjernes igen af browserne, så brug den ikke som løsning.
+- **Hvilken adresse skal på listen?** Ifølge Microsofts dokumentation gælder politikken den side, der står i adresselinjen, og en indlejret ramme skal desuden have tilladelsen givet videre af siden uden om. I Office på nettet er add-in'et en ramme inde i Office-siden. Det er derfor sandsynligvis Office-sidens adresse (den, brugerne ser i adresselinjen), der skal på listen, og det afhænger af Office, om add-in'et får tilladelsen videre.
+- **Add-in og model på det interne net** (central udrulning, fx `https://miai.firma.local` og `https://llm.firma.local`): kald mellem to adresser på det lokale netværk kræver ingen tilladelse, men Office-siden henter selve add-in'et fra det lokale netværk, og det er også omfattet. Blokeres det, indlæses add-in'et slet ikke, og MIAI kan ikke vise en besked. Det samme gælder MIAI App brugt i Office på nettet, hvor task pane hentes fra `https://localhost`.
+- Der skal ikke sættes særlige svar-headere på modelserveren eller i MIAI Bridge. Kravet afgøres af tilladelsen eller politikken, ikke af headeren `Access-Control-Allow-Private-Network` fra den ældre mekanisme (Private Network Access).
+
+Microsoft har ingen vejledning om kravet for Office-add-ins. Punkterne om Office på nettet er udledt af Chromes og Edges generelle regler og er endnu ikke afprøvet i Office på nettet. Afprøv derfor i jeres eget miljø før udrulning; tjeklisten står i [UDVIKLING.md](UDVIKLING.md#fase-0--manuel-testliste).
 
 ## Fejlfinding
 
 | Symptom | Løsning |
 |---|---|
 | Gul badge / "CORS"-fejl i fejlbeskeden | Værktøjet tillader ikke kald fra add-in'ets adresse. Ollama: `OLLAMA_ORIGINS` (se Installation, vej B). LM Studio: "Enable CORS". vLLM: `--allowed-origins`. Alternativt brug bridgen, som kører uden CORS. |
+| Status *Blokeret af browseren* / "Browseren blokerer adgangen til din lokale model." | Chrome eller Edge har afvist add-in'ets adgang til lokale adresser. Se [Office på nettet: lokal netværksadgang](#office-på-nettet-lokal-netværksadgang-i-chrome-og-edge). |
 | "Endpoint er ikke tilladt af politikken." | Endpointet ligger uden for *Tilladte hosts*. Tilføj hosten (fx `llm.firma.local`) og **Gem** – medmindre en maskinpolitik låser feltet. Se [Brug en intern server](#brug-en-intern-server). |
 | Rød badge "MIAI Bridge svarer ikke" | Bridgen kører ikke. Start MIAI App (ikonet skal ligge i menulinjen eller ved uret). Kører du bridgen fra kildekoden: `npm start`, og brug dit personlige manifest (stien vises ved start). |
 | Ingen modeller i udfyldningsfeltet / "Test forbindelse" fejler | Kører værktøjet på den rigtige port? Prøv `curl http://127.0.0.1:11434/v1/models`. |

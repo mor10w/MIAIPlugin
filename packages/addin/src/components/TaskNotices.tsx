@@ -25,6 +25,8 @@ export function describeError(t: T, code?: string, status?: number): string | un
       return t("err_unreachable");
     case "UPSTREAM_TIMEOUT":
       return t("err_timeout");
+    case "LNA_BLOCKED":
+      return t("lnaTitle");
     case "UPSTREAM_PROTOCOL":
       return t("err_protocol");
     case "NO_MODEL":

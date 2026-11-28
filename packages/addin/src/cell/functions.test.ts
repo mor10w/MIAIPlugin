@@ -87,6 +87,19 @@ describe("=MIAI.ASK()", () => {
     expect(f.calls).toHaveLength(3);
   });
 
+  it("ændrede faste instruktioner for Excel (#78) giver en ny forespørgsel; en anden værts gør ikke", async () => {
+    const cache = new CellCache(memory());
+    const ask = async (instructions: Partial<Settings["instructions"]>) => {
+      const b = fakeBackend({ instructions: { ...defaultSettings().instructions, ...instructions } });
+      await createCellRuntime(b.backend, cache).ask("p", [["x"]], null, null);
+      return b.calls.length;
+    };
+    expect(await ask({})).toBe(1);
+    expect(await ask({ word: "Skriv kort." })).toBe(0); // svaret fra cachen
+    expect(await ask({ excel: "Svar på engelsk." })).toBe(1);
+    expect(await ask({ excel: "Svar på engelsk." })).toBe(0);
+  });
+
   it("tal returneres som tal, postnumre og formler som tekst, og kodehegn fjernes", async () => {
     const answer = async (text: string) => {
       f.state.reply = () => [{ type: "delta", text }, { type: "done" }];

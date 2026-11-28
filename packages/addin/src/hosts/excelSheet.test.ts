@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOverview, colIndex, colName, groups, range, toTsv } from "./excelSheet";
+import { boxAddress, buildOverview, colIndex, colName, countOverwrite, fillPieces, groups, lastRows, range, toTsv, writeTarget } from "./excelSheet";
 
 describe("kolonnebogstaver (#57)", () => {
   it("colName: 0-baseret index → bogstaver", () => {
@@ -82,5 +82,110 @@ describe("buildOverview: Excel-oversigt", () => {
     ]);
     expect(o).not.toContain("Headers");
     expect(o).toContain("A: 2 non-empty, numeric sum=4 min=1 max=3");
+  });
+});
+
+describe("advarsel før overskrivning (#75)", () => {
+  // Som Office.js giver `formulas`: formler som tekst med "=", ellers værdien, og "" for en tom celle.
+  const existing = [
+    ["Region", "Beløb", ""],
+    ["Nord", 120, "=B2*2"],
+    ["", 0, "=SUM(C2:C2)"],
+  ];
+
+  it("countOverwrite: ryd tæller alle celler med indhold og heraf formlerne", () => {
+    expect(countOverwrite(existing)).toEqual({ cells: 7, formulas: 2 });
+    expect(countOverwrite([["", null, undefined]])).toEqual({ cells: 0, formulas: 0 });
+    expect(countOverwrite([])).toEqual({ cells: 0, formulas: 0 });
+  });
+
+  it("countOverwrite: tallet 0, FALSK og en formel, der giver tom tekst, er indhold", () => {
+    expect(countOverwrite([[0, false, '=""']])).toEqual({ cells: 3, formulas: 1 });
+  });
+
+  it("countOverwrite: null rører ikke cellen, og uændrede værdier tæller ikke med", () => {
+    const incoming = [
+      ["Region", "Omsætning", "Dobbelt"],
+      ["Nord", null, 240],
+      ["Syd", 0, null],
+    ];
+    // B1 får ny tekst og C2 mister sin formel; A1, A2 og B3 er uændrede, B2 og C3 røres ikke, og C1 og A3 var tomme.
+    expect(countOverwrite(existing, incoming)).toEqual({ cells: 2, formulas: 1 });
+  });
+
+  it("countOverwrite: samme formel igen er ingen overskrivning, en anden er", () => {
+    expect(countOverwrite([["=B2*2"]], [["=B2*2"]])).toEqual({ cells: 0, formulas: 0 });
+    expect(countOverwrite([["=B2*2"]], [["=B2*3"]])).toEqual({ cells: 1, formulas: 1 });
+    expect(countOverwrite([[120]], [["120"]])).toEqual({ cells: 0, formulas: 0 });
+  });
+
+  it("countOverwrite: værdier uden for det læste område ignoreres", () => {
+    expect(countOverwrite([[1]], [[2, 3], [4]])).toEqual({ cells: 1, formulas: 0 });
+  });
+
+  it("writeTarget: setValues skriver fra øverste venstre celle, så langt værdierne rækker; korte rækker fyldes med null", () => {
+    expect(writeTarget({ action: "setValues", address: "Salg!$B$2:C9", values: [[1, 2, 3], [4]], reason: "" })).toEqual({
+      address: "B2:D3",
+      incoming: [
+        [1, 2, 3],
+        [4, null, null],
+      ],
+    });
+    expect(writeTarget({ action: "setValues", address: "A5", values: [["Total"]], reason: "" })).toEqual({ address: "A5", incoming: [["Total"]] });
+  });
+
+  it("writeTarget: setFormula rammer én celle (med = foran), og clear hele området uden nye værdier", () => {
+    expect(writeTarget({ action: "setFormula", address: "F2", formula: " SUM(B2:B4)", reason: "" })).toEqual({ address: "F2", incoming: [["=SUM(B2:B4)"]] });
+    expect(writeTarget({ action: "clear", address: "'Mit ark'!D4:B2", reason: "" })).toEqual({ address: "B2:D4" });
+  });
+
+  it("writeTarget: handlinger, der ikke overskriver celler, og ugyldige adresser giver intet", () => {
+    expect(writeTarget({ action: "setNumberFormat", address: "A1:B2", format: "0%", reason: "" })).toBeUndefined();
+    expect(writeTarget({ action: "deleteRows", address: "A2:B2", reason: "" })).toBeUndefined();
+    expect(writeTarget({ action: "clear", address: "ikke en adresse", reason: "" })).toBeUndefined();
+    expect(writeTarget({ action: "setValues", address: "A1", values: [[]], reason: "" })).toBeUndefined();
+  });
+});
+
+describe("markering af ændrede celler (#75)", () => {
+  it("boxAddress og lastRows", () => {
+    expect(boxAddress({ r0: 1, c0: 1, r1: 3, c1: 27 })).toBe("B2:AB4");
+    expect(boxAddress({ r0: 0, c0: 0, r1: 0, c1: 0 })).toBe("A1");
+    expect(lastRows("A2:C6", 2)).toBe("A5:C6");
+    expect(lastRows("A2:C6", 1)).toBe("A6:C6");
+    // Flere rækker, end området har, giver hele området.
+    expect(lastRows("A2:C3", 9)).toBe("A2:C3");
+  });
+
+  it("fillPieces: et område helt uden fyld ryddes i ét stykke", () => {
+    expect(
+      fillPieces("B2:C3", [
+        [undefined, undefined],
+        [undefined, undefined],
+      ]),
+    ).toEqual([{ address: "B2:C3" }]);
+  });
+
+  it("fillPieces: et område, hvor alle celler har fyld, får farverne tilbage i ét stykke", () => {
+    const fills = [
+      ["#FFFF00", "#FFFF00"],
+      ["#00FF00", "#FFFF00"],
+    ];
+    expect(fillPieces("B2:C3", fills)).toEqual([{ address: "B2:C3", colors: fills }]);
+  });
+
+  it("fillPieces: blandet fyld deles i sammenhængende stykker pr. række, og hver celle er med præcis én gang", () => {
+    const pieces = fillPieces("B2:E3", [
+      ["#FFFF00", "#00FF00", undefined, undefined],
+      [undefined, "#FFFF00", undefined, "#FF0000"],
+    ]);
+    expect(pieces).toEqual([
+      { address: "B2:C2", colors: [["#FFFF00", "#00FF00"]] },
+      { address: "D2:E2" },
+      { address: "B3" },
+      { address: "C3", colors: [["#FFFF00"]] },
+      { address: "D3" },
+      { address: "E3", colors: [["#FF0000"]] },
+    ]);
   });
 });

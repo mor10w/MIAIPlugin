@@ -55,8 +55,11 @@ const useStyles = makeStyles({
   banner: { marginBottom: tokens.spacingVerticalM },
 });
 
-/** token = bridgen afviser, fordi adgangstokenet mangler (gammelt manifest, #11). */
-type Status = { kind: "ok" | "warn" | "down"; detail?: string; token?: boolean };
+/**
+ * token = bridgen afviser, fordi adgangstokenet mangler (gammelt manifest, #11).
+ * blocked = browseren blokerer kaldet til modellen (lokal netværksadgang, #74).
+ */
+type Status = { kind: "ok" | "warn" | "down"; detail?: string; token?: boolean; blocked?: "denied" | "frame" };
 type TabId = "actions" | "tasks" | "chat" | "settings";
 
 /** MIAI's mærke: en firtakket gnist i et afrundet felt i brandfarven (kun tokens – følger temaet). */
@@ -103,7 +106,10 @@ export function App({ adapter }: { adapter: HostAdapter }) {
       api
         .health()
         .then(
-          (h) => setStatus(h.endpoint.reachable ? { kind: "ok", detail: h.endpoint.baseUrl } : { kind: "warn", detail: h.endpoint.error }),
+          (h) =>
+            setStatus(
+              h.endpoint.reachable ? { kind: "ok", detail: h.endpoint.baseUrl } : { kind: "warn", detail: h.endpoint.error, blocked: h.endpoint.blocked },
+            ),
           (e) => setStatus({ kind: "down", detail: (e as Error).message, token: (e as { code?: string }).code === "TOKEN" }),
         )
         .finally(() => setChecked(true)),
@@ -120,7 +126,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     return () => clearInterval(id);
   }, [api, check]);
 
-  const statusText = { ok: t("connected"), warn: t("notConnected"), down: t("bridgeDown") }[status.kind];
+  const statusText = status.blocked ? t("lnaBadge") : { ok: t("connected"), warn: t("notConnected"), down: t("bridgeDown") }[status.kind];
 
   return (
     <I18n.Provider value={i18n}>
@@ -176,8 +182,17 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 </MessageBarBody>
               </MessageBar>
             )}
+            {/* Blokeret af browseren (#74): hvad der er sket, og hvordan det tillades (guiden viser det samme under Indstillinger). */}
+            {status.blocked && tab !== "settings" && (
+              <MessageBar intent="warning" className={mergeClasses(s.banner, kit.appear)}>
+                <MessageBarBody>
+                  <MessageBarTitle>{t("lnaTitle")}</MessageBarTitle>
+                  {t(status.blocked === "frame" ? "lnaFrame" : "lnaDenied")}
+                </MessageBarBody>
+              </MessageBar>
+            )}
             {/* Førstegangsguide (#4): uden forbindelse peges brugeren til Indstillinger, hvor guiden åbner. */}
-            {checked && status.kind !== "ok" && !status.token && tab !== "settings" && (
+            {checked && status.kind !== "ok" && !status.token && !status.blocked && tab !== "settings" && (
               <MessageBar intent="warning" className={mergeClasses(s.banner, kit.appear)}>
                 <MessageBarBody>{t("noConnectionBanner")}</MessageBarBody>
                 <MessageBarActions>

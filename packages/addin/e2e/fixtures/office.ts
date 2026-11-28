@@ -963,6 +963,17 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
               record({ kind: "autofitColumns", address: addr(r0, c0, rows, cols) });
               for (let c = 0; c < cols; c++) widths.set(c0 + c, 10 + 7 * Math.max(1, ...grid.map((row) => String(row[c0 + c] ?? "").length)));
             },
+            // Fyld (#75): en farve sætter massivt fyld på alle områdets celler; clear() fjerner cellernes eget fyld.
+            fill: strict("Excel.RangeFill", {
+              set color(v: string) {
+                record({ kind: "fillColor", address: addr(r0, c0, rows, cols), color: v });
+                each((r, c) => setFmt(r, c, { fill: v }));
+              },
+              clear() {
+                record({ kind: "fillClear", address: addr(r0, c0, rows, cols) });
+                each((r, c) => setFmt(r, c, { fill: undefined }));
+              },
+            }),
           }),
           delete(direction: string) {
             record({ kind: "rangeDelete", address: addr(r0, c0, rows, cols), direction });
@@ -1006,15 +1017,21 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
             value: Array.from({ length: rows }, (_, r) =>
               Array.from({ length: cols }, (_, c) => {
                 const f = fmtOf(r0 + r, c0 + c);
-                return { format: { font: { bold: !!f.bold }, fill: { color: f.fill ?? "#FFFFFF" } } };
+                // En celle uden fyld læses som hvid med mønstret "None" (Excel.FillPattern.none; bekræftes i rigtig Excel, se UDVIKLING.md).
+                return { format: { font: { bold: !!f.bold }, fill: { color: f.fill ?? "#FFFFFF", pattern: f.fill ? "Solid" : "None" } } };
               }),
             ),
           }),
-          setCellProperties(p: { format: { font: { bold: boolean }; fill: { color: string } } }[][]) {
+          // Som Excel: kun de egenskaber, der er med, sættes, og arrayet skal have områdets størrelse.
+          setCellProperties(p: { format?: { font?: { bold?: boolean }; fill?: { color?: string } } }[][]) {
+            if (p.length !== rows || p.some((row) => row.length !== cols)) throw new Error("InvalidArgument: setCellProperties skal have områdets størrelse");
             p.forEach((row, r) =>
-              row.forEach((x, c) =>
-                setFmt(r0 + r, c0 + c, { bold: x.format.font.bold || undefined, fill: x.format.fill.color === "#FFFFFF" ? undefined : x.format.fill.color }),
-              ),
+              row.forEach((x, c) => {
+                const f: Fmt = {};
+                if (x.format?.font && "bold" in x.format.font) f.bold = x.format.font.bold || undefined;
+                if (x.format?.fill && "color" in x.format.fill) f.fill = x.format.fill.color === "#FFFFFF" ? undefined : x.format.fill.color;
+                setFmt(r0 + r, c0 + c, f);
+              }),
             );
           },
           clear(applyTo: string) {
@@ -1291,6 +1308,10 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
     // Det første ark er det aktive (markeringen); __miai.sheet() viser det, __miai.sheets() alle ark.
     (w.__miai as Record<string, unknown>).sheet = () => built[0].state();
     (w.__miai as Record<string, unknown>).sheets = () => Object.fromEntries(built.map((b) => [b.name(), b.state()]));
+    // Excels egen fortryd (#75): antal trin, add-in'et har lagt i fortryd-stakken. __miai.undoGroups() læser det.
+    let undoGroups = 0;
+    (w.__miai as Record<string, unknown>).undoGroups = () => undoGroups;
+    const fingerprint = () => JSON.stringify(built.map((b) => [b.name(), b.state()]));
     const findSheet = (name: string) => {
       const b = built.find((x) => x.name().toLowerCase() === name.toLowerCase());
       if (!b) throw new Error(`ItemNotFound: arket ${name} findes ikke`);
@@ -1341,7 +1362,39 @@ export function installFakeOffice(o: FakeOfficeOptions): void {
       ConditionalFormatPresetCriterion: { duplicateValues: "DuplicateValues" },
       InsertShiftDirection: { down: "Down" },
       RangeCopyType: { formats: "Formats" },
-      run: async (fn: (c: unknown) => unknown) => fn(strict("Excel.RequestContext", { workbook, sync })),
+      /**
+       * Excel.run(batch) eller Excel.run(options, batch). Som i Excel giver hvert context.sync(), der
+       * ændrer noget, sit eget trin i fortryd-stakken; med `mergeUndoGroup` (ExcelApi 1.20) bliver
+       * hele batchen ét trin. Simuleringen afviser `mergeUndoGroup` uden 1.20, så en manglende
+       * isSetSupported i adapteren opdages (hvad rigtig Excel gør her, er ikke afprøvet).
+       */
+      run: async (a: unknown, b?: unknown) => {
+        const options = typeof a === "function" ? undefined : (a as { mergeUndoGroup?: boolean });
+        const fn = (typeof a === "function" ? a : b) as (c: unknown) => unknown;
+        if (options) {
+          if (options.mergeUndoGroup !== undefined && !versionAtLeast(o.apiSets?.ExcelApi, "1.20"))
+            throw new Error("Simuleret Office.js: mergeUndoGroup kræver ExcelApi 1.20");
+          record({ kind: "run", options: { ...options } });
+        }
+        let before = fingerprint();
+        const commit = () => {
+          const now = fingerprint();
+          if (now !== before) undoGroups++;
+          before = now;
+        };
+        try {
+          return await fn(
+            strict("Excel.RequestContext", {
+              workbook,
+              sync: async () => {
+                if (!options?.mergeUndoGroup) commit();
+              },
+            }),
+          );
+        } finally {
+          commit();
+        }
+      },
     });
   }
 

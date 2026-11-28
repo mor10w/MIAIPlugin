@@ -52,6 +52,14 @@ const da = {
   setupNeedsCors: "Kører – mangler CORS",
   setupCorsIntro: "Værktøjet kører, men tillader ikke add-in'et ({origin}) at læse svaret. Gør sådan, og tryk Søg igen:",
   setupNothing: "Intet værktøj fundet. Start fx Ollama eller LM Studio (og hent en model), og tryk Søg igen – eller tilføj din endpoint manuelt nedenfor.",
+  lnaBadge: "Blokeret af browseren",
+  lnaTitle: "Browseren blokerer adgangen til din lokale model.",
+  lnaDenied:
+    "Browseren har afvist, at add-in'et må kalde adresser på denne maskine og dit lokale netværk (Local Network Access), så MIAI kan ikke se, om modellen kører. Sådan tillader du det – også hvis du tidligere har valgt Bloker: klik på ikonet til venstre for adressen øverst i browseren, åbn Webstedsindstillinger, sæt tilladelsen til lokalt netværk (i nyere versioner også apps på enheden) til Tillad, og genindlæs siden.",
+  lnaFrame:
+    "Siden, add-in'et vises i (fx Office på nettet), giver ikke add-in'et lov til at kalde adresser på denne maskine og dit lokale netværk, så browseren blokerer kaldet uden at spørge (Local Network Access). Det kan ikke ændres i browserens indstillinger. Brug MIAI i skrivebordsudgaven af Office, eller spørg din administrator.",
+  lnaPrompt:
+    "Browseren skal have din tilladelse, før add-in'et må kalde adresser på denne maskine. Spørger den om adgang til apps på enheden eller dit lokale netværk, så vælg Tillad, og tryk Søg igen.",
   setupNotFound: "Ikke fundet",
   setupConnected: "Forbundet til {name} – {n} modeller fundet.",
   saveCors: "Endpointen svarer, men mangler CORS-opsætning, så add-in'et kan ikke bruge den endnu.",
@@ -234,6 +242,15 @@ const da = {
   agentExecuteOne: "Udfør 1 handling",
   agentTrack: "Som sporede ændringer",
   agentDestructive: "Fjerner indhold",
+  agentOverwrite: "Overskriver {n} celler",
+  agentOverwriteOne: "Overskriver 1 celle",
+  agentClearFilled: "Rydder {n} celler med indhold",
+  agentClearFilledOne: "Rydder 1 celle med indhold",
+  agentWithFormulas: "{text}, heraf {n} formler",
+  agentWithFormulasOne: "{text}, heraf 1 formel",
+  agentUnmark: "Fjern markering",
+  agentMarked: "De ændrede celler er markeret med en lys farve i arket. Fjern markeringen, når du har set dem – ellers bliver farven stående i filen.",
+  agentUndoNative: "Du kan også fortryde det hele med ét Ctrl+Z i Excel. Brug så ikke Fortryd her bagefter.",
   agentUndo: "Fortryd agent-session",
   agentUndone: "Agent-sessionen er fortrudt. Dokumentet er som før.",
   agentDone: "{ok} af {n} handlinger udført.",
@@ -503,6 +520,15 @@ const da = {
   // Audit-log og brugeropgaver-mappe
   customTasksDir: "Mappe med brugeropgaver",
   customTasksDirHint: "Kun bridge. Tom = <konfig>/tasks (fx ~/.config/miai/tasks). Kopier mappen for at dele opgaver med andre.",
+  // Faste instruktioner (#78)
+  secInstructions: "Faste instruktioner",
+  instructionsIntro:
+    "Det, MIAI altid skal følge i et program, fx »Formatér tal med tusindtalsseparator« i Excel. Instruktionerne sendes med i alle handlinger, i chatten og til agenten i det program.",
+  instructionsFor: "Instruktioner i {app}",
+  instructionsPlaceholder: "Fx: Skriv kort og i et enkelt sprog.",
+  instructionsCount: "{n} af {max} tegn · ca. {tokens} tokens i hver forespørgsel",
+  instructionsOrg: "Fra din organisation i {app}",
+  instructionsOrgHint: "Fastsat af din organisation og kan ikke ændres. Gælder før dine egne · ca. {tokens} tokens i hver forespørgsel",
   viewAudit: "Vis log",
   hideAudit: "Skjul log",
   auditEmpty: "Ingen poster endnu.",
@@ -568,6 +594,14 @@ const en: Dict = {
   setupNeedsCors: "Running – CORS missing",
   setupCorsIntro: "The tool is running but does not allow the add-in ({origin}) to read its answers. Do this and press Search again:",
   setupNothing: "No tool found. Start e.g. Ollama or LM Studio (and download a model), then press Search again – or add your endpoint manually below.",
+  lnaBadge: "Blocked by the browser",
+  lnaTitle: "The browser is blocking access to your local model.",
+  lnaDenied:
+    "The browser has denied the add-in access to addresses on this machine and your local network (Local Network Access), so MIAI cannot tell whether the model is running. To allow it – also if you chose Block earlier: click the icon to the left of the address at the top of the browser, open Site settings, set the permission for local network (in newer versions also apps on device) to Allow, and reload the page.",
+  lnaFrame:
+    "The page the add-in is shown in (e.g. Office on the web) does not let the add-in call addresses on this machine and your local network, so the browser blocks the call without asking (Local Network Access). This cannot be changed in the browser's settings. Use MIAI in the desktop version of Office, or ask your administrator.",
+  lnaPrompt:
+    "The browser needs your permission before the add-in may call addresses on this machine. If it asks for access to apps on the device or your local network, choose Allow and press Search again.",
   setupNotFound: "Not found",
   setupConnected: "Connected to {name} – {n} models found.",
   saveCors: "The endpoint answers but lacks CORS setup, so the add-in cannot use it yet.",
@@ -749,6 +783,16 @@ const en: Dict = {
   agentExecuteOne: "Run 1 action",
   agentTrack: "As tracked changes",
   agentDestructive: "Removes content",
+  agentOverwrite: "Overwrites {n} cells",
+  agentOverwriteOne: "Overwrites 1 cell",
+  agentClearFilled: "Clears {n} cells with content",
+  agentClearFilledOne: "Clears 1 cell with content",
+  agentWithFormulas: "{text}, including {n} formulas",
+  agentWithFormulasOne: "{text}, including 1 formula",
+  agentUnmark: "Remove highlight",
+  agentMarked:
+    "The changed cells are highlighted with a light colour in the sheet. Remove the highlight when you have seen them – otherwise the colour stays in the file.",
+  agentUndoNative: "You can also undo everything with a single Ctrl+Z in Excel. Do not use Undo here afterwards.",
   agentUndo: "Undo agent session",
   agentUndone: "The agent session was undone. The document is as before.",
   agentDone: "{ok} of {n} actions done.",
@@ -1019,6 +1063,15 @@ const en: Dict = {
   // Audit log and custom tasks folder
   customTasksDir: "Custom tasks folder",
   customTasksDirHint: "Bridge only. Empty = <config>/tasks (e.g. ~/.config/miai/tasks). Copy the folder to share tasks with others.",
+  // Standing instructions (#78)
+  secInstructions: "Standing instructions",
+  instructionsIntro:
+    "What MIAI should always follow in an app, e.g. “Format numbers with thousand separators” in Excel. The instructions are sent with every action, in the chat and to the agent in that app.",
+  instructionsFor: "Instructions in {app}",
+  instructionsPlaceholder: "E.g.: Write briefly and in plain language.",
+  instructionsCount: "{n} of {max} characters · approx. {tokens} tokens in every request",
+  instructionsOrg: "From your organisation in {app}",
+  instructionsOrgHint: "Set by your organisation and cannot be changed. Applies before your own · approx. {tokens} tokens in every request",
   viewAudit: "View log",
   hideAudit: "Hide log",
   auditEmpty: "No entries yet.",

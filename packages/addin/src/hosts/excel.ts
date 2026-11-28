@@ -1,11 +1,12 @@
-import { fitGrid, numberedRows, parseTsv, rangeBox, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
+import { fitGrid, numberedRows, parseTsv, rangeBox, writesCells, type AgentAction, type ApplyMode, type DocContext, type FormulaResult } from "@miai/shared";
 import { EXCEL_ADDRESS, splitAddress } from "../excelAddress";
 import { mdToPlain } from "../markdown";
 import type { DocRef } from "../refs";
 import { runExcelScript } from "../script";
+import { canMergeUndo, countOverwrites, markCells, unmarkCells, type CellMark } from "./excelChanges";
 import { FORMAT_PROPS } from "./excelFormats";
-import { buildOverview, colIndex, colName, groups, range, toTsv } from "./excelSheet";
-import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, SelectionInfo, TextFormat } from "./types";
+import { buildOverview, colIndex, colName, groups, lastRows, range, toTsv } from "./excelSheet";
+import type { AgentOptions, AgentOutcome, AgentStepResult, ApplyOutcome, ContextOptions, HostAdapter, Overwrite, SelectionInfo, TextFormat } from "./types";
 
 const MAX_ROWS = 200;
 const MAX_COLS = 30;
@@ -22,8 +23,17 @@ const MAX_SHEETS = 30;
 /** Skjult hjælpeark med modellisten bag modelvælgeren (#80). */
 export const MODEL_SHEET = "MIAI_modeller";
 
+/** Kører i den ydre batch, når der er én (ét trin i Excels fortryd, #75); ellers i sin egen Excel.run som før. */
+const inRun = <T>(outer: Excel.RequestContext | undefined, fn: (ctx: Excel.RequestContext) => Promise<T>): Promise<T> => (outer ? fn(outer) : Excel.run(fn));
+
 export class ExcelAdapter implements HostAdapter {
   readonly host = "excel" as const;
+  /**
+   * Markeringen af de celler, agenten senest har ændret (#75), og hvem der skal have besked, når den
+   * er fjernet. Højst én udførelse er markeret ad gangen.
+   */
+  private marked?: { marks: CellMark[]; done?: () => void };
+  private clearing: Promise<void> = Promise.resolve();
 
   supports(mode: ApplyMode): boolean {
     if (mode === "comment") return Office.context.requirements.isSetSupported("ExcelApi", "1.10");
@@ -225,17 +235,59 @@ export class ExcelAdapter implements HostAdapter {
    * Fortryd gendanner alt i omvendt rækkefølge: slettede rækker sættes ind igen med værdier og
    * formater, tilføjede tabelrækker fjernes, nye tabeller bliver almindelige områder igen, og formler,
    * talformater, formater og kolonnebredder får deres tidligere værdier.
+   *
+   * Ét fortryd og markering (#75): med ExcelApi 1.20 kører hele udførelsen i én Excel.run med
+   * `mergeUndoGroup`, så ét Ctrl+Z i Excel fjerner det hele; uden 1.20 kører hvert trin i sin egen
+   * Excel.run som før. De ændrede celler markeres til sidst med en lys fyldfarve, som fjernes igen
+   * med `unmark` eller ved fortryd – før fortryd gendanner noget, så markeringen aldrig gemmes som
+   * cellernes oprindelige format.
    */
   async applyAgent(actions: AgentAction[], dc: DocContext, opts: AgentOptions = {}): Promise<AgentOutcome> {
     if (!dc.address) throw new Error("Ingen markering.");
     const sheetName = splitAddress(dc.address).sheet;
+    // En markering fra en tidligere udførelse fjernes først, så dens farve ikke gemmes til fortryd.
+    await this.clearMarks().catch(() => {});
     const script = actions.find((a) => a.action === "runScript");
     if (script?.action === "runScript") {
       if (!opts.scripts) throw new Error("Kodetilstanden er ikke slået til (Indstillinger → Avanceret).");
       if (actions.length > 1) throw new Error("Et script skal stå alene i planen.");
       return runExcelScript(script, sheetName);
     }
+    if (!canMergeUndo()) return this.applyActions(actions, dc, opts, sheetName);
+    const out = await Excel.run({ mergeUndoGroup: true }, (ctx) => this.applyActions(actions, dc, opts, sheetName, ctx));
+    return { ...out, nativeUndo: true };
+  }
 
+  /**
+   * Fjerner markeringen i arket. Med `marks`: kun hvis det stadig er den markering, der står der.
+   * Kaldene sker ét ad gangen, så en ny udførelse venter på en fjernelse, der allerede er i gang.
+   */
+  private clearMarks(marks?: CellMark[]): Promise<void> {
+    const clear = async () => {
+      const current = this.marked;
+      if (!current || (marks && current.marks !== marks)) return;
+      // Fejler det, står markeringen der stadig og kan fjernes ved næste forsøg.
+      await unmarkCells(current.marks);
+      this.marked = undefined;
+      current.done?.();
+    };
+    this.clearing = this.clearing.catch(() => {}).then(clear);
+    return this.clearing;
+  }
+
+  /** Advarsel før overskrivning (#75): læser arket og ændrer intet. */
+  overwrites(actions: AgentAction[], dc: DocContext): Promise<(Overwrite | undefined)[]> {
+    return countOverwrites(actions, dc);
+  }
+
+  /** Udfører planens faste handlinger (se applyAgent). `outer`: batchen, alt skal køre i (ExcelApi 1.20). */
+  private async applyActions(
+    actions: AgentAction[],
+    dc: DocContext,
+    opts: AgentOptions,
+    sheetName: string,
+    outer?: Excel.RequestContext,
+  ): Promise<AgentOutcome> {
     // Flere ark (#21): handlingerne grupperes pr. ark og udføres ark for ark med samme fremgangsmåde
     // og fortryd. Nye ark oprettes først, så planen kan skrive på dem; omdøbning sker til sidst, så
     // alle adresser i planen bruger navnene fra før planen.
@@ -253,7 +305,7 @@ export class ExcelAdapter implements HostAdapter {
 
     const added: string[] = [];
     if (actions.some((a) => a.action === "addSheet"))
-      await Excel.run(async (ctx) => {
+      await inRun(outer, async (ctx) => {
         for (const [i, a] of actions.entries()) {
           if (a.action !== "addSheet") continue;
           try {
@@ -269,6 +321,7 @@ export class ExcelAdapter implements HostAdapter {
     const structural = (a: AgentAction) => a.action === "addSheet" || a.action === "renameSheet";
     const order = [...new Set(actions.filter((a) => !structural(a)).map(sheetFor))];
     const undos: (() => Promise<void>)[] = [];
+    const marks: CellMark[] = [];
     for (const name of order) {
       const idx = actions.flatMap((a, i) => (!structural(a) && sheetFor(a) === name ? [i] : []));
       try {
@@ -278,8 +331,10 @@ export class ExcelAdapter implements HostAdapter {
           opts,
           name,
           name === sheetName,
+          outer,
         );
         idx.forEach((i, k) => (results[i] = out.results[k]));
+        marks.push(...out.marks);
         // Et ark, planen selv har oprettet, fjernes helt ved fortryd.
         if (!added.includes(name)) undos.push(out.undo);
       } catch (e) {
@@ -289,7 +344,7 @@ export class ExcelAdapter implements HostAdapter {
 
     const renamed: { from: string; to: string }[] = [];
     if (actions.some((a) => a.action === "renameSheet"))
-      await Excel.run(async (ctx) => {
+      await inRun(outer, async (ctx) => {
         for (const [i, a] of actions.entries()) {
           if (a.action !== "renameSheet") continue;
           try {
@@ -302,7 +357,14 @@ export class ExcelAdapter implements HostAdapter {
         }
       });
 
+    // Markeringen findes under arkenes navne efter planen (et omdøbt ark har fået sit nye navn).
+    for (const m of marks) m.sheet = renamed.find((r) => r.from.toLowerCase() === m.sheet.toLowerCase())?.to ?? m.sheet;
+    if (marks.length) this.marked = { marks, done: opts.onUnmarked };
+    const unmark = () => this.clearMarks(marks);
+
     const undo = async () => {
+      // Markeringen fjernes først, så cellerne har deres eget fyld, når de gendannes.
+      await unmark().catch(() => {});
       // Omvendt rækkefølge: navnene tilbage, så arkene kan findes; så hvert arks ændringer; så de nye ark væk.
       if (renamed.length)
         await Excel.run(async (ctx) => {
@@ -316,7 +378,7 @@ export class ExcelAdapter implements HostAdapter {
           await ctx.sync();
         });
     };
-    return { results, undo, undoKind: "cells" };
+    return { results, undo, undoKind: "cells", ...(marks.length ? { unmark } : {}) };
   }
 
   /** Det markerede område med arknavn (#26). */
@@ -416,10 +478,17 @@ export class ExcelAdapter implements HostAdapter {
   }
 
   /** Udfører handlingerne for ét ark (se applyAgent). `active`: arket er det, markeringen står på. */
-  private async applyOnSheet(actions: AgentAction[], dc: DocContext, opts: AgentOptions, sheetName: string, active: boolean): Promise<AgentOutcome> {
+  private async applyOnSheet(
+    actions: AgentAction[],
+    dc: DocContext,
+    opts: AgentOptions,
+    sheetName: string,
+    active: boolean,
+    outer?: Excel.RequestContext,
+  ): Promise<AgentOutcome & { marks: CellMark[] }> {
     const has = (v: string) => Office.context.requirements.isSetSupported("ExcelApi", v);
     const formats = has("1.9");
-    return Excel.run(async (ctx) => {
+    return inRun(outer, async (ctx) => {
       const sheet = ctx.workbook.worksheets.getItem(sheetName);
       const results: AgentStepResult[] = actions.map(() => ({ ok: true }));
       const fail = (i: number, detail: string) => (results[i] = { ok: false, error: "failed", detail });
@@ -859,6 +928,30 @@ export class ExcelAdapter implements HostAdapter {
         }
       });
 
+      // 5) De ændrede celler markeres (#75): målene for værdier, formler og ryd, og nye tabelrækker.
+      // Har planen flyttet celler på arket (slettede rækker, sortering), passer adresserne ikke
+      // længere, og så markeres intet. Markeringen er kun en hjælp: kan den ikke sættes, er
+      // handlingerne stadig udført.
+      const moved = deleted.length > 0 || actions.some((a, i) => a.action === "sortRange" && results[i].ok);
+      let marks: CellMark[] = [];
+      if (formats && !moved) {
+        try {
+          const changed = (i: number) => results[i].ok || results[i].error === "formula-error";
+          const appended = [...new Set(added.map((t) => t.name))].map((name) => {
+            const body = sheet.tables.getItem(name).getDataBodyRange();
+            body.load("address");
+            return { body, rows: actions.reduce((n, a, i) => n + (a.action === "appendRows" && a.table === name && results[i].ok ? a.values.length : 0), 0) };
+          });
+          if (appended.length) await ctx.sync();
+          marks = await markCells(ctx, sheet, sheetName, [
+            ...actions.flatMap((a, i) => (writesCells(a) && targets[i] && changed(i) ? [splitAddress(targets[i]!.address).range] : [])),
+            ...appended.flatMap((x) => (x.rows > 0 ? [lastRows(splitAddress(x.body.address).range, x.rows)] : [])),
+          ]);
+        } catch {
+          marks = [];
+        }
+      }
+
       const undo = () =>
         Excel.run(async (c) => {
           const ws = c.workbook.worksheets.getItem(sheetName);
@@ -912,7 +1005,7 @@ export class ExcelAdapter implements HostAdapter {
           }
           await c.sync();
         });
-      return { results, undo, undoKind: "cells" };
+      return { results, undo, undoKind: "cells", marks };
     });
   }
 }
